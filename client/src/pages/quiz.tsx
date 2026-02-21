@@ -20,7 +20,7 @@ import { BlockMath, InlineMath } from 'react-katex';
 
 function renderLatex(text: string) {
   if (!text) return null;
-  const parts = text.split(/(\\\(.*?\\\)|\\\[.*?\\\]|\$\$.*?\$\$|\$.*?\$)/gs);
+  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
   return parts.map((part, i) => {
     if (part.startsWith('\\(') && part.endsWith('\\)')) {
       return <InlineMath key={i} math={part.slice(2, -2)} />;
