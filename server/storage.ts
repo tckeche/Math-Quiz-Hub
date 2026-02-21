@@ -51,6 +51,7 @@ class DatabaseStorage implements IStorage {
   }
 
   async deleteQuiz(id: number): Promise<void> {
+    await this.database.delete(submissions).where(eq(submissions.quizId, id));
     await this.database.delete(quizzes).where(eq(quizzes.id, id));
   }
 

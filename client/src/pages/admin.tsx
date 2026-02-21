@@ -522,7 +522,7 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   );
 }
 
-function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) {
+function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () => void; onDeleted: () => void }) {
   const [showUploader, setShowUploader] = useState(false);
   const [showPdfGen, setShowPdfGen] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -547,6 +547,19 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "questions"] });
       toast({ title: "Question deleted" });
+    },
+  });
+
+  const deleteQuizMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("DELETE", `/api/admin/quizzes/${quizId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+      toast({ title: "Exam deleted", description: "Quiz, questions, and submissions were removed." });
+      onDeleted();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete exam", description: err.message, variant: "destructive" });
     },
   });
 
@@ -605,6 +618,20 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
         <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-admin">
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => {
+            if (confirm("Delete this entire exam? This will remove questions and all submitted tests.")) {
+              deleteQuizMutation.mutate();
+            }
+          }}
+          disabled={deleteQuizMutation.isPending}
+          data-testid="button-delete-exam"
+        >
+          <Trash2 className="w-4 h-4 mr-1" />
+          {deleteQuizMutation.isPending ? "Deleting..." : "Delete Exam"}
         </Button>
         <div className="flex-1 min-w-0">
           <h2 className="font-serif text-xl font-bold truncate" data-testid="text-quiz-detail-title">{quiz.title}</h2>
@@ -818,7 +845,7 @@ export default function AdminPage() {
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         {selectedQuizId !== null ? (
-          <QuizDetail quizId={selectedQuizId} onBack={() => setSelectedQuizId(null)} />
+          <QuizDetail quizId={selectedQuizId} onBack={() => setSelectedQuizId(null)} onDeleted={() => setSelectedQuizId(null)} />
         ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-2 flex-wrap">
