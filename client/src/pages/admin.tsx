@@ -368,6 +368,16 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
                     data-testid={`input-generated-prompt-${idx}`}
                   />
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Image URL (optional)</Label>
+                  <Input
+                    value={q.image_url ?? ""}
+                    onChange={(e) => updateQuestion(idx, "image_url", e.target.value || null)}
+                    placeholder="https://example.com/diagram.png"
+                    className="font-mono text-sm"
+                    data-testid={`input-generated-image-url-${idx}`}
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   {q.options.map((opt, optIdx) => (
                     <div key={optIdx} className="space-y-1">
@@ -512,7 +522,7 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   );
 }
 
-function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) {
+function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () => void; onDeleted: () => void }) {
   const [showUploader, setShowUploader] = useState(false);
   const [showPdfGen, setShowPdfGen] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -537,6 +547,37 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "questions"] });
       toast({ title: "Question deleted" });
+    },
+  });
+
+  const deleteQuizMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("DELETE", `/api/admin/quizzes/${quizId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+      toast({ title: "Exam deleted", description: "Quiz, questions, and submissions were removed." });
+      onDeleted();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete exam", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteSubmissionMutation = useMutation({
+    mutationFn: async (submissionId: number) =>
+      apiRequest("DELETE", `/api/admin/submissions/${submissionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "submissions"] });
+      toast({ title: "Submission deleted" });
+    },
+  });
+
+  const clearSubmissionsMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("DELETE", `/api/admin/quizzes/${quizId}/submissions`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "submissions"] });
+      toast({ title: "All submissions deleted" });
     },
   });
 
@@ -578,6 +619,20 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => {
+            if (confirm("Delete this entire exam? This will remove questions and all submitted tests.")) {
+              deleteQuizMutation.mutate();
+            }
+          }}
+          disabled={deleteQuizMutation.isPending}
+          data-testid="button-delete-exam"
+        >
+          <Trash2 className="w-4 h-4 mr-1" />
+          {deleteQuizMutation.isPending ? "Deleting..." : "Delete Exam"}
+        </Button>
         <div className="flex-1 min-w-0">
           <h2 className="font-serif text-xl font-bold truncate" data-testid="text-quiz-detail-title">{quiz.title}</h2>
           <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
@@ -601,10 +656,26 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
           View Results ({submissions?.length ?? 0})
         </Button>
         {submissions && submissions.length > 0 && (
-          <Button variant="outline" size="sm" onClick={downloadCSV} data-testid="button-download-csv">
-            <Download className="w-4 h-4 mr-1" />
-            Download CSV
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={downloadCSV} data-testid="button-download-csv">
+              <Download className="w-4 h-4 mr-1" />
+              Download CSV
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirm("Delete all submitted tests for this quiz? This cannot be undone.")) {
+                  clearSubmissionsMutation.mutate();
+                }
+              }}
+              disabled={clearSubmissionsMutation.isPending}
+              data-testid="button-delete-all-submissions"
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              {clearSubmissionsMutation.isPending ? "Deleting..." : "Delete All Tests"}
+            </Button>
+          </>
         )}
       </div>
 
@@ -638,6 +709,33 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
                         <Badge variant={s.totalScore / s.maxPossibleScore >= 0.5 ? "default" : "secondary"}>
                           {((s.totalScore / s.maxPossibleScore) * 100).toFixed(0)}%
                         </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm("Delete this submitted test?")) {
+                              deleteSubmissionMutation.mutate(s.id);
+                            }
+                          }}
+                          disabled={deleteSubmissionMutation.isPending}
+                          data-testid={`button-delete-submission-${s.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Delete Test
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded-md border bg-muted/20 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Marks Breakdown</p>
+                      <div className="grid gap-1">
+                        {Object.entries(s.answersBreakdown).map(([questionId, detail]) => (
+                          <div key={questionId} className="text-sm flex items-center justify-between gap-2">
+                            <span>Q{questionId}: {detail.answer || "No answer"}</span>
+                            <span className={detail.correct ? "text-primary" : "text-muted-foreground"}>
+                              {detail.correct ? `+${detail.marksEarned}` : "0"}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                     <div className="mt-3">
@@ -747,7 +845,7 @@ export default function AdminPage() {
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         {selectedQuizId !== null ? (
-          <QuizDetail quizId={selectedQuizId} onBack={() => setSelectedQuizId(null)} />
+          <QuizDetail quizId={selectedQuizId} onBack={() => setSelectedQuizId(null)} onDeleted={() => setSelectedQuizId(null)} />
         ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-2 flex-wrap">
