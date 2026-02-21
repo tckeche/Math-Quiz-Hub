@@ -404,12 +404,14 @@ When the user asks general questions about curriculum, pedagogy, or math concept
 
   app.delete("/api/admin/submissions/:id", async (req, res) => {
     const submissionId = parseInt(req.params.id);
+    if (!db) return res.status(500).json({ message: "Database not available" });
     await db.delete(submissionsTable).where(eq(submissionsTable.id, submissionId));
     res.json({ success: true });
   });
 
   app.delete("/api/admin/quizzes/:id/submissions", async (req, res) => {
     const quizId = parseInt(req.params.id);
+    if (!db) return res.status(500).json({ message: "Database not available" });
     await db.delete(submissionsTable).where(eq(submissionsTable.quizId, quizId));
     res.json({ success: true });
   });
