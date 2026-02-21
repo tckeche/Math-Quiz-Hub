@@ -61,32 +61,19 @@ function extractJsonArray(text: string): any[] | null {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.get("/api/quizzes", async (_req, res) => {
     const quizzes = await storage.getQuizzes();
-<<<<<<< HEAD
-    const sanitized = quizzes.map(({ pinCode, ...quiz }) => quiz);
-    res.json(sanitized);
-=======
     const safe = quizzes.map(({ pinCode, ...rest }) => rest);
     res.json(safe);
->>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   });
 
   app.get("/api/quizzes/:id", async (req, res) => {
     const quiz = await storage.getQuiz(parseInt(req.params.id));
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-<<<<<<< HEAD
-    const { pinCode, ...safeQuiz } = quiz;
-    res.json(safeQuiz);
-=======
     const { pinCode, ...safe } = quiz;
     res.json(safe);
->>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   });
 
   app.post("/api/quizzes/:id/verify-pin", async (req, res) => {
     const quizId = parseInt(req.params.id);
-<<<<<<< HEAD
-    const pin = String(req.query.pin || "").trim().toUpperCase();
-=======
     const { pin } = req.body;
     if (!pin) return res.status(400).json({ message: "PIN required" });
     const valid = await storage.verifyQuizPin(quizId, pin);
@@ -100,7 +87,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!pin) return res.status(400).json({ message: "PIN required" });
     const valid = await storage.verifyQuizPin(quizId, pin);
     if (!valid) return res.status(403).json({ message: "Invalid PIN" });
->>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     if (!pin || pin !== quiz.pinCode) {
@@ -189,7 +175,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       title,
       timeLimitMinutes,
       dueDate: new Date(dueDate),
-      pinCode: generatePinCode(),
     });
     res.json(quiz);
   });
@@ -245,11 +230,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const model = getGeminiModel();
       const base64Pdf = req.file.buffer.toString("base64");
 
-<<<<<<< HEAD
-      const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\frac instead of \\frac, and \\sqrt instead of \\sqrt) so the JSON parser does not strip them. Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
-=======
       const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\( instead of \\(). Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
->>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
 
       const result = await model.generateContent([
         { text: prompt },
@@ -323,20 +304,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { quizId } = req.body;
       if (!quizId) return res.status(400).json({ message: "quizId required" });
 
-<<<<<<< HEAD
-      const submissions = await storage.getSubmissionsByQuizId(Number(quizId));
-      const questions = await storage.getQuestionsByQuizId(Number(quizId));
-      const model = getGeminiModel();
-
-      const payload = submissions.map((s) => ({
-        student: `${s.student.firstName} ${s.student.lastName}`,
-        totalScore: s.totalScore,
-        maxPossibleScore: s.maxPossibleScore,
-        answersBreakdown: s.answersBreakdown,
-      }));
-
-      const prompt = `You are a master mathematics tutor. Analyze this cohort's quiz data. Identify macro-trends, the most commonly failed questions, and the specific mathematical concepts the class as a whole is struggling with. Output in clean, professional HTML.\n\nQuestions:\n${JSON.stringify(questions, null, 2)}\n\nSubmissions:\n${JSON.stringify(payload, null, 2)}`;
-=======
       const quiz = await storage.getQuiz(quizId);
       if (!quiz) return res.status(404).json({ message: "Quiz not found" });
 
@@ -371,19 +338,10 @@ Identify macro-trends, the most commonly failed questions, and the specific math
 
 Data:
 ${JSON.stringify(summaryData, null, 2)}`;
->>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
 
       const result = await model.generateContent(prompt);
       let html = result.response.text();
       html = html.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-<<<<<<< HEAD
-      res.json({ analysis: html, submissionCount: submissions.length });
-    } catch (err: any) {
-      res.status(500).json({ message: `Class analysis failed: ${err.message}` });
-    }
-  });
-
-=======
 
       res.json({ analysis: html });
     } catch (err: any) {
@@ -456,7 +414,6 @@ When the user asks general questions about curriculum, pedagogy, or math concept
     res.json({ success: true });
   });
 
->>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   app.post("/api/upload-image", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: "No image uploaded" });
     const url = `/uploads/${req.file.filename}`;

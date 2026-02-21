@@ -8,11 +8,7 @@ export const quizzes = pgTable("quizzes", {
   title: text("title").notNull(),
   timeLimitMinutes: integer("time_limit_minutes").notNull(),
   dueDate: timestamp("due_date").notNull(),
-<<<<<<< HEAD
-  pinCode: varchar("pin_code", { length: 5 }).notNull(),
-=======
   pinCode: varchar("pin_code", { length: 5 }).notNull().default("00000"),
->>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

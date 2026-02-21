@@ -20,7 +20,6 @@ import {
   FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, KeyRound, BarChart3, MessageSquare, Copy
 } from "lucide-react";
 import { format } from "date-fns";
-import { Link } from "wouter";
 
 interface GeneratedQuestion {
   prompt_text: string;
@@ -479,7 +478,7 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
-    content: () => printRef.current,
+    contentRef: printRef,
     documentTitle: `student-analysis-${submission.id}`,
   });
 
