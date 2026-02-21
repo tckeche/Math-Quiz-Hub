@@ -6,7 +6,11 @@ import {
   quizzes, questions, students, submissions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
+
+function sanitizeName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
 
 export interface IStorage {
   createQuiz(quiz: InsertQuiz): Promise<Quiz>;
@@ -20,9 +24,11 @@ export interface IStorage {
 
   createStudent(student: InsertStudent): Promise<Student>;
   getStudent(id: number): Promise<Student | undefined>;
+  findStudentByName(firstName: string, lastName: string): Promise<Student | undefined>;
 
   createSubmission(submission: InsertSubmission): Promise<Submission>;
   getSubmissionsByQuizId(quizId: number): Promise<(Submission & { student: Student })[]>;
+  checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -58,12 +64,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStudent(student: InsertStudent): Promise<Student> {
-    const [result] = await db.insert(students).values(student).returning();
+    const sanitized = {
+      firstName: sanitizeName(student.firstName),
+      lastName: sanitizeName(student.lastName),
+    };
+    const [result] = await db.insert(students).values(sanitized).returning();
     return result;
   }
 
   async getStudent(id: number): Promise<Student | undefined> {
     const [result] = await db.select().from(students).where(eq(students.id, id));
+    return result;
+  }
+
+  async findStudentByName(firstName: string, lastName: string): Promise<Student | undefined> {
+    const fn = sanitizeName(firstName);
+    const ln = sanitizeName(lastName);
+    const [result] = await db.select().from(students)
+      .where(and(eq(students.firstName, fn), eq(students.lastName, ln)));
     return result;
   }
 
@@ -82,6 +100,20 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return results;
+  }
+
+  async checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean> {
+    const fn = sanitizeName(firstName);
+    const ln = sanitizeName(lastName);
+    const matchingStudents = await db.select().from(students)
+      .where(and(eq(students.firstName, fn), eq(students.lastName, ln)));
+    if (matchingStudents.length === 0) return false;
+    for (const student of matchingStudents) {
+      const [sub] = await db.select().from(submissions)
+        .where(and(eq(submissions.studentId, student.id), eq(submissions.quizId, quizId)));
+      if (sub) return true;
+    }
+    return false;
   }
 }
 

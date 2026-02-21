@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz, Question, Submission, Student } from "@shared/schema";
+import DOMPurify from "dompurify";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +14,18 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   ShieldCheck, Plus, Upload, FileJson, Eye, Download, ArrowLeft, Trash2,
-  BookOpen, Clock, Calendar, Users, CheckCircle2, AlertCircle, LogOut
+  BookOpen, Clock, Calendar, Users, CheckCircle2, AlertCircle, LogOut,
+  FileText, Loader2, Pencil, ImagePlus, Save, Brain, X
 } from "lucide-react";
 import { format } from "date-fns";
+
+interface GeneratedQuestion {
+  prompt_text: string;
+  options: string[];
+  correct_answer: string;
+  marks_worth: number;
+  image_url?: string | null;
+}
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
@@ -181,7 +191,7 @@ function QuestionUploader({ quizId, onDone }: { quizId: number; onDone: () => vo
       <CardHeader>
         <CardTitle className="font-serif text-lg flex items-center gap-2">
           <Upload className="w-5 h-5" />
-          Upload Questions
+          Upload Questions (JSON)
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -221,8 +231,290 @@ function QuestionUploader({ quizId, onDone }: { quizId: number; onDone: () => vo
   );
 }
 
+function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => void }) {
+  const { toast } = useToast();
+  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[] | null>(null);
+
+  const generateMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("pdf", file);
+      const res = await fetch("/api/generate-questions", { method: "POST", body: formData, credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || "Generation failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedQuestions(data.questions);
+      toast({ title: `${data.questions.length} questions extracted from PDF` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "PDF analysis failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (questions: GeneratedQuestion[]) =>
+      apiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "questions"] });
+      toast({ title: "Questions saved to quiz" });
+      setGeneratedQuestions(null);
+      onDone();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save questions", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    generateMutation.mutate(file);
+  };
+
+  const updateQuestion = (index: number, field: keyof GeneratedQuestion, value: any) => {
+    if (!generatedQuestions) return;
+    const updated = [...generatedQuestions];
+    updated[index] = { ...updated[index], [field]: value };
+    setGeneratedQuestions(updated);
+  };
+
+  const updateOption = (qIndex: number, optIndex: number, value: string) => {
+    if (!generatedQuestions) return;
+    const updated = [...generatedQuestions];
+    const newOptions = [...updated[qIndex].options];
+    newOptions[optIndex] = value;
+    updated[qIndex] = { ...updated[qIndex], options: newOptions };
+    setGeneratedQuestions(updated);
+  };
+
+  const removeQuestion = (index: number) => {
+    if (!generatedQuestions) return;
+    setGeneratedQuestions(generatedQuestions.filter((_, i) => i !== index));
+  };
+
+  const handleImageUpload = async (qIndex: number, file: File) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    try {
+      const res = await fetch("/api/upload-image", { method: "POST", body: formData, credentials: "include" });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      updateQuestion(qIndex, "image_url", data.url);
+      toast({ title: "Image attached" });
+    } catch {
+      toast({ title: "Image upload failed", variant: "destructive" });
+    }
+  };
+
+  const handlePublish = () => {
+    if (!generatedQuestions || generatedQuestions.length === 0) return;
+    saveMutation.mutate(generatedQuestions);
+  };
+
+  if (generateMutation.isPending) {
+    return (
+      <Card>
+        <CardContent className="py-16 text-center">
+          <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary mb-4" />
+          <h3 className="font-serif text-lg font-semibold mb-2" data-testid="text-pdf-analyzing">Analyzing PDF...</h3>
+          <p className="text-sm text-muted-foreground">
+            Extracting questions and solving for correct answers. This may take 10-20 seconds.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (generatedQuestions) {
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="font-serif text-lg flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              Review & Edit ({generatedQuestions.length} questions)
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setGeneratedQuestions(null); }} data-testid="button-discard-generated">
+                Discard
+              </Button>
+              <Button size="sm" onClick={handlePublish} disabled={saveMutation.isPending || generatedQuestions.length === 0} data-testid="button-publish-generated">
+                <Save className="w-4 h-4 mr-1" />
+                {saveMutation.isPending ? "Saving..." : "Save & Publish Quiz"}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {generatedQuestions.map((q, idx) => (
+              <div key={idx} className="border rounded-md p-4 space-y-3" data-testid={`card-generated-q-${idx}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-mono text-sm text-muted-foreground font-medium shrink-0">Q{idx + 1}</span>
+                  <Button variant="outline" size="icon" onClick={() => removeQuestion(idx)} data-testid={`button-remove-generated-${idx}`}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Question Text (LaTeX)</Label>
+                  <Textarea
+                    value={q.prompt_text}
+                    onChange={(e) => updateQuestion(idx, "prompt_text", e.target.value)}
+                    className="font-mono text-sm min-h-[60px]"
+                    data-testid={`input-generated-prompt-${idx}`}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {q.options.map((opt, optIdx) => (
+                    <div key={optIdx} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Option {String.fromCharCode(65 + optIdx)}</Label>
+                      <Input
+                        value={opt}
+                        onChange={(e) => updateOption(idx, optIdx, e.target.value)}
+                        className="font-mono text-sm"
+                        data-testid={`input-generated-opt-${idx}-${optIdx}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Correct Answer</Label>
+                    <Input
+                      value={q.correct_answer}
+                      onChange={(e) => updateQuestion(idx, "correct_answer", e.target.value)}
+                      className="font-mono text-sm"
+                      data-testid={`input-generated-answer-${idx}`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Marks</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={q.marks_worth}
+                      onChange={(e) => updateQuestion(idx, "marks_worth", parseInt(e.target.value) || 1)}
+                      className="font-mono text-sm"
+                      data-testid={`input-generated-marks-${idx}`}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label htmlFor={`img-upload-${idx}`} className="cursor-pointer">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground border rounded-md px-3 py-1.5">
+                      <ImagePlus className="w-4 h-4" />
+                      {q.image_url ? "Change Image" : "Attach Image"}
+                    </div>
+                    <input
+                      id={`img-upload-${idx}`}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => { if (e.target.files?.[0]) handleImageUpload(idx, e.target.files[0]); }}
+                      data-testid={`input-generated-image-${idx}`}
+                    />
+                  </Label>
+                  {q.image_url && (
+                    <div className="flex items-center gap-2">
+                      <img src={q.image_url} alt="attached" className="h-10 w-10 object-cover rounded border" />
+                      <Button variant="outline" size="sm" onClick={() => updateQuestion(idx, "image_url", null)}>Remove</Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-serif text-lg flex items-center gap-2">
+          <FileText className="w-5 h-5" />
+          Generate Questions from PDF
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Upload a math exam PDF and AI will extract multiple-choice questions with LaTeX notation.
+            You'll be able to review and edit before publishing.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="pdfFile">Select PDF file</Label>
+            <Input id="pdfFile" type="file" accept=".pdf" onChange={handlePdfUpload} data-testid="input-pdf-upload" />
+          </div>
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={onDone} data-testid="button-cancel-pdf">Cancel</Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StudentAnalysis({ submission, questions }: { submission: Submission & { student: Student }; questions: Question[] }) {
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleAnalyze = async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/analyze-student", { submission, questions });
+      const data = await res.json();
+      setAnalysis(data.analysis);
+    } catch (err: any) {
+      toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      {!analysis && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAnalyze}
+          disabled={loading}
+          data-testid={`button-analyze-${submission.id}`}
+        >
+          {loading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Brain className="w-4 h-4 mr-1" />}
+          {loading ? "Analyzing..." : "Analyze with AI"}
+        </Button>
+      )}
+      {analysis && (
+        <div className="mt-3 border rounded-md p-4 bg-muted/30">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h4 className="text-sm font-medium flex items-center gap-1.5">
+              <Brain className="w-4 h-4 text-primary" />
+              AI Analysis
+            </h4>
+            <Button variant="outline" size="sm" onClick={() => setAnalysis(null)}>Close</Button>
+          </div>
+          <div
+            className="prose prose-sm max-w-none text-sm"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }}
+            data-testid={`text-analysis-${submission.id}`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) {
   const [showUploader, setShowUploader] = useState(false);
+  const [showPdfGen, setShowPdfGen] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
   const { data: quiz, isLoading: quizLoading } = useQuery<Quiz>({
@@ -296,9 +588,13 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => setShowUploader(!showUploader)} data-testid="button-toggle-uploader">
+        <Button variant="outline" size="sm" onClick={() => { setShowUploader(!showUploader); setShowPdfGen(false); }} data-testid="button-toggle-uploader">
           <Upload className="w-4 h-4 mr-1" />
-          Add Questions
+          Add Questions (JSON)
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => { setShowPdfGen(!showPdfGen); setShowUploader(false); }} data-testid="button-toggle-pdf">
+          <FileText className="w-4 h-4 mr-1" />
+          Generate from PDF
         </Button>
         <Button variant="outline" size="sm" onClick={() => setShowResults(!showResults)} data-testid="button-toggle-results">
           <Users className="w-4 h-4 mr-1" />
@@ -316,6 +612,10 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
         <QuestionUploader quizId={quizId} onDone={() => setShowUploader(false)} />
       )}
 
+      {showPdfGen && (
+        <PdfQuizGenerator quizId={quizId} onDone={() => setShowPdfGen(false)} />
+      )}
+
       {showResults && submissions && (
         <Card>
           <CardHeader>
@@ -325,31 +625,26 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
             {submissions.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">No submissions yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-3 font-medium">Student</th>
-                      <th className="text-center py-2 px-3 font-medium">Score</th>
-                      <th className="text-center py-2 px-3 font-medium">%</th>
-                      <th className="text-right py-2 px-3 font-medium">Submitted</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {submissions.map((s) => (
-                      <tr key={s.id} className="border-b last:border-0" data-testid={`row-submission-${s.id}`}>
-                        <td className="py-2 px-3">{s.student.firstName} {s.student.lastName}</td>
-                        <td className="text-center py-2 px-3 font-medium">{s.totalScore}/{s.maxPossibleScore}</td>
-                        <td className="text-center py-2 px-3">
-                          <Badge variant={s.totalScore / s.maxPossibleScore >= 0.5 ? "default" : "secondary"}>
-                            {((s.totalScore / s.maxPossibleScore) * 100).toFixed(0)}%
-                          </Badge>
-                        </td>
-                        <td className="text-right py-2 px-3 text-muted-foreground">{format(new Date(s.submittedAt), "PP p")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-4">
+                {submissions.map((s) => (
+                  <div key={s.id} className="border rounded-md p-4" data-testid={`row-submission-${s.id}`}>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="font-medium">{s.student.firstName} {s.student.lastName}</p>
+                        <p className="text-sm text-muted-foreground">{format(new Date(s.submittedAt), "PP p")}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium">{s.totalScore}/{s.maxPossibleScore}</span>
+                        <Badge variant={s.totalScore / s.maxPossibleScore >= 0.5 ? "default" : "secondary"}>
+                          {((s.totalScore / s.maxPossibleScore) * 100).toFixed(0)}%
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <StudentAnalysis submission={s} questions={questions || []} />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
@@ -370,7 +665,7 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
           ) : !questions || questions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileJson className="w-10 h-10 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">No questions added yet. Upload a JSON file to get started.</p>
+              <p className="text-sm">No questions added yet. Upload JSON or generate from a PDF.</p>
             </div>
           ) : (
             <div className="space-y-3">

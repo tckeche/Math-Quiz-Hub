@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
   Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2,
-  Circle, Send, ArrowLeft, GraduationCap, Home
+  Circle, Send, ArrowLeft, GraduationCap, Home, ShieldAlert, Loader2
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { BlockMath, InlineMath } from 'react-katex';
@@ -38,7 +38,31 @@ function renderLatex(text: string) {
   });
 }
 
-function EntryGate({ quiz, onStart }: { quiz: Quiz; onStart: (firstName: string, lastName: string) => void }) {
+function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <Card className="w-full max-w-md text-center">
+        <CardContent className="py-12">
+          <ShieldAlert className="w-16 h-16 mx-auto text-destructive/60 mb-4" />
+          <h2 className="font-serif text-2xl font-bold mb-2" data-testid="text-already-taken">
+            This test has already been taken.
+          </h2>
+          <p className="text-muted-foreground mb-6">
+            You have already submitted your answers for "{quizTitle}". Each student is allowed only one attempt.
+          </p>
+          <Link href="/">
+            <Button data-testid="button-back-home-taken">
+              <Home className="w-4 h-4 mr-1.5" />
+              Return Home
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstName: string, lastName: string) => void; checking: boolean }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
@@ -46,7 +70,7 @@ function EntryGate({ quiz, onStart }: { quiz: Quiz; onStart: (firstName: string,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim() || !lastName.trim()) return;
+    if (!firstName.trim() || !lastName.trim() || checking) return;
     onStart(firstName.trim(), lastName.trim());
   };
 
@@ -86,6 +110,7 @@ function EntryGate({ quiz, onStart }: { quiz: Quiz; onStart: (firstName: string,
                   <li>The timer will start as soon as you click "Begin".</li>
                   <li>If you refresh, the timer will <strong>not</strong> reset.</li>
                   <li>The examination will auto-submit when time expires.</li>
+                  <li>You are allowed <strong>one attempt only</strong>.</li>
                 </ul>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -110,8 +135,15 @@ function EntryGate({ quiz, onStart }: { quiz: Quiz; onStart: (firstName: string,
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim()} data-testid="button-begin-quiz">
-                Begin Examination
+              <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || checking} data-testid="button-begin-quiz">
+                {checking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  "Begin Examination"
+                )}
               </Button>
             </form>
           )}
@@ -194,6 +226,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
       setSubmitted(true);
       localStorage.removeItem(startTimeKey);
       localStorage.removeItem(answersKey);
+      localStorage.setItem(`completed_quiz_${quiz.id}`, "true");
     },
     onError: (err: Error) => {
       submittingRef.current = false;
@@ -432,6 +465,8 @@ export default function QuizPage() {
   const quizId = parseInt(params.id || "0");
   const [studentId, setStudentId] = useState<number | null>(null);
   const [started, setStarted] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   const { data: quiz, isLoading: quizLoading } = useQuery<Quiz>({
     queryKey: ["/api/quizzes", quizId],
@@ -441,6 +476,13 @@ export default function QuizPage() {
     queryKey: ["/api/quizzes", quizId, "questions"],
     enabled: started,
   });
+
+  useEffect(() => {
+    const completedKey = `completed_quiz_${quizId}`;
+    if (localStorage.getItem(completedKey) === "true") {
+      setBlocked(true);
+    }
+  }, [quizId]);
 
   const registerMutation = useMutation({
     mutationFn: async (data: { firstName: string; lastName: string }) => {
@@ -453,8 +495,22 @@ export default function QuizPage() {
     },
   });
 
-  const handleStart = (firstName: string, lastName: string) => {
-    registerMutation.mutate({ firstName, lastName });
+  const handleStart = async (firstName: string, lastName: string) => {
+    setChecking(true);
+    try {
+      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName });
+      const data = await res.json();
+      if (data.hasSubmitted) {
+        setBlocked(true);
+        localStorage.setItem(`completed_quiz_${quizId}`, "true");
+        return;
+      }
+      registerMutation.mutate({ firstName, lastName });
+    } catch {
+      registerMutation.mutate({ firstName, lastName });
+    } finally {
+      setChecking(false);
+    }
   };
 
   if (quizLoading) {
@@ -488,8 +544,12 @@ export default function QuizPage() {
     );
   }
 
+  if (blocked) {
+    return <AlreadyTakenScreen quizTitle={quiz.title} />;
+  }
+
   if (!started || !studentId) {
-    return <EntryGate quiz={quiz} onStart={handleStart} />;
+    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} />;
   }
 
   if (questionsLoading || !questions) {
