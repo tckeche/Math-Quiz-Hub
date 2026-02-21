@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz, Question, Submission, Student } from "@shared/schema";
 import DOMPurify from "dompurify";
+import { useReactToPrint } from "react-to-print";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -474,6 +476,11 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    content: () => printRef.current,
+    documentTitle: `student-analysis-${submission.id}`,
+  });
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -511,7 +518,11 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
             </h4>
             <Button variant="outline" size="sm" onClick={() => setAnalysis(null)}>Close</Button>
           </div>
+          <div className="mb-2">
+            <Button variant="outline" size="sm" onClick={handlePrint}>Download Report as PDF</Button>
+          </div>
           <div
+            ref={printRef}
             className="prose prose-sm max-w-none text-sm"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }}
             data-testid={`text-analysis-${submission.id}`}
@@ -638,6 +649,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{quiz.timeLimitMinutes} min</span>
             <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Due {format(new Date(quiz.dueDate), "PPP")}</span>
+            <Badge variant="secondary">PIN: {quiz.pinCode}</Badge>
           </div>
         </div>
       </div>
@@ -651,6 +663,12 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           <FileText className="w-4 h-4 mr-1" />
           Generate from PDF
         </Button>
+        <Link href="/admin/builder">
+          <Button variant="outline" size="sm">AI Builder</Button>
+        </Link>
+        <Link href={`/admin/analytics/${quizId}`}>
+          <Button variant="outline" size="sm">Class Analytics</Button>
+        </Link>
         <Button variant="outline" size="sm" onClick={() => setShowResults(!showResults)} data-testid="button-toggle-results">
           <Users className="w-4 h-4 mr-1" />
           View Results ({submissions?.length ?? 0})
