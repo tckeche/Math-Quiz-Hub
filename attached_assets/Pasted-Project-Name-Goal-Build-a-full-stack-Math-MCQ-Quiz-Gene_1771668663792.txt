@@ -1,0 +1,56 @@
+Project Name/Goal: Build a full-stack Math MCQ Quiz Generation and Assessment Platform.
+
+Tech Stack: React (Vite), Node.js, Express, Drizzle ORM, PostgreSQL, Tailwind CSS.
+Crucial Addition: You MUST install and use react-katex (and import the katex/dist/katex.min.css stylesheet) on the frontend to render LaTeX strings for mathematical notation.
+
+Project Description: I need a web application for students to take timed, interactive multiple-choice mathematics quizzes. It must include an admin dashboard for me to upload JSON question banks. The student interface MUST look highly academic, resembling a formal printed math exam (like a Cambridge A-Level paper).
+
+Please implement the following core requirements:
+
+1. Database Schema (Drizzle + Postgres):
+
+Quizzes: id, title, time_limit_minutes, due_date, created_at.
+
+Questions: id, quiz_id, prompt_text (contains LaTeX strings), image_url (nullable), options (JSON array of strings, can contain LaTeX), correct_answer (string), marks_worth (integer).
+
+Students: id, first_name, last_name.
+
+Submissions: id, student_id, quiz_id, total_score, max_possible_score, answers_breakdown (JSON mapping question IDs to the student's answer, whether it was correct, and marks earned), submitted_at.
+
+2. Admin Dashboard (/admin):
+
+Authentication: Implement a simple password gate with the hardcoded password Chomukamba. Use a simple cookie or localStorage token so the admin doesn't have to re-enter the password on every page reload.
+
+Quiz Management: Create a form to generate a new quiz (Title, Time Limit, Due Date).
+
+Robust Question Uploading: To add questions to a quiz, provide a file upload input for .json files AND a large textarea for pasting raw JSON.
+
+Error Handling: You MUST wrap the JSON parsing in a try-catch block. If the JSON is invalid, display a clear, red error message to the admin rather than crashing the app.
+
+Image Handling: Allow images to be attached via direct URL.
+
+Analytics & Export: A view to see all student submissions for a specific quiz, showing total scores and mark breakdowns. Include a "Download Results as CSV" button.
+
+3. Student Interface (/quiz/:quiz_id):
+
+Entry Gate: Students must enter First Name and Last Name. Check the due_date; block entry if the quiz is closed.
+
+Anti-Cheat Timer: A prominent countdown timer pinned to the top. Crucial: Store the startTime in the browser's localStorage so that if the student refreshes the page, the timer does NOT reset. If time hits 00:00, auto-submit the form.
+
+The Exam Layout (Academic UI): * Show one question at a time.
+
+Typography: Use a clean, serif font (like Cambria or Times New Roman) for the question text to mimic a real exam.
+
+Math Rendering: Wrap prompt_text and all options in <BlockMath> or <InlineMath> components from react-katex so mathematical symbols, fractions, and integrals render perfectly.
+
+Images: If an image_url exists, display it centered. Add CSS constraints (max-w-full, max-h-96, object-contain) so geometric diagrams and graphs do not stretch or distort.
+
+Marks: Display the marks_worth in bold brackets on the right side of the screen (e.g., [4]).
+
+Use large, distinct buttons for A, B, C, D options. Highlight the selected option clearly. Include "Next" and "Previous" buttons.
+
+Submission: A summary screen before clicking "Submit" showing which questions are answered/unanswered. A final success screen (do not show the final score).
+
+4. Backend Scoring Logic:
+
+Upon submission, calculate the total_score by comparing the student's exact string choice against the correct_answer, factoring in marks_worth. Save the detailed breakdown to the Submissions table.
