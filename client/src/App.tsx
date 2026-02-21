@@ -16,7 +16,11 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/admin" component={AdminPage} />
       <Route path="/admin/builder" component={BuilderPage} />
+<<<<<<< HEAD
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
+=======
+      <Route path="/admin/analytics/:quizId" component={AnalyticsPage} />
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
       <Route path="/quiz/:id" component={QuizPage} />
       <Route component={NotFound} />
     </Switch>

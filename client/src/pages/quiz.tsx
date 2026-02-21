@@ -62,17 +62,29 @@ function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
   );
 }
 
+<<<<<<< HEAD
 function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [pin, setPin] = useState("");
+=======
+function EntryGate({ quiz, onStart, checking, pinError: externalPinError }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean; pinError?: string }) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [pin, setPin] = useState("");
+  const pinError = externalPinError || "";
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
 
   const isClosed = new Date(quiz.dueDate) < new Date();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim() || !pin.trim() || checking) return;
+<<<<<<< HEAD
     onStart(firstName.trim(), lastName.trim(), pin.trim().toUpperCase());
+=======
+    onStart(firstName.trim(), lastName.trim(), pin.trim());
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   };
 
   return (
@@ -144,8 +156,20 @@ function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstNam
                   onChange={(e) => setPin(e.target.value.toUpperCase())}
                   placeholder="Enter 5-character PIN"
                   maxLength={5}
+<<<<<<< HEAD
                   data-testid="input-quiz-pin"
                 />
+=======
+                  className="font-mono text-center text-lg tracking-widest"
+                  data-testid="input-quiz-pin"
+                />
+                {pinError && (
+                  <p className="text-sm text-destructive flex items-center gap-1" data-testid="text-pin-error">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {pinError}
+                  </p>
+                )}
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
               </div>
               <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || !pin.trim() || checking} data-testid="button-begin-quiz">
                 {checking ? (
@@ -479,13 +503,20 @@ export default function QuizPage() {
   const [started, setStarted] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(false);
+<<<<<<< HEAD
   const [quizPin, setQuizPin] = useState("");
+=======
+  const [pinError, setPinError] = useState("");
+  const [verifiedPin, setVerifiedPin] = useState<string | null>(null);
+  const { toast } = useToast();
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
 
   const { data: quiz, isLoading: quizLoading } = useQuery<Quiz>({
     queryKey: ["/api/quizzes", quizId],
   });
 
   const { data: questions, isLoading: questionsLoading } = useQuery<Question[]>({
+<<<<<<< HEAD
     queryKey: ["/api/quizzes", quizId, "questions", quizPin],
     queryFn: async () => {
       const res = await fetch(`/api/quizzes/${quizId}/questions?pin=${encodeURIComponent(quizPin)}`, { credentials: "include" });
@@ -496,6 +527,14 @@ export default function QuizPage() {
       return res.json();
     },
     enabled: started && Boolean(quizPin),
+=======
+    queryKey: ["/api/quizzes", quizId, "questions"],
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/quizzes/${quizId}/questions`, { pin: verifiedPin });
+      return res.json();
+    },
+    enabled: started && !!verifiedPin,
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   });
 
   useEffect(() => {
@@ -518,8 +557,22 @@ export default function QuizPage() {
 
   const handleStart = async (firstName: string, lastName: string, pin: string) => {
     setChecking(true);
+    setPinError("");
     try {
+<<<<<<< HEAD
       const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName, pin });
+=======
+      const pinRes = await apiRequest("POST", `/api/quizzes/${quizId}/verify-pin`, { pin });
+      const pinData = await pinRes.json();
+      if (!pinData.valid) {
+        setPinError("Invalid PIN. Please check and try again.");
+        setChecking(false);
+        return;
+      }
+      setVerifiedPin(pin);
+
+      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName });
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
       const data = await res.json();
       if (data.hasSubmitted) {
         setBlocked(true);
@@ -528,9 +581,18 @@ export default function QuizPage() {
       }
       setQuizPin(pin);
       registerMutation.mutate({ firstName, lastName });
+<<<<<<< HEAD
     } catch {
       setQuizPin(pin);
       registerMutation.mutate({ firstName, lastName });
+=======
+    } catch (err: any) {
+      if (err.message?.includes("403") || err.message?.includes("Invalid PIN")) {
+        setPinError("Invalid PIN. Please check and try again.");
+      } else {
+        registerMutation.mutate({ firstName, lastName });
+      }
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
     } finally {
       setChecking(false);
     }
@@ -572,7 +634,7 @@ export default function QuizPage() {
   }
 
   if (!started || !studentId) {
-    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} />;
+    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} />;
   }
 
   if (questionsLoading || !questions) {

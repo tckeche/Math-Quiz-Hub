@@ -8,7 +8,11 @@ export const quizzes = pgTable("quizzes", {
   title: text("title").notNull(),
   timeLimitMinutes: integer("time_limit_minutes").notNull(),
   dueDate: timestamp("due_date").notNull(),
+<<<<<<< HEAD
   pinCode: varchar("pin_code", { length: 5 }).notNull(),
+=======
+  pinCode: varchar("pin_code", { length: 5 }).notNull().default("00000"),
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -38,7 +42,7 @@ export const submissions = pgTable("submissions", {
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
 });
 
-export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, createdAt: true });
+export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, createdAt: true, pinCode: true });
 export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
 export const insertStudentSchema = createInsertSchema(students).omit({ id: true });
 export const insertSubmissionSchema = createInsertSchema(submissions).omit({ id: true, submittedAt: true });

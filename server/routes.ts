@@ -1,7 +1,9 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { questionUploadSchema } from "@shared/schema";
+import { questionUploadSchema, submissions as submissionsTable } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
 import path from "path";
@@ -59,20 +61,46 @@ function extractJsonArray(text: string): any[] | null {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.get("/api/quizzes", async (_req, res) => {
     const quizzes = await storage.getQuizzes();
+<<<<<<< HEAD
     const sanitized = quizzes.map(({ pinCode, ...quiz }) => quiz);
     res.json(sanitized);
+=======
+    const safe = quizzes.map(({ pinCode, ...rest }) => rest);
+    res.json(safe);
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   });
 
   app.get("/api/quizzes/:id", async (req, res) => {
     const quiz = await storage.getQuiz(parseInt(req.params.id));
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+<<<<<<< HEAD
     const { pinCode, ...safeQuiz } = quiz;
     res.json(safeQuiz);
+=======
+    const { pinCode, ...safe } = quiz;
+    res.json(safe);
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   });
 
-  app.get("/api/quizzes/:id/questions", async (req, res) => {
+  app.post("/api/quizzes/:id/verify-pin", async (req, res) => {
     const quizId = parseInt(req.params.id);
+<<<<<<< HEAD
     const pin = String(req.query.pin || "").trim().toUpperCase();
+=======
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ message: "PIN required" });
+    const valid = await storage.verifyQuizPin(quizId, pin);
+    if (!valid) return res.status(403).json({ message: "Invalid PIN" });
+    res.json({ valid: true });
+  });
+
+  app.post("/api/quizzes/:id/questions", async (req, res) => {
+    const quizId = parseInt(req.params.id);
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ message: "PIN required" });
+    const valid = await storage.verifyQuizPin(quizId, pin);
+    if (!valid) return res.status(403).json({ message: "Invalid PIN" });
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     if (!pin || pin !== quiz.pinCode) {
@@ -81,6 +109,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const qs = await storage.getQuestionsByQuizId(quizId);
     const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
+  });
+
+  app.get("/api/quizzes/:id/questions", async (req, res) => {
+    res.status(403).json({ message: "PIN verification required. Use POST with pin." });
   });
 
   app.post("/api/students", async (req, res) => {
@@ -206,16 +238,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(submissions);
   });
 
-  app.delete("/api/admin/submissions/:id", async (req, res) => {
-    await storage.deleteSubmission(parseInt(req.params.id));
-    res.json({ success: true });
-  });
-
-  app.delete("/api/admin/quizzes/:id/submissions", async (req, res) => {
-    await storage.deleteSubmissionsByQuizId(parseInt(req.params.id));
-    res.json({ success: true });
-  });
-
   app.post("/api/generate-questions", pdfUpload.single("pdf"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No PDF file uploaded" });
@@ -223,7 +245,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const model = getGeminiModel();
       const base64Pdf = req.file.buffer.toString("base64");
 
+<<<<<<< HEAD
       const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\frac instead of \\frac, and \\sqrt instead of \\sqrt) so the JSON parser does not strip them. Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
+=======
+      const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\( instead of \\(). Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
 
       const result = await model.generateContent([
         { text: prompt },
@@ -297,6 +323,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { quizId } = req.body;
       if (!quizId) return res.status(400).json({ message: "quizId required" });
 
+<<<<<<< HEAD
       const submissions = await storage.getSubmissionsByQuizId(Number(quizId));
       const questions = await storage.getQuestionsByQuizId(Number(quizId));
       const model = getGeminiModel();
@@ -309,16 +336,127 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }));
 
       const prompt = `You are a master mathematics tutor. Analyze this cohort's quiz data. Identify macro-trends, the most commonly failed questions, and the specific mathematical concepts the class as a whole is struggling with. Output in clean, professional HTML.\n\nQuestions:\n${JSON.stringify(questions, null, 2)}\n\nSubmissions:\n${JSON.stringify(payload, null, 2)}`;
+=======
+      const quiz = await storage.getQuiz(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+
+      const allQuestions = await storage.getQuestionsByQuizId(quizId);
+      const submissions = await storage.getSubmissionsByQuizId(quizId);
+
+      if (submissions.length === 0) {
+        return res.status(400).json({ message: "No submissions to analyze" });
+      }
+
+      const model = getGeminiModel();
+
+      const summaryData = submissions.map((s) => ({
+        student: `${s.student.firstName} ${s.student.lastName}`,
+        score: s.totalScore,
+        maxScore: s.maxPossibleScore,
+        percentage: ((s.totalScore / s.maxPossibleScore) * 100).toFixed(1),
+        breakdown: Object.entries(s.answersBreakdown).map(([qId, detail]) => {
+          const question = allQuestions.find((q) => String(q.id) === qId);
+          return {
+            question: question?.promptText || "Unknown",
+            correct: detail.correct,
+            marksEarned: detail.marksEarned,
+            marksWorth: question?.marksWorth || 1,
+          };
+        }),
+      }));
+
+      const prompt = `You are a master mathematics tutor. Analyze this cohort's quiz data for "${quiz.title}". There are ${submissions.length} students and ${allQuestions.length} questions.
+
+Identify macro-trends, the most commonly failed questions, and the specific mathematical concepts the class as a whole is struggling with. Also highlight strengths. Output in clean, professional HTML with headings, lists, and tables where appropriate. Do not use code fences.
+
+Data:
+${JSON.stringify(summaryData, null, 2)}`;
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
 
       const result = await model.generateContent(prompt);
       let html = result.response.text();
       html = html.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+<<<<<<< HEAD
       res.json({ analysis: html, submissionCount: submissions.length });
     } catch (err: any) {
       res.status(500).json({ message: `Class analysis failed: ${err.message}` });
     }
   });
 
+=======
+
+      res.json({ analysis: html });
+    } catch (err: any) {
+      console.error("AI class analysis error:", err);
+      res.status(500).json({ message: `AI class analysis failed: ${err.message}` });
+    }
+  });
+
+  app.post("/api/builder/chat", async (req, res) => {
+    try {
+      const { messages } = req.body;
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ message: "messages array required" });
+      }
+
+      const model = getGeminiModel();
+
+      const systemPrompt = `You are an expert mathematics curriculum assistant helping teachers create multiple-choice quiz questions. When the user asks you to generate questions, you MUST respond with:
+1. A brief conversational explanation of the questions you've created.
+2. A JSON block wrapped in \`\`\`json ... \`\`\` containing an array of question objects matching this exact schema:
+[{
+  "prompt_text": "The question text with LaTeX math notation using double-escaped backslashes (e.g., \\\\(x^2\\\\))",
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correct_answer": "The exact text of the correct option",
+  "marks_worth": 2
+}]
+
+IMPORTANT RULES:
+- Always use LaTeX notation for math expressions
+- Double-escape all backslashes in JSON (use \\\\ instead of \\)
+- The correct_answer MUST exactly match one of the options
+- Always provide exactly 4 options unless asked otherwise
+- Default marks_worth to 2 unless specified
+
+When the user asks general questions about curriculum, pedagogy, or math concepts, respond conversationally without JSON.`;
+
+      const chatHistory = messages.map((m: { role: string; content: string }) => ({
+        role: m.role === "user" ? "user" : "model",
+        parts: [{ text: m.content }],
+      }));
+
+      const chat = model.startChat({
+        history: [
+          { role: "user", parts: [{ text: systemPrompt }] },
+          { role: "model", parts: [{ text: "I'm ready to help you create mathematics quiz questions! I can generate multiple-choice questions on any math topic with proper LaTeX notation. What topic would you like to start with?" }] },
+          ...chatHistory.slice(0, -1),
+        ],
+      });
+
+      const lastMessage = messages[messages.length - 1];
+      const result = await chat.sendMessage(lastMessage.content);
+      const responseText = result.response.text();
+
+      res.json({ response: responseText });
+    } catch (err: any) {
+      console.error("Builder chat error:", err);
+      res.status(500).json({ message: `AI chat failed: ${err.message}` });
+    }
+  });
+
+  app.delete("/api/admin/submissions/:id", async (req, res) => {
+    const submissionId = parseInt(req.params.id);
+    await db.delete(submissionsTable).where(eq(submissionsTable.id, submissionId));
+    res.json({ success: true });
+  });
+
+  app.delete("/api/admin/quizzes/:id/submissions", async (req, res) => {
+    const quizId = parseInt(req.params.id);
+    await db.delete(submissionsTable).where(eq(submissionsTable.quizId, quizId));
+    res.json({ success: true });
+  });
+
+>>>>>>> e68bba0 (Add quiz PIN verification and AI-powered quiz builder features)
   app.post("/api/upload-image", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: "No image uploaded" });
     const url = `/uploads/${req.file.filename}`;
