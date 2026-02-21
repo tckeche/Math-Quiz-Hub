@@ -1,0 +1,51 @@
+Phase 2 Update: Native AI Integration & Submission Security
+
+Please add the following features to the existing application. Do not break the existing Drizzle/Postgres schema or the React student timer logic.
+
+1. Backend Setup & AI Configuration:
+
+Install the @google/generative-ai package.
+
+Configure the backend to securely read process.env.GEMINI_API_KEY.
+
+Use the gemini-2.5-flash model for all AI tasks.
+
+2. Endpoint 1: PDF to AI Quiz Generation (POST /api/generate-questions)
+
+The Flow: On the Admin /admin dashboard, add a file upload tool specifically for PDFs. When uploaded, the backend must convert the PDF to a base64 string (application/pdf) and send it to the Gemini API.
+
+The System Prompt: The prompt sent to Gemini MUST include these exact instructions: "Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ prompt_text: string, options: [string], correct_answer: string, marks_worth: number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\frac instead of \\frac, and \\\\sqrt instead of \\sqrt) so the JSON parser does not strip them."
+
+The Parser Fix: Before running JSON.parse() on the AI's response, use regex to strip out any markdown formatting (e.g., remove ```json and trailing ```).
+
+Frontend UX: The PDF analysis will take 10-20 seconds. You MUST add a prominent loading spinner or "Analyzing PDF..." state on the frontend so the admin knows the system is working.
+
+3. The "Review & Edit" Stage (Critical Feature):
+
+When the AI returns the generated questions, DO NOT save them directly to the active quiz database yet.
+
+First, render them on the Admin screen in an "Edit Mode" list.
+
+Why: The AI cannot extract geometric diagrams (like circles or graphs) from the PDF. The Admin must be able to click "Attach Image" on specific generated questions to manually upload the missing diagrams to the local /public/uploads directory.
+
+The Admin must also be able to edit the text/LaTeX or change the correct answer in case of AI hallucinations.
+
+Once reviewed, provide a "Save and Publish Quiz" button to write to the database.
+
+4. Endpoint 2: AI Student Analysis (POST /api/analyze-student)
+
+Add an "Analyze with AI" button next to each student's submission on the Admin dashboard.
+
+When clicked, send the student's score and answers_breakdown (which questions they got right/wrong and the specific concepts tested) to the Gemini API.
+
+The System Prompt: "You are an expert mathematics tutor. Analyze this student's quiz submission. Identify which specific mathematical concepts they are struggling with based on the questions they got wrong. Keep the analysis concise, actionable, and formatted in clean HTML."
+
+Render the returned HTML analysis directly on the student's result card.
+
+5. Single-Attempt Enforcement & Security (POST /api/check-submission)
+
+Server-Side Validation: Create an endpoint that receives quiz_id, first_name, and last_name. Before querying the database, the backend MUST sanitize the incoming names: trim all leading/trailing whitespace, replace multiple internal spaces with a single space, and convert the strings to completely lowercase. Do the exact same sanitization when initially creating a Student record. If a matching submission exists for that quiz_id, return { hasSubmitted: true }.
+
+Frontend Gatekeeper (/quiz/:quiz_id): When a student enters their name and clicks "Start Quiz", the frontend must pause and call /api/check-submission. If it returns true, completely block access to the quiz questions and timer. Display a prominent message: "This test has already been taken." Hide the question UI entirely.
+
+Client-Side Fallback: Upon a successful quiz submission, set a flag in the browser's localStorage (e.g., completed_quiz_${quiz_id}: true). When the quiz component mounts, check this key first. If it exists, immediately show the "This test has already been taken" message without making a database call.
