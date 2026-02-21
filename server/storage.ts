@@ -28,6 +28,8 @@ export interface IStorage {
 
   createSubmission(submission: InsertSubmission): Promise<Submission>;
   getSubmissionsByQuizId(quizId: number): Promise<(Submission & { student: Student })[]>;
+  deleteSubmission(id: number): Promise<void>;
+  deleteSubmissionsByQuizId(quizId: number): Promise<void>;
   checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean>;
 }
 
@@ -105,6 +107,15 @@ class DatabaseStorage implements IStorage {
       if (student) results.push({ ...sub, student });
     }
     return results;
+  }
+
+
+  async deleteSubmission(id: number): Promise<void> {
+    await this.database.delete(submissions).where(eq(submissions.id, id));
+  }
+
+  async deleteSubmissionsByQuizId(quizId: number): Promise<void> {
+    await this.database.delete(submissions).where(eq(submissions.quizId, quizId));
   }
 
   async checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean> {
@@ -196,6 +207,15 @@ class MemoryStorage implements IStorage {
       .filter((s) => s.quizId === quizId)
       .map((s) => ({ ...s, student: this.students.find((st) => st.id === s.studentId)! }))
       .filter((s) => Boolean(s.student));
+  }
+
+
+  async deleteSubmission(id: number): Promise<void> {
+    this.submissions = this.submissions.filter((s) => s.id !== id);
+  }
+
+  async deleteSubmissionsByQuizId(quizId: number): Promise<void> {
+    this.submissions = this.submissions.filter((s) => s.quizId !== quizId);
   }
 
   async checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean> {

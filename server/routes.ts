@@ -172,6 +172,16 @@ export async function registerRoutes(
     res.json(submissions);
   });
 
+  app.delete("/api/admin/submissions/:id", async (req, res) => {
+    await storage.deleteSubmission(parseInt(req.params.id));
+    res.json({ success: true });
+  });
+
+  app.delete("/api/admin/quizzes/:id/submissions", async (req, res) => {
+    await storage.deleteSubmissionsByQuizId(parseInt(req.params.id));
+    res.json({ success: true });
+  });
+
   app.post("/api/generate-questions", pdfUpload.single("pdf"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No PDF file uploaded" });
@@ -179,7 +189,7 @@ export async function registerRoutes(
       const model = getGeminiModel();
       const base64Pdf = req.file.buffer.toString("base64");
 
-      const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\( instead of \\(). Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
+      const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\frac instead of \\frac, and \\\\sqrt instead of \\sqrt) so the JSON parser does not strip them. Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
 
       const result = await model.generateContent([
         { text: prompt },
