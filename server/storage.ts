@@ -47,7 +47,8 @@ class DatabaseStorage implements IStorage {
   constructor(private readonly database: NonNullable<typeof db>) {}
 
   async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const [result] = await this.database.insert(quizzes).values(quiz).returning();
+    const pinCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const [result] = await this.database.insert(quizzes).values({ ...quiz, pinCode }).returning();
     return result;
   }
 

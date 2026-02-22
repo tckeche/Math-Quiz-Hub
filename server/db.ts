@@ -3,7 +3,7 @@ import pg from "pg";
 import * as schema from "@shared/schema";
 
 function getConnectionConfig() {
-  const supabaseUrl = process.env.SUPABASE_DATABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_DB_URL || process.env.SUPABASE_DATABASE_URL;
   if (supabaseUrl && supabaseUrl.startsWith("postgres")) {
     return {
       connectionString: supabaseUrl,
