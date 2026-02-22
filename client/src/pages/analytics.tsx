@@ -39,7 +39,7 @@ export default function AnalyticsPage() {
   });
 
   const handlePrint = useReactToPrint({
-    contentRef: reportRef,
+    content: () => reportRef.current,
     documentTitle: `${quiz?.title || "class"}-analytics-report`,
   });
 

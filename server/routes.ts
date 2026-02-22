@@ -43,15 +43,6 @@ function getGeminiModel() {
   return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 }
 
-function generatePinCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let pin = "";
-  for (let i = 0; i < 5; i++) {
-    pin += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return pin;
-}
-
 
 const ADMIN_COOKIE_NAME = "admin_session";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Chomukamba";
@@ -246,7 +237,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       title,
       timeLimitMinutes,
       dueDate: new Date(dueDate),
-      pinCode: generatePinCode(),
     });
     res.json(quiz);
   });
