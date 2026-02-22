@@ -62,7 +62,7 @@ function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
   );
 }
 
-function EntryGate({ quiz, onStart, checking, pinError: externalPinError }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean; pinError?: string }) {
+function EntryGate({ quiz, onStart, checking, pinError, onPinChange }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean; pinError: string; onPinChange: () => void }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [pin, setPin] = useState("");
@@ -141,19 +141,22 @@ function EntryGate({ quiz, onStart, checking, pinError: externalPinError }: { qu
                 <Input
                   id="quizPin"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value.toUpperCase())}
+                  onChange={(e) => { setPin(e.target.value.toUpperCase()); onPinChange(); }}
                   placeholder="Enter 5-character PIN"
                   maxLength={5}
                   className="font-mono text-center text-lg tracking-widest"
                   data-testid="input-quiz-pin"
                 />
-                {externalPinError && (
+                {pinError && (
                   <p className="text-sm text-destructive flex items-center gap-1" data-testid="text-pin-error">
                     <AlertCircle className="w-3.5 h-3.5" />
-                    {externalPinError}
+                    {pinError}
                   </p>
                 )}
               </div>
+              {pinError && (
+                <p className="text-sm text-destructive" data-testid="text-pin-error">{pinError}</p>
+              )}
               <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || !pin.trim() || checking} data-testid="button-begin-quiz">
                 {checking ? (
                   <>
@@ -540,14 +543,18 @@ export default function QuizPage() {
         localStorage.setItem(`completed_quiz_${quizId}`, "true");
         return;
       }
+      setQuizPin(pin);
       registerMutation.mutate({ firstName, lastName });
     } catch (err: any) {
-      if (err.message?.includes("403") || err.message?.includes("Invalid PIN")) {
-        setPinError("Invalid PIN. Please check and try again.");
+      const message = String(err?.message || "");
+      if (message.includes("403")) {
+        setPinError("Invalid PIN. Please check the quiz PIN and try again.");
+      } else if (message.includes("404")) {
+        setPinError("Quiz not found. Please verify the quiz link.");
       } else {
-        setQuizPin(pin);
-        registerMutation.mutate({ firstName, lastName });
+        setPinError("Could not verify your PIN right now. Please try again.");
       }
+      return;
     } finally {
       setChecking(false);
     }
@@ -589,7 +596,7 @@ export default function QuizPage() {
   }
 
   if (!started || !studentId) {
-    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} />;
+    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} onPinChange={() => setPinError("")} />;
   }
 
   if (questionsLoading || !questions) {

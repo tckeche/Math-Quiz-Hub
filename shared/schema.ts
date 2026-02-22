@@ -30,8 +30,8 @@ export const students = pgTable("students", {
 
 export const submissions = pgTable("submissions", {
   id: serial("id").primaryKey(),
-  studentId: integer("student_id").notNull().references(() => students.id),
-  quizId: integer("quiz_id").notNull().references(() => quizzes.id),
+  studentId: integer("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  quizId: integer("quiz_id").notNull().references(() => quizzes.id, { onDelete: "cascade" }),
   totalScore: integer("total_score").notNull(),
   maxPossibleScore: integer("max_possible_score").notNull(),
   answersBreakdown: json("answers_breakdown").$type<Record<string, { answer: string; correct: boolean; marksEarned: number }>>().notNull(),
