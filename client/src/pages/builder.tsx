@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz } from "@shared/schema";
@@ -25,7 +25,15 @@ export default function BuilderPage() {
   const [drafts, setDrafts] = useState<DraftQuestion[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
 
-  const authenticated = typeof window !== "undefined" && localStorage.getItem("admin_token") === "authenticated";
+  const { data: adminSession, isLoading: sessionLoading } = useQuery<{ authenticated: boolean }>({
+    queryKey: ["/api/admin/session"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/session", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const authenticated = adminSession?.authenticated === true;
 
   const { data: quizzes } = useQuery<Quiz[]>({
     queryKey: ["/api/admin/quizzes"],
@@ -68,6 +76,10 @@ export default function BuilderPage() {
     const data = await res.json();
     setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, image_url: data.url } : d)));
   };
+
+  if (sessionLoading) {
+    return <div className="p-6">Loading...</div>;
+  }
 
   if (!authenticated) {
     return (

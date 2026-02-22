@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz, Question, Submission, Student } from "@shared/schema";
@@ -29,17 +29,37 @@ interface GeneratedQuestion {
   image_url?: string | null;
 }
 
+function normalizeJsonPayload(text: string) {
+  const cleaned = text
+    .replace(/```json\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const parsed = JSON.parse(cleaned);
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && Array.isArray((parsed as { questions?: unknown }).questions)) {
+    return (parsed as { questions: unknown[] }).questions;
+  }
+  return [parsed];
+}
+
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "Chomukamba") {
-      localStorage.setItem("admin_token", "authenticated");
+    setLoading(true);
+    try {
+      await apiRequest("POST", "/api/admin/login", { password });
+      setError("");
       onLogin();
-    } else {
-      setError("Incorrect password. Access denied.");
+    } catch (err: any) {
+      setError(err?.message || "Incorrect password. Access denied.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,8 +92,8 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full" data-testid="button-admin-login">
-              Sign In
+            <Button type="submit" className="w-full" data-testid="button-admin-login" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
         </CardContent>
@@ -163,8 +183,7 @@ function QuestionUploader({ quizId, onDone }: { quizId: number; onDone: () => vo
   const parseAndUpload = useCallback((text: string) => {
     setParseError("");
     try {
-      const parsed = JSON.parse(text);
-      const questions = Array.isArray(parsed) ? parsed : [parsed];
+      const questions = normalizeJsonPayload(text);
       uploadMutation.mutate(questions);
     } catch (err: any) {
       setParseError(`Invalid JSON: ${err.message}`);
@@ -478,7 +497,7 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
-    content: () => printRef.current,
+    contentRef: printRef,
     documentTitle: `student-analysis-${submission.id}`,
   });
 
@@ -840,28 +859,36 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
 }
 
 export default function AdminPage() {
-  const [authenticated, setAuthenticated] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
+  const [authVersion, setAuthVersion] = useState(0);
 
-  useEffect(() => {
-    if (localStorage.getItem("admin_token") === "authenticated") {
-      setAuthenticated(true);
-    }
-  }, []);
+  const { data: adminSession, isLoading: sessionLoading } = useQuery<{ authenticated: boolean }>({
+    queryKey: ["/api/admin/session", authVersion],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/session", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const authenticated = adminSession?.authenticated === true;
 
   const { data: quizzes, isLoading } = useQuery<Quiz[]>({
     queryKey: ["/api/admin/quizzes"],
     enabled: authenticated,
   });
 
-  const handleLogout = () => {
-    localStorage.removeItem("admin_token");
-    setAuthenticated(false);
+  const handleLogout = async () => {
+    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    setAuthVersion((v) => v + 1);
   };
 
+  if (sessionLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
   if (!authenticated) {
-    return <AdminLogin onLogin={() => setAuthenticated(true)} />;
+    return <AdminLogin onLogin={() => setAuthVersion((v) => v + 1)} />;
   }
 
   return (

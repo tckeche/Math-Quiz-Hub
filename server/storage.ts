@@ -65,12 +65,6 @@ class DatabaseStorage implements IStorage {
     await this.database.delete(quizzes).where(eq(quizzes.id, id));
   }
 
-  async verifyQuizPin(quizId: number, pin: string): Promise<boolean> {
-    const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, quizId));
-    if (!quiz) return false;
-    return quiz.pinCode.toUpperCase() === pin.toUpperCase();
-  }
-
   async createQuestions(questionList: InsertQuestion[]): Promise<Question[]> {
     if (questionList.length === 0) return [];
     const normalizedQuestions = questionList.map((question) => ({

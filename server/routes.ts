@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { questionUploadSchema, submissions as submissionsTable } from "@shared/schema";
@@ -8,6 +8,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
+
+const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -21,6 +24,14 @@ const upload = multer({
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
     },
   }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!allowedImageTypes.has(file.mimetype)) {
+      cb(new Error("Only PNG, JPEG, WEBP, and SVG images are allowed"));
+      return;
+    }
+    cb(null, true);
+  },
 });
 
 const pdfUpload = multer({ storage: multer.memoryStorage() });
@@ -39,6 +50,36 @@ function generatePinCode() {
     pin += chars[Math.floor(Math.random() * chars.length)];
   }
   return pin;
+}
+
+
+const ADMIN_COOKIE_NAME = "admin_session";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Chomukamba";
+const adminSessions = new Set<string>();
+
+function parseCookies(req: Request) {
+  const raw = req.headers.cookie;
+  if (!raw) return {} as Record<string, string>;
+  return raw.split(";").reduce<Record<string, string>>((acc, pair) => {
+    const idx = pair.indexOf("=");
+    if (idx === -1) return acc;
+    const key = pair.slice(0, idx).trim();
+    const value = decodeURIComponent(pair.slice(idx + 1).trim());
+    acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function getAdminSessionToken(req: Request) {
+  return parseCookies(req)[ADMIN_COOKIE_NAME] || "";
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const token = getAdminSessionToken(req);
+  if (!token || !adminSessions.has(token)) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  next();
 }
 
 function extractJsonArray(text: string): any[] | null {
@@ -66,6 +107,36 @@ function extractJsonArray(text: string): any[] | null {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.post("/api/admin/login", async (req, res) => {
+    const { password } = req.body;
+    if (String(password || "") !== ADMIN_PASSWORD) {
+      return res.status(401).json({ message: "Invalid admin credentials" });
+    }
+    const token = crypto.randomBytes(24).toString("hex");
+    adminSessions.add(token);
+    res.cookie(ADMIN_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 1000 * 60 * 60 * 12,
+      path: "/",
+    });
+    res.json({ authenticated: true });
+  });
+
+  app.get("/api/admin/session", async (req, res) => {
+    const token = getAdminSessionToken(req);
+    res.json({ authenticated: Boolean(token && adminSessions.has(token)) });
+  });
+
+  app.post("/api/admin/logout", async (req, res) => {
+    const token = getAdminSessionToken(req);
+    if (token) adminSessions.delete(token);
+    res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
+    res.json({ success: true });
+  });
+
+  app.use("/api/admin", requireAdmin);
   app.get("/api/quizzes", async (_req, res) => {
     const quizzes = await storage.getQuizzes();
     const sanitized = quizzes.map(({ pinCode, ...quiz }) => quiz);
@@ -229,7 +300,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ success: true });
   });
 
-  app.post("/api/generate-questions", pdfUpload.single("pdf"), async (req, res) => {
+  app.post("/api/generate-questions", requireAdmin, pdfUpload.single("pdf"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No PDF file uploaded" });
 
@@ -275,7 +346,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/analyze-student", async (req, res) => {
+  app.post("/api/analyze-student", requireAdmin, async (req, res) => {
     try {
       const { submission, questions } = req.body;
       if (!submission || !questions) {
@@ -305,7 +376,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/analyze-class", async (req, res) => {
+  app.post("/api/analyze-class", requireAdmin, async (req, res) => {
     try {
       const { quizId } = req.body;
       if (!quizId) return res.status(400).json({ message: "quizId required" });
@@ -332,10 +403,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/upload-image", upload.single("image"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No image uploaded" });
-    const url = `/uploads/${req.file.filename}`;
-    res.json({ url });
+  app.post("/api/upload-image", requireAdmin, (req, res) => {
+    upload.single("image")(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ message: "Image exceeds 5MB size limit" });
+        }
+        return res.status(400).json({ message: err.message || "Invalid image upload" });
+      }
+      if (!req.file) return res.status(400).json({ message: "No image uploaded" });
+      const url = `/uploads/${req.file.filename}`;
+      res.json({ url });
+    });
   });
 
   return httpServer;

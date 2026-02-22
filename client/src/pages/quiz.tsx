@@ -62,7 +62,7 @@ function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
   );
 }
 
-function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean }) {
+function EntryGate({ quiz, onStart, checking, pinError, onPinChange }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean; pinError: string; onPinChange: () => void }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [pin, setPin] = useState("");
@@ -141,12 +141,15 @@ function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstNam
                 <Input
                   id="quizPin"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value.toUpperCase())}
+                  onChange={(e) => { setPin(e.target.value.toUpperCase()); onPinChange(); }}
                   placeholder="Enter 5-character PIN"
                   maxLength={5}
                   data-testid="input-quiz-pin"
                 />
               </div>
+              {pinError && (
+                <p className="text-sm text-destructive" data-testid="text-pin-error">{pinError}</p>
+              )}
               <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || !pin.trim() || checking} data-testid="button-begin-quiz">
                 {checking ? (
                   <>
@@ -480,6 +483,7 @@ export default function QuizPage() {
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(false);
   const [quizPin, setQuizPin] = useState("");
+  const [pinError, setPinError] = useState("");
 
   const { data: quiz, isLoading: quizLoading } = useQuery<Quiz>({
     queryKey: ["/api/quizzes", quizId],
@@ -529,9 +533,16 @@ export default function QuizPage() {
       }
       setQuizPin(pin);
       registerMutation.mutate({ firstName, lastName });
-    } catch {
-      setQuizPin(pin);
-      registerMutation.mutate({ firstName, lastName });
+    } catch (err: any) {
+      const message = String(err?.message || "");
+      if (message.includes("403")) {
+        setPinError("Invalid PIN. Please check the quiz PIN and try again.");
+      } else if (message.includes("404")) {
+        setPinError("Quiz not found. Please verify the quiz link.");
+      } else {
+        setPinError("Could not verify your PIN right now. Please try again.");
+      }
+      return;
     } finally {
       setChecking(false);
     }
@@ -573,7 +584,7 @@ export default function QuizPage() {
   }
 
   if (!started || !studentId) {
-    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} />;
+    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} onPinChange={() => setPinError("")} />;
   }
 
   if (questionsLoading || !questions) {

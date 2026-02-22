@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import DOMPurify from "dompurify";
@@ -14,7 +14,15 @@ export default function AnalyticsPage() {
   const reportRef = useRef<HTMLDivElement>(null);
   const [analysis, setAnalysis] = useState<string>("");
 
-  const authenticated = typeof window !== "undefined" && localStorage.getItem("admin_token") === "authenticated";
+  const { data: adminSession, isLoading: sessionLoading } = useQuery<{ authenticated: boolean }>({
+    queryKey: ["/api/admin/session"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/session", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const authenticated = adminSession?.authenticated === true;
 
   const { data: quiz } = useQuery<Quiz>({ queryKey: ["/api/admin/quizzes", quizId], enabled: authenticated && quizId > 0 });
   const { data: submissions } = useQuery<(Submission & { student: Student })[]>({
@@ -31,9 +39,11 @@ export default function AnalyticsPage() {
   });
 
   const handlePrint = useReactToPrint({
-    content: () => reportRef.current,
+    contentRef: reportRef,
     documentTitle: `${quiz?.title || "class"}-analytics-report`,
   });
+
+  if (sessionLoading) return <div className="p-6">Loading...</div>;
 
   if (!authenticated) return <div className="p-6">Please log in via /admin first.</div>;
 
