@@ -143,6 +143,12 @@ class DatabaseStorage implements IStorage {
     }
     return false;
   }
+
+  async verifyQuizPin(quizId: number, pin: string): Promise<boolean> {
+    const quiz = await this.getQuiz(quizId);
+    if (!quiz) return false;
+    return quiz.pinCode === pin;
+  }
 }
 
 class MemoryStorage implements IStorage {
@@ -156,7 +162,8 @@ class MemoryStorage implements IStorage {
   private submissionId = 1;
 
   async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const created: Quiz = { id: this.quizId++, createdAt: new Date(), ...quiz };
+    const pinCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const created: Quiz = { id: this.quizId++, createdAt: new Date(), pinCode, ...quiz };
     this.quizzes.push(created);
     return created;
   }
@@ -234,6 +241,12 @@ class MemoryStorage implements IStorage {
     const student = await this.findStudentByName(firstName, lastName);
     if (!student) return false;
     return this.submissions.some((s) => s.quizId === quizId && s.studentId === student.id);
+  }
+
+  async verifyQuizPin(quizId: number, pin: string): Promise<boolean> {
+    const quiz = await this.getQuiz(quizId);
+    if (!quiz) return false;
+    return quiz.pinCode === pin;
   }
 }
 
