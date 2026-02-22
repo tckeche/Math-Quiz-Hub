@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz, Question, Submission, Student } from "@shared/schema";
 import DOMPurify from "dompurify";
+import { useReactToPrint } from "react-to-print";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,17 +29,37 @@ interface GeneratedQuestion {
   image_url?: string | null;
 }
 
+function normalizeJsonPayload(text: string) {
+  const cleaned = text
+    .replace(/```json\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const parsed = JSON.parse(cleaned);
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && Array.isArray((parsed as { questions?: unknown }).questions)) {
+    return (parsed as { questions: unknown[] }).questions;
+  }
+  return [parsed];
+}
+
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "Chomukamba") {
-      localStorage.setItem("admin_token", "authenticated");
+    setLoading(true);
+    try {
+      await apiRequest("POST", "/api/admin/login", { password });
+      setError("");
       onLogin();
-    } else {
-      setError("Incorrect password. Access denied.");
+    } catch (err: any) {
+      setError(err?.message || "Incorrect password. Access denied.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -70,8 +92,8 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full" data-testid="button-admin-login">
-              Sign In
+            <Button type="submit" className="w-full" data-testid="button-admin-login" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
         </CardContent>
@@ -161,8 +183,7 @@ function QuestionUploader({ quizId, onDone }: { quizId: number; onDone: () => vo
   const parseAndUpload = useCallback((text: string) => {
     setParseError("");
     try {
-      const parsed = JSON.parse(text);
-      const questions = Array.isArray(parsed) ? parsed : [parsed];
+      const questions = normalizeJsonPayload(text);
       uploadMutation.mutate(questions);
     } catch (err: any) {
       setParseError(`Invalid JSON: ${err.message}`);
@@ -368,6 +389,16 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
                     data-testid={`input-generated-prompt-${idx}`}
                   />
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Image URL (optional)</Label>
+                  <Input
+                    value={q.image_url ?? ""}
+                    onChange={(e) => updateQuestion(idx, "image_url", e.target.value || null)}
+                    placeholder="https://example.com/diagram.png"
+                    className="font-mono text-sm"
+                    data-testid={`input-generated-image-url-${idx}`}
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   {q.options.map((opt, optIdx) => (
                     <div key={optIdx} className="space-y-1">
@@ -464,6 +495,11 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `student-analysis-${submission.id}`,
+  });
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -501,7 +537,11 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
             </h4>
             <Button variant="outline" size="sm" onClick={() => setAnalysis(null)}>Close</Button>
           </div>
+          <div className="mb-2">
+            <Button variant="outline" size="sm" onClick={handlePrint}>Download Report as PDF</Button>
+          </div>
           <div
+            ref={printRef}
             className="prose prose-sm max-w-none text-sm"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }}
             data-testid={`text-analysis-${submission.id}`}
@@ -512,7 +552,7 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   );
 }
 
-function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) {
+function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () => void; onDeleted: () => void }) {
   const [showUploader, setShowUploader] = useState(false);
   const [showPdfGen, setShowPdfGen] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -537,6 +577,37 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "questions"] });
       toast({ title: "Question deleted" });
+    },
+  });
+
+  const deleteQuizMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("DELETE", `/api/admin/quizzes/${quizId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+      toast({ title: "Exam deleted", description: "Quiz, questions, and submissions were removed." });
+      onDeleted();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete exam", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteSubmissionMutation = useMutation({
+    mutationFn: async (submissionId: number) =>
+      apiRequest("DELETE", `/api/admin/submissions/${submissionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "submissions"] });
+      toast({ title: "Submission deleted" });
+    },
+  });
+
+  const clearSubmissionsMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("DELETE", `/api/admin/quizzes/${quizId}/submissions`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "submissions"] });
+      toast({ title: "All submissions deleted" });
     },
   });
 
@@ -578,11 +649,26 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => {
+            if (confirm("Delete this entire exam? This will remove questions and all submitted tests.")) {
+              deleteQuizMutation.mutate();
+            }
+          }}
+          disabled={deleteQuizMutation.isPending}
+          data-testid="button-delete-exam"
+        >
+          <Trash2 className="w-4 h-4 mr-1" />
+          {deleteQuizMutation.isPending ? "Deleting..." : "Delete Exam"}
+        </Button>
         <div className="flex-1 min-w-0">
           <h2 className="font-serif text-xl font-bold truncate" data-testid="text-quiz-detail-title">{quiz.title}</h2>
           <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{quiz.timeLimitMinutes} min</span>
             <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Due {format(new Date(quiz.dueDate), "PPP")}</span>
+            <Badge variant="secondary">PIN: {quiz.pinCode}</Badge>
           </div>
         </div>
       </div>
@@ -596,15 +682,37 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
           <FileText className="w-4 h-4 mr-1" />
           Generate from PDF
         </Button>
+        <Link href="/admin/builder">
+          <Button variant="outline" size="sm">AI Builder</Button>
+        </Link>
+        <Link href={`/admin/analytics/${quizId}`}>
+          <Button variant="outline" size="sm">Class Analytics</Button>
+        </Link>
         <Button variant="outline" size="sm" onClick={() => setShowResults(!showResults)} data-testid="button-toggle-results">
           <Users className="w-4 h-4 mr-1" />
           View Results ({submissions?.length ?? 0})
         </Button>
         {submissions && submissions.length > 0 && (
-          <Button variant="outline" size="sm" onClick={downloadCSV} data-testid="button-download-csv">
-            <Download className="w-4 h-4 mr-1" />
-            Download CSV
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={downloadCSV} data-testid="button-download-csv">
+              <Download className="w-4 h-4 mr-1" />
+              Download CSV
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirm("Delete all submitted tests for this quiz? This cannot be undone.")) {
+                  clearSubmissionsMutation.mutate();
+                }
+              }}
+              disabled={clearSubmissionsMutation.isPending}
+              data-testid="button-delete-all-submissions"
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              {clearSubmissionsMutation.isPending ? "Deleting..." : "Delete All Tests"}
+            </Button>
+          </>
         )}
       </div>
 
@@ -638,6 +746,33 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
                         <Badge variant={s.totalScore / s.maxPossibleScore >= 0.5 ? "default" : "secondary"}>
                           {((s.totalScore / s.maxPossibleScore) * 100).toFixed(0)}%
                         </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm("Delete this submitted test?")) {
+                              deleteSubmissionMutation.mutate(s.id);
+                            }
+                          }}
+                          disabled={deleteSubmissionMutation.isPending}
+                          data-testid={`button-delete-submission-${s.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Delete Test
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded-md border bg-muted/20 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Marks Breakdown</p>
+                      <div className="grid gap-1">
+                        {Object.entries(s.answersBreakdown).map(([questionId, detail]) => (
+                          <div key={questionId} className="text-sm flex items-center justify-between gap-2">
+                            <span>Q{questionId}: {detail.answer || "No answer"}</span>
+                            <span className={detail.correct ? "text-primary" : "text-muted-foreground"}>
+                              {detail.correct ? `+${detail.marksEarned}` : "0"}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                     <div className="mt-3">
@@ -701,28 +836,40 @@ function QuizDetail({ quizId, onBack }: { quizId: number; onBack: () => void }) 
 }
 
 export default function AdminPage() {
-  const [authenticated, setAuthenticated] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
+  const [authVersion, setAuthVersion] = useState(0);
 
-  useEffect(() => {
-    if (localStorage.getItem("admin_token") === "authenticated") {
-      setAuthenticated(true);
-    }
-  }, []);
+  const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
+    queryKey: ["/api/admin/session", authVersion],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/session", { credentials: "include" });
+      return res.json();
+    },
+  });
 
-  const { data: quizzes, isLoading } = useQuery<Quiz[]>({
+  const authenticated = adminSession?.authenticated === true;
+
+  const { data: quizzes, isLoading, error: quizzesError } = useQuery<Quiz[]>({
     queryKey: ["/api/admin/quizzes"],
     enabled: authenticated,
   });
 
-  const handleLogout = () => {
-    localStorage.removeItem("admin_token");
-    setAuthenticated(false);
+  const handleLogout = async () => {
+    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    setAuthVersion((v) => v + 1);
   };
 
+  if (sessionLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (sessionError) {
+    return <div className="min-h-screen flex items-center justify-center p-6 text-destructive">Failed to verify admin session.</div>;
+  }
+
   if (!authenticated) {
-    return <AdminLogin onLogin={() => setAuthenticated(true)} />;
+    return <AdminLogin onLogin={() => setAuthVersion((v) => v + 1)} />;
   }
 
   return (
@@ -747,7 +894,7 @@ export default function AdminPage() {
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         {selectedQuizId !== null ? (
-          <QuizDetail quizId={selectedQuizId} onBack={() => setSelectedQuizId(null)} />
+          <QuizDetail quizId={selectedQuizId} onBack={() => setSelectedQuizId(null)} onDeleted={() => setSelectedQuizId(null)} />
         ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -762,7 +909,11 @@ export default function AdminPage() {
               <CreateQuizForm onClose={() => setShowCreateForm(false)} />
             )}
 
-            {isLoading ? (
+            {quizzesError ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 text-destructive p-4">
+                Failed to load quizzes. Please refresh and try again.
+              </div>
+            ) : isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
               </div>

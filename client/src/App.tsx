@@ -7,12 +7,17 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import AdminPage from "@/pages/admin";
 import QuizPage from "@/pages/quiz";
+import BuilderPage from "@/pages/builder";
+import AnalyticsPage from "@/pages/analytics";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/admin" component={AdminPage} />
+      <Route path="/admin/builder" component={BuilderPage} />
+      <Route path="/admin/analytics/:id" component={AnalyticsPage} />
       <Route path="/quiz/:id" component={QuizPage} />
       <Route component={NotFound} />
     </Switch>
@@ -24,7 +29,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <ErrorBoundary title="Application error"><Router /></ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );
