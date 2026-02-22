@@ -506,7 +506,12 @@ export default function QuizPage() {
   const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuery<Question[]>({
     queryKey: ["/api/quizzes", quizId, "questions", quizPin],
     queryFn: async () => {
-      const res = await fetch(`/api/quizzes/${quizId}/questions?pin=${encodeURIComponent(quizPin)}`, { credentials: "include" });
+      const res = await fetch(`/api/quizzes/${quizId}/questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: quizPin }),
+        credentials: "include",
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: res.statusText }));
         throw new Error(err.message || "Failed to load questions");
