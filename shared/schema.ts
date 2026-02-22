@@ -38,7 +38,7 @@ export const submissions = pgTable("submissions", {
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
 });
 
-export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, createdAt: true });
+export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, createdAt: true, pinCode: true });
 export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
 export const insertStudentSchema = createInsertSchema(students).omit({ id: true });
 export const insertSubmissionSchema = createInsertSchema(submissions).omit({ id: true, submittedAt: true });

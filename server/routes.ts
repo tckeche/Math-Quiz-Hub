@@ -1,7 +1,9 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { questionUploadSchema } from "@shared/schema";
+import { questionUploadSchema, submissions as submissionsTable } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
 import path from "path";
@@ -77,7 +79,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(safeQuiz);
   });
 
-  app.get("/api/quizzes/:id/questions", async (req, res) => {
+  app.post("/api/quizzes/:id/verify-pin", async (req, res) => {
     const quizId = parseInt(req.params.id);
     const pin = String(req.query.pin || "").trim().toUpperCase();
     const quiz = await storage.getQuiz(quizId);
@@ -88,6 +90,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const qs = await storage.getQuestionsByQuizId(quizId);
     const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
+  });
+
+  app.get("/api/quizzes/:id/questions", async (req, res) => {
+    res.status(403).json({ message: "PIN verification required. Use POST with pin." });
   });
 
   app.post("/api/students", async (req, res) => {

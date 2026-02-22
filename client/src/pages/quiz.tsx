@@ -518,6 +518,7 @@ export default function QuizPage() {
 
   const handleStart = async (firstName: string, lastName: string, pin: string) => {
     setChecking(true);
+    setPinError("");
     try {
       const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName, pin });
       const data = await res.json();
@@ -572,7 +573,7 @@ export default function QuizPage() {
   }
 
   if (!started || !studentId) {
-    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} />;
+    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} />;
   }
 
   if (questionsLoading || !questions) {
