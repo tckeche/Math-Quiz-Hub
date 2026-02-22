@@ -8,14 +8,12 @@ export async function seedDatabase() {
     title: "Pure Mathematics — Paper 1",
     timeLimitMinutes: 45,
     dueDate: new Date("2026-06-30T23:59:00"),
-    pinCode: "MATH1",
   });
 
   const quiz2 = await storage.createQuiz({
     title: "Statistics & Probability — Paper 2",
     timeLimitMinutes: 30,
     dueDate: new Date("2026-07-15T23:59:00"),
-    pinCode: "STAT2",
   });
 
   await storage.createQuestions([
