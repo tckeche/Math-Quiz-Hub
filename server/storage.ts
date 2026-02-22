@@ -47,7 +47,8 @@ class DatabaseStorage implements IStorage {
   constructor(private readonly database: NonNullable<typeof db>) {}
 
   async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const [result] = await this.database.insert(quizzes).values(quiz).returning();
+    const pinCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const [result] = await this.database.insert(quizzes).values({ ...quiz, pinCode }).returning();
     return result;
   }
 
@@ -246,98 +247,6 @@ class MemoryStorage implements IStorage {
     const quiz = await this.getQuiz(quizId);
     if (!quiz) return false;
     return quiz.pinCode === pin;
-  }
-}
-
-class MemoryStorage implements IStorage {
-  private quizzes: Quiz[] = [];
-  private questions: Question[] = [];
-  private students: Student[] = [];
-  private submissions: Submission[] = [];
-  private quizId = 1;
-  private questionId = 1;
-  private studentId = 1;
-  private submissionId = 1;
-
-  async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const created: Quiz = { id: this.quizId++, createdAt: new Date(), ...quiz };
-    this.quizzes.push(created);
-    return created;
-  }
-
-  async getQuizzes(): Promise<Quiz[]> { return [...this.quizzes]; }
-  async getQuiz(id: number): Promise<Quiz | undefined> { return this.quizzes.find((q) => q.id === id); }
-
-  async deleteQuiz(id: number): Promise<void> {
-    this.quizzes = this.quizzes.filter((q) => q.id !== id);
-    this.questions = this.questions.filter((q) => q.quizId !== id);
-    this.submissions = this.submissions.filter((s) => s.quizId !== id);
-  }
-
-  async createQuestions(questionList: InsertQuestion[]): Promise<Question[]> {
-    const created = questionList.map((q) => ({
-      id: this.questionId++,
-      ...q,
-      options: Array.isArray(q.options) ? [...(q.options as string[])] : [],
-      imageUrl: q.imageUrl ?? null,
-      marksWorth: q.marksWorth ?? 1,
-    }));
-    this.questions.push(...created);
-    return created;
-  }
-
-  async getQuestionsByQuizId(quizId: number): Promise<Question[]> {
-    return this.questions.filter((q) => q.quizId === quizId);
-  }
-
-  async deleteQuestion(id: number): Promise<void> {
-    this.questions = this.questions.filter((q) => q.id !== id);
-  }
-
-  async createStudent(student: InsertStudent): Promise<Student> {
-    const created: Student = {
-      id: this.studentId++,
-      firstName: sanitizeName(student.firstName),
-      lastName: sanitizeName(student.lastName),
-    };
-    this.students.push(created);
-    return created;
-  }
-
-  async getStudent(id: number): Promise<Student | undefined> { return this.students.find((s) => s.id === id); }
-
-  async findStudentByName(firstName: string, lastName: string): Promise<Student | undefined> {
-    const fn = sanitizeName(firstName);
-    const ln = sanitizeName(lastName);
-    return this.students.find((s) => s.firstName === fn && s.lastName === ln);
-  }
-
-  async createSubmission(submission: InsertSubmission): Promise<Submission> {
-    const created: Submission = { id: this.submissionId++, submittedAt: new Date(), ...submission };
-    this.submissions.push(created);
-    return created;
-  }
-
-  async getSubmissionsByQuizId(quizId: number): Promise<(Submission & { student: Student })[]> {
-    return this.submissions
-      .filter((s) => s.quizId === quizId)
-      .map((s) => ({ ...s, student: this.students.find((st) => st.id === s.studentId)! }))
-      .filter((s) => Boolean(s.student));
-  }
-
-
-  async deleteSubmission(id: number): Promise<void> {
-    this.submissions = this.submissions.filter((s) => s.id !== id);
-  }
-
-  async deleteSubmissionsByQuizId(quizId: number): Promise<void> {
-    this.submissions = this.submissions.filter((s) => s.quizId !== quizId);
-  }
-
-  async checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean> {
-    const student = await this.findStudentByName(firstName, lastName);
-    if (!student) return false;
-    return this.submissions.some((s) => s.quizId === quizId && s.studentId === student.id);
   }
 }
 
