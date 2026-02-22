@@ -43,14 +43,6 @@ function getGeminiModel() {
   return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 }
 
-function generatePinCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let pin = "";
-  for (let i = 0; i < 5; i++) {
-    pin += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return pin;
-}
 
 
 const ADMIN_COOKIE_NAME = "admin_session";
@@ -152,7 +144,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/quizzes/:id/verify-pin", async (req, res) => {
     const quizId = parseInt(req.params.id);
-    const pin = String(req.query.pin || "").trim().toUpperCase();
+    const pin = String(req.body.pin || req.query.pin || "").trim().toUpperCase();
+    const quiz = await storage.getQuiz(quizId);
+    if (!quiz) return res.status(404).json({ valid: false, message: "Quiz not found" });
+    if (!pin || pin !== quiz.pinCode) {
+      return res.status(403).json({ valid: false, message: "Invalid quiz PIN" });
+    }
+    const qs = await storage.getQuestionsByQuizId(quizId);
+    const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
+    res.json({ valid: true, questions: sanitized });
+  });
+
+  app.get("/api/quizzes/:id/questions", async (req, res) => {
+    res.status(403).json({ message: "PIN verification required. Use POST with pin." });
+  });
+
+  app.post("/api/quizzes/:id/questions", async (req, res) => {
+    const quizId = parseInt(req.params.id);
+    const pin = String(req.body.pin || "").trim().toUpperCase();
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     if (!pin || pin !== quiz.pinCode) {
@@ -161,10 +170,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const qs = await storage.getQuestionsByQuizId(quizId);
     const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
-  });
-
-  app.get("/api/quizzes/:id/questions", async (req, res) => {
-    res.status(403).json({ message: "PIN verification required. Use POST with pin." });
   });
 
   app.post("/api/students", async (req, res) => {
@@ -241,7 +246,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       title,
       timeLimitMinutes,
       dueDate: new Date(dueDate),
-      pinCode: generatePinCode(),
     });
     res.json(quiz);
   });
