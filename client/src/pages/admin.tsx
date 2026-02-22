@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ShieldCheck, Plus, Upload, FileJson, Eye, Download, ArrowLeft, Trash2,
   BookOpen, Clock, Calendar, Users, CheckCircle2, AlertCircle, LogOut,
-  FileText, Loader2, Pencil, ImagePlus, Save, Brain, X
+  FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, KeyRound, BarChart3, MessageSquare, Copy
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -673,6 +673,29 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
         </div>
       </div>
 
+      <Card className="bg-muted/30">
+        <CardContent className="py-3 flex items-center gap-3 flex-wrap">
+          <KeyRound className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium">Student PIN:</span>
+          <code className="bg-primary/10 px-3 py-1 rounded-md font-mono font-bold text-lg tracking-widest" data-testid="text-quiz-pin">
+            {quiz.pinCode}
+          </code>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              navigator.clipboard.writeText(quiz.pinCode);
+              toast({ title: "PIN copied to clipboard" });
+            }}
+            data-testid="button-copy-pin"
+          >
+            <Copy className="w-3.5 h-3.5 mr-1" />
+            Copy
+          </Button>
+          <span className="text-xs text-muted-foreground ml-auto">Share this PIN with students to access the quiz</span>
+        </CardContent>
+      </Card>
+
       <div className="flex gap-2 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => { setShowUploader(!showUploader); setShowPdfGen(false); }} data-testid="button-toggle-uploader">
           <Upload className="w-4 h-4 mr-1" />
@@ -881,10 +904,18 @@ export default function AdminPage() {
               <p className="text-xs text-muted-foreground">Manage quizzes and view results</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-admin-logout">
-            <LogOut className="w-4 h-4 mr-1" />
-            Log Out
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/admin/builder">
+              <Button variant="outline" size="sm" data-testid="button-ai-builder">
+                <MessageSquare className="w-4 h-4 mr-1" />
+                AI Builder
+              </Button>
+            </Link>
+            <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-admin-logout">
+              <LogOut className="w-4 h-4 mr-1" />
+              Log Out
+            </Button>
+          </div>
         </div>
       </header>
 

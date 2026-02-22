@@ -12,11 +12,21 @@ function sanitizeName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function generatePinCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let pin = "";
+  for (let i = 0; i < 5; i++) {
+    pin += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return pin;
+}
+
 export interface IStorage {
   createQuiz(quiz: InsertQuiz): Promise<Quiz>;
   getQuizzes(): Promise<Quiz[]>;
   getQuiz(id: number): Promise<Quiz | undefined>;
   deleteQuiz(id: number): Promise<void>;
+  verifyQuizPin(quizId: number, pin: string): Promise<boolean>;
 
   createQuestions(questionList: InsertQuestion[]): Promise<Question[]>;
   getQuestionsByQuizId(quizId: number): Promise<Question[]>;
