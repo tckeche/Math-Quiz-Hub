@@ -74,10 +74,6 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 
-function normalizePin(value: string) {
-  return String(value || "").trim().toUpperCase();
-}
-
 function extractJsonArray(text: string): any[] | null {
   const cleaned = text
     .replace(/```json\s*/gi, "")
@@ -135,29 +131,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/api/admin", requireAdmin);
   app.get("/api/quizzes", async (_req, res) => {
     const quizzes = await storage.getQuizzes();
-    const sanitized = quizzes.map(({ pinCode, ...quiz }) => quiz);
-    res.json(sanitized);
+    res.json(quizzes);
   });
 
   app.get("/api/quizzes/:id", async (req, res) => {
     const quiz = await storage.getQuiz(parseInt(req.params.id));
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    const { pinCode, ...safeQuiz } = quiz;
-    res.json(safeQuiz);
+    res.json(quiz);
   });
 
   app.get("/api/quizzes/:id/questions", async (req, res) => {
-    res.status(403).json({ message: "PIN verification required. Use POST with pin." });
-  });
-
-  app.post("/api/quizzes/:id/questions", async (req, res) => {
     const quizId = parseInt(req.params.id);
-    const pin = normalizePin(String(req.query.pin || ""));
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    if (!pin || pin !== normalizePin(quiz.pinCode)) {
-      return res.status(403).json({ message: "Invalid quiz PIN" });
-    }
     const qs = await storage.getQuestionsByQuizId(quizId);
     const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
@@ -171,15 +157,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/check-submission", async (req, res) => {
-    const { quizId, firstName, lastName, pin } = req.body;
-    if (!quizId || !firstName || !lastName || !pin) {
-      return res.status(400).json({ message: "quizId, firstName, lastName, and pin required" });
+    const { quizId, firstName, lastName } = req.body;
+    if (!quizId || !firstName || !lastName) {
+      return res.status(400).json({ message: "quizId, firstName, and lastName required" });
     }
     const quiz = await storage.getQuiz(Number(quizId));
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    if (normalizePin(String(pin)) !== normalizePin(quiz.pinCode)) {
-      return res.status(403).json({ message: "Invalid quiz PIN" });
-    }
     const hasSubmitted = await storage.checkStudentSubmission(quizId, firstName, lastName);
     res.json({ hasSubmitted });
   });

@@ -12,21 +12,11 @@ function sanitizeName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function generatePinCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let pin = "";
-  for (let i = 0; i < 5; i++) {
-    pin += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return pin;
-}
-
 export interface IStorage {
   createQuiz(quiz: InsertQuiz): Promise<Quiz>;
   getQuizzes(): Promise<Quiz[]>;
   getQuiz(id: number): Promise<Quiz | undefined>;
   deleteQuiz(id: number): Promise<void>;
-  verifyQuizPin(quizId: number, pin: string): Promise<boolean>;
 
   createQuestions(questionList: InsertQuestion[]): Promise<Question[]>;
   getQuestionsByQuizId(quizId: number): Promise<Question[]>;
@@ -143,11 +133,6 @@ class DatabaseStorage implements IStorage {
     return false;
   }
 
-  async verifyQuizPin(quizId: number, pin: string): Promise<boolean> {
-    const quiz = await this.getQuiz(quizId);
-    if (!quiz) return false;
-    return quiz.pinCode === pin;
-  }
 }
 
 class MemoryStorage implements IStorage {
@@ -161,8 +146,7 @@ class MemoryStorage implements IStorage {
   private submissionId = 1;
 
   async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const pinCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const created: Quiz = { id: this.quizId++, createdAt: new Date(), pinCode, ...quiz };
+    const created: Quiz = { id: this.quizId++, createdAt: new Date(), ...quiz };
     this.quizzes.push(created);
     return created;
   }
@@ -242,11 +226,6 @@ class MemoryStorage implements IStorage {
     return this.submissions.some((s) => s.quizId === quizId && s.studentId === student.id);
   }
 
-  async verifyQuizPin(quizId: number, pin: string): Promise<boolean> {
-    const quiz = await this.getQuiz(quizId);
-    if (!quiz) return false;
-    return quiz.pinCode === pin;
-  }
 }
 
 export const storage: IStorage = db ? new DatabaseStorage(db) : new MemoryStorage();

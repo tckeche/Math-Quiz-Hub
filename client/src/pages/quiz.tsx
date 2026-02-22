@@ -62,17 +62,16 @@ function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
   );
 }
 
-function EntryGate({ quiz, onStart, checking, pinError, onPinChange }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean; pinError: string; onPinChange: () => void }) {
+function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (firstName: string, lastName: string) => void; checking: boolean; error: string }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [pin, setPin] = useState("");
 
   const isClosed = new Date(quiz.dueDate) < new Date();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim() || !lastName.trim() || !pin.trim() || checking) return;
-    onStart(firstName.trim(), lastName.trim(), pin.trim().toUpperCase());
+    if (!firstName.trim() || !lastName.trim() || checking) return;
+    onStart(firstName.trim(), lastName.trim());
   };
 
   return (
@@ -136,21 +135,10 @@ function EntryGate({ quiz, onStart, checking, pinError, onPinChange }: { quiz: Q
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="quizPin">Quiz PIN</Label>
-                <Input
-                  id="quizPin"
-                  value={pin}
-                  onChange={(e) => { setPin(e.target.value.toUpperCase()); onPinChange(); }}
-                  placeholder="Enter 5-character PIN"
-                  maxLength={5}
-                  data-testid="input-quiz-pin"
-                />
-              </div>
-              {pinError && (
-                <p className="text-sm text-destructive" data-testid="text-pin-error">{pinError}</p>
+              {error && (
+                <p className="text-sm text-destructive" data-testid="text-entry-error">{error}</p>
               )}
-              <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || !pin.trim() || checking} data-testid="button-begin-quiz">
+              <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || checking} data-testid="button-begin-quiz">
                 {checking ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
@@ -482,8 +470,7 @@ export default function QuizPage() {
   const [started, setStarted] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [quizPin, setQuizPin] = useState("");
-  const [pinError, setPinError] = useState("");
+  const [entryError, setEntryError] = useState("");
 
   if (!Number.isFinite(quizId) || quizId <= 0) {
     return (
@@ -504,16 +491,8 @@ export default function QuizPage() {
   });
 
   const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuery<Question[]>({
-    queryKey: ["/api/quizzes", quizId, "questions", quizPin],
-    queryFn: async () => {
-      const res = await fetch(`/api/quizzes/${quizId}/questions?pin=${encodeURIComponent(quizPin)}`, { credentials: "include" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(err.message || "Failed to load questions");
-      }
-      return res.json();
-    },
-    enabled: started && Boolean(quizPin),
+    queryKey: ["/api/quizzes", quizId, "questions"],
+    enabled: started,
   });
 
   useEffect(() => {
@@ -523,11 +502,11 @@ export default function QuizPage() {
     }
   }, [quizId]);
 
-  const handleStart = async (firstName: string, lastName: string, pin: string) => {
+  const handleStart = async (firstName: string, lastName: string) => {
     setChecking(true);
-    setPinError("");
+    setEntryError("");
     try {
-      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName, pin });
+      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName });
       const data = await res.json();
       if (data.hasSubmitted) {
         setBlocked(true);
@@ -536,19 +515,14 @@ export default function QuizPage() {
       }
       const studentRes = await apiRequest("POST", "/api/students", { firstName, lastName });
       const studentData = await studentRes.json();
-      setQuizPin(pin);
       setStudentId(studentData.id);
       setStarted(true);
     } catch (err: any) {
       const message = String(err?.message || "");
-      if (message.includes("403")) {
-        setPinError("Invalid PIN. Please check the quiz PIN and try again.");
-      } else if (message.includes("404")) {
-        setPinError("Quiz not found. Please verify the quiz link.");
-      } else if (message.includes("500") || message.includes("/api/students")) {
-        setPinError("Could not start quiz due to a server error. Please try again.");
+      if (message.includes("404")) {
+        setEntryError("Quiz not found. Please verify the quiz link.");
       } else {
-        setPinError("Could not verify your PIN right now. Please try again.");
+        setEntryError("Could not start the quiz. Please try again.");
       }
       return;
     } finally {
@@ -607,7 +581,7 @@ export default function QuizPage() {
   }
 
   if (!started || !studentId) {
-    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} onPinChange={() => setPinError("")} />;
+    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} error={entryError} />;
   }
 
   if (questionsError) {

@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ShieldCheck, Plus, Upload, FileJson, Eye, Download, ArrowLeft, Trash2,
   BookOpen, Clock, Calendar, Users, CheckCircle2, AlertCircle, LogOut,
-  FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, KeyRound, BarChart3, MessageSquare, Copy
+  FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, BarChart3, MessageSquare
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -668,33 +668,9 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{quiz.timeLimitMinutes} min</span>
             <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Due {format(new Date(quiz.dueDate), "PPP")}</span>
-            <Badge variant="secondary">PIN: {quiz.pinCode}</Badge>
           </div>
         </div>
       </div>
-
-      <Card className="bg-muted/30">
-        <CardContent className="py-3 flex items-center gap-3 flex-wrap">
-          <KeyRound className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium">Student PIN:</span>
-          <code className="bg-primary/10 px-3 py-1 rounded-md font-mono font-bold text-lg tracking-widest" data-testid="text-quiz-pin">
-            {quiz.pinCode}
-          </code>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              navigator.clipboard.writeText(quiz.pinCode);
-              toast({ title: "PIN copied to clipboard" });
-            }}
-            data-testid="button-copy-pin"
-          >
-            <Copy className="w-3.5 h-3.5 mr-1" />
-            Copy
-          </Button>
-          <span className="text-xs text-muted-foreground ml-auto">Share this PIN with students to access the quiz</span>
-        </CardContent>
-      </Card>
 
       <div className="flex gap-2 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => { setShowUploader(!showUploader); setShowPdfGen(false); }} data-testid="button-toggle-uploader">
