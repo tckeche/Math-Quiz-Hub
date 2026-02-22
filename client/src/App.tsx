@@ -9,6 +9,7 @@ import AdminPage from "@/pages/admin";
 import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
 import AnalyticsPage from "@/pages/analytics";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 function Router() {
   return (
@@ -28,7 +29,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <ErrorBoundary title="Application error"><Router /></ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );

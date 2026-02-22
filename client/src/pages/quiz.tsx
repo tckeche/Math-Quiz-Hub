@@ -144,15 +144,8 @@ function EntryGate({ quiz, onStart, checking, pinError, onPinChange }: { quiz: Q
                   onChange={(e) => { setPin(e.target.value.toUpperCase()); onPinChange(); }}
                   placeholder="Enter 5-character PIN"
                   maxLength={5}
-                  className="font-mono text-center text-lg tracking-widest"
                   data-testid="input-quiz-pin"
                 />
-                {pinError && (
-                  <p className="text-sm text-destructive flex items-center gap-1" data-testid="text-pin-error">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    {pinError}
-                  </p>
-                )}
               </div>
               {pinError && (
                 <p className="text-sm text-destructive" data-testid="text-pin-error">{pinError}</p>
@@ -492,14 +485,32 @@ export default function QuizPage() {
   const [quizPin, setQuizPin] = useState("");
   const [pinError, setPinError] = useState("");
 
-  const { data: quiz, isLoading: quizLoading } = useQuery<Quiz>({
+  if (!Number.isFinite(quizId) || quizId <= 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="py-12">
+            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
+            <h2 className="font-serif text-xl font-bold">Invalid Quiz Link</h2>
+            <p className="text-sm text-muted-foreground mt-2">Please use a valid quiz URL.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const { data: quiz, isLoading: quizLoading, error: quizError } = useQuery<Quiz>({
     queryKey: ["/api/quizzes", quizId],
   });
 
-  const { data: questions, isLoading: questionsLoading } = useQuery<Question[]>({
+  const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuery<Question[]>({
     queryKey: ["/api/quizzes", quizId, "questions", quizPin],
     queryFn: async () => {
-      const res = await apiRequest("POST", `/api/quizzes/${quizId}/questions`, { pin: quizPin });
+      const res = await fetch(`/api/quizzes/${quizId}/questions?pin=${encodeURIComponent(quizPin)}`, { credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || "Failed to load questions");
+      }
       return res.json();
     },
     enabled: started && Boolean(quizPin),
@@ -527,16 +538,7 @@ export default function QuizPage() {
     setChecking(true);
     setPinError("");
     try {
-      const pinRes = await apiRequest("POST", `/api/quizzes/${quizId}/verify-pin`, { pin });
-      const pinData = await pinRes.json();
-      if (!pinData.valid) {
-        setPinError("Invalid PIN. Please check and try again.");
-        setChecking(false);
-        return;
-      }
-      setQuizPin(pin);
-
-      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName });
+      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName, pin });
       const data = await res.json();
       if (data.hasSubmitted) {
         setBlocked(true);
@@ -571,6 +573,21 @@ export default function QuizPage() {
     );
   }
 
+
+  if (quizError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="py-12">
+            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
+            <h2 className="font-serif text-xl font-bold">Unable to Load Quiz</h2>
+            <p className="text-sm text-muted-foreground mt-2">{String((quizError as Error).message || "Please try again.")}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!quiz) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -597,6 +614,20 @@ export default function QuizPage() {
 
   if (!started || !studentId) {
     return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} onPinChange={() => setPinError("")} />;
+  }
+
+  if (questionsError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="py-12">
+            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
+            <h2 className="font-serif text-xl font-bold">Unable to Start Quiz</h2>
+            <p className="text-sm text-muted-foreground mt-2">{String((questionsError as Error).message || "Please try again.")}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (questionsLoading || !questions) {

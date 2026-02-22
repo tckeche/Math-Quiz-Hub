@@ -863,7 +863,7 @@ export default function AdminPage() {
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
   const [authVersion, setAuthVersion] = useState(0);
 
-  const { data: adminSession, isLoading: sessionLoading } = useQuery<{ authenticated: boolean }>({
+  const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
     queryKey: ["/api/admin/session", authVersion],
     queryFn: async () => {
       const res = await fetch("/api/admin/session", { credentials: "include" });
@@ -873,7 +873,7 @@ export default function AdminPage() {
 
   const authenticated = adminSession?.authenticated === true;
 
-  const { data: quizzes, isLoading } = useQuery<Quiz[]>({
+  const { data: quizzes, isLoading, error: quizzesError } = useQuery<Quiz[]>({
     queryKey: ["/api/admin/quizzes"],
     enabled: authenticated,
   });
@@ -885,6 +885,10 @@ export default function AdminPage() {
 
   if (sessionLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (sessionError) {
+    return <div className="min-h-screen flex items-center justify-center p-6 text-destructive">Failed to verify admin session.</div>;
   }
 
   if (!authenticated) {
@@ -936,7 +940,11 @@ export default function AdminPage() {
               <CreateQuizForm onClose={() => setShowCreateForm(false)} />
             )}
 
-            {isLoading ? (
+            {quizzesError ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 text-destructive p-4">
+                Failed to load quizzes. Please refresh and try again.
+              </div>
+            ) : isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
               </div>

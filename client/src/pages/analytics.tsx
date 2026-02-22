@@ -14,7 +14,7 @@ export default function AnalyticsPage() {
   const reportRef = useRef<HTMLDivElement>(null);
   const [analysis, setAnalysis] = useState<string>("");
 
-  const { data: adminSession, isLoading: sessionLoading } = useQuery<{ authenticated: boolean }>({
+  const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
     queryKey: ["/api/admin/session"],
     queryFn: async () => {
       const res = await fetch("/api/admin/session", { credentials: "include" });

@@ -25,7 +25,7 @@ export default function BuilderPage() {
   const [drafts, setDrafts] = useState<DraftQuestion[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
 
-  const { data: adminSession, isLoading: sessionLoading } = useQuery<{ authenticated: boolean }>({
+  const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
     queryKey: ["/api/admin/session"],
     queryFn: async () => {
       const res = await fetch("/api/admin/session", { credentials: "include" });
@@ -79,6 +79,10 @@ export default function BuilderPage() {
 
   if (sessionLoading) {
     return <div className="p-6">Loading...</div>;
+  }
+
+  if (sessionError) {
+    return <div className="p-6 text-destructive">Failed to verify admin session.</div>;
   }
 
   if (!authenticated) {
