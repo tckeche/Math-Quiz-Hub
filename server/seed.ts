@@ -1,24 +1,24 @@
-import { db } from "./db";
-import { quizzes, questions } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { storage } from "./storage";
 
 export async function seedDatabase() {
-  const existing = await db.select({ count: sql<number>`count(*)` }).from(quizzes);
-  if (Number(existing[0].count) > 0) return;
+  const existing = await storage.getQuizzes();
+  if (existing.length > 0) return;
 
-  const [quiz1] = await db.insert(quizzes).values({
+  const quiz1 = await storage.createQuiz({
     title: "Pure Mathematics — Paper 1",
     timeLimitMinutes: 45,
     dueDate: new Date("2026-06-30T23:59:00"),
-  }).returning();
+    pinCode: "MATH1",
+  });
 
-  const [quiz2] = await db.insert(quizzes).values({
+  const quiz2 = await storage.createQuiz({
     title: "Statistics & Probability — Paper 2",
     timeLimitMinutes: 30,
     dueDate: new Date("2026-07-15T23:59:00"),
-  }).returning();
+    pinCode: "STAT2",
+  });
 
-  await db.insert(questions).values([
+  await storage.createQuestions([
     {
       quizId: quiz1.id,
       promptText: "Solve the equation \\(x^2 - 5x + 6 = 0\\).",

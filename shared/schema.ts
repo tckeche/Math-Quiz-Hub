@@ -8,6 +8,7 @@ export const quizzes = pgTable("quizzes", {
   title: text("title").notNull(),
   timeLimitMinutes: integer("time_limit_minutes").notNull(),
   dueDate: timestamp("due_date").notNull(),
+  pinCode: varchar("pin_code", { length: 5 }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
