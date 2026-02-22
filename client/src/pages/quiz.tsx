@@ -62,16 +62,17 @@ function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
   );
 }
 
-function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstName: string, lastName: string) => void; checking: boolean }) {
+function EntryGate({ quiz, onStart, checking, pinError, onPinChange }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean; pinError: string; onPinChange: () => void }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [pin, setPin] = useState("");
 
   const isClosed = new Date(quiz.dueDate) < new Date();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim() || !lastName.trim() || checking) return;
-    onStart(firstName.trim(), lastName.trim());
+    if (!firstName.trim() || !lastName.trim() || !pin.trim() || checking) return;
+    onStart(firstName.trim(), lastName.trim(), pin.trim().toUpperCase());
   };
 
   return (
@@ -135,7 +136,21 @@ function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstNam
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || checking} data-testid="button-begin-quiz">
+              <div className="space-y-2">
+                <Label htmlFor="quizPin">Quiz PIN</Label>
+                <Input
+                  id="quizPin"
+                  value={pin}
+                  onChange={(e) => { setPin(e.target.value.toUpperCase()); onPinChange(); }}
+                  placeholder="Enter 5-character PIN"
+                  maxLength={5}
+                  data-testid="input-quiz-pin"
+                />
+              </div>
+              {pinError && (
+                <p className="text-sm text-destructive" data-testid="text-pin-error">{pinError}</p>
+              )}
+              <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || !pin.trim() || checking} data-testid="button-begin-quiz">
                 {checking ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
@@ -467,14 +482,38 @@ export default function QuizPage() {
   const [started, setStarted] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [quizPin, setQuizPin] = useState("");
+  const [pinError, setPinError] = useState("");
 
-  const { data: quiz, isLoading: quizLoading } = useQuery<Quiz>({
+  if (!Number.isFinite(quizId) || quizId <= 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="py-12">
+            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
+            <h2 className="font-serif text-xl font-bold">Invalid Quiz Link</h2>
+            <p className="text-sm text-muted-foreground mt-2">Please use a valid quiz URL.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const { data: quiz, isLoading: quizLoading, error: quizError } = useQuery<Quiz>({
     queryKey: ["/api/quizzes", quizId],
   });
 
-  const { data: questions, isLoading: questionsLoading } = useQuery<Question[]>({
-    queryKey: ["/api/quizzes", quizId, "questions"],
-    enabled: started,
+  const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuery<Question[]>({
+    queryKey: ["/api/quizzes", quizId, "questions", quizPin],
+    queryFn: async () => {
+      const res = await fetch(`/api/quizzes/${quizId}/questions?pin=${encodeURIComponent(quizPin)}`, { credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || "Failed to load questions");
+      }
+      return res.json();
+    },
+    enabled: started && Boolean(quizPin),
   });
 
   useEffect(() => {
@@ -484,30 +523,34 @@ export default function QuizPage() {
     }
   }, [quizId]);
 
-  const registerMutation = useMutation({
-    mutationFn: async (data: { firstName: string; lastName: string }) => {
-      const res = await apiRequest("POST", "/api/students", data);
-      return res.json();
-    },
-    onSuccess: (data: { id: number }) => {
-      setStudentId(data.id);
-      setStarted(true);
-    },
-  });
-
-  const handleStart = async (firstName: string, lastName: string) => {
+  const handleStart = async (firstName: string, lastName: string, pin: string) => {
     setChecking(true);
+    setPinError("");
     try {
-      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName });
+      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName, pin });
       const data = await res.json();
       if (data.hasSubmitted) {
         setBlocked(true);
         localStorage.setItem(`completed_quiz_${quizId}`, "true");
         return;
       }
-      registerMutation.mutate({ firstName, lastName });
-    } catch {
-      registerMutation.mutate({ firstName, lastName });
+      const studentRes = await apiRequest("POST", "/api/students", { firstName, lastName });
+      const studentData = await studentRes.json();
+      setQuizPin(pin);
+      setStudentId(studentData.id);
+      setStarted(true);
+    } catch (err: any) {
+      const message = String(err?.message || "");
+      if (message.includes("403")) {
+        setPinError("Invalid PIN. Please check the quiz PIN and try again.");
+      } else if (message.includes("404")) {
+        setPinError("Quiz not found. Please verify the quiz link.");
+      } else if (message.includes("500") || message.includes("/api/students")) {
+        setPinError("Could not start quiz due to a server error. Please try again.");
+      } else {
+        setPinError("Could not verify your PIN right now. Please try again.");
+      }
+      return;
     } finally {
       setChecking(false);
     }
@@ -520,6 +563,21 @@ export default function QuizPage() {
           <Skeleton className="h-8 w-3/4 mx-auto" />
           <Skeleton className="h-40 w-full" />
         </div>
+      </div>
+    );
+  }
+
+
+  if (quizError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="py-12">
+            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
+            <h2 className="font-serif text-xl font-bold">Unable to Load Quiz</h2>
+            <p className="text-sm text-muted-foreground mt-2">{String((quizError as Error).message || "Please try again.")}</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -549,7 +607,21 @@ export default function QuizPage() {
   }
 
   if (!started || !studentId) {
-    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} />;
+    return <EntryGate quiz={quiz} onStart={handleStart} checking={checking} pinError={pinError} onPinChange={() => setPinError("")} />;
+  }
+
+  if (questionsError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="py-12">
+            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
+            <h2 className="font-serif text-xl font-bold">Unable to Start Quiz</h2>
+            <p className="text-sm text-muted-foreground mt-2">{String((questionsError as Error).message || "Please try again.")}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (questionsLoading || !questions) {

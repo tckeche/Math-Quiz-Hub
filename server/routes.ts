@@ -1,11 +1,14 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
+import type { Express, NextFunction, Request, Response } from "express";
+import { type Server } from "http";
 import { storage } from "./storage";
 import { questionUploadSchema } from "@shared/schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
+
+const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -19,6 +22,14 @@ const upload = multer({
       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
     },
   }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!allowedImageTypes.has(file.mimetype)) {
+      cb(new Error("Only PNG, JPEG, WEBP, and SVG images are allowed"));
+      return;
+    }
+    cb(null, true);
+  },
 });
 
 const pdfUpload = multer({ storage: multer.memoryStorage() });
@@ -30,26 +41,126 @@ function getGeminiModel() {
   return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+function generatePinCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let pin = "";
+  for (let i = 0; i < 5; i++) {
+    pin += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return pin;
+}
 
+
+const ADMIN_COOKIE_NAME = "admin_session";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Chomukamba";
+const adminSessions = new Set<string>();
+
+function parseCookies(req: Request) {
+  const raw = req.headers.cookie;
+  if (!raw) return {} as Record<string, string>;
+  return raw.split(";").reduce<Record<string, string>>((acc, pair) => {
+    const idx = pair.indexOf("=");
+    if (idx === -1) return acc;
+    const key = pair.slice(0, idx).trim();
+    const value = decodeURIComponent(pair.slice(idx + 1).trim());
+    acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function getAdminSessionToken(req: Request) {
+  return parseCookies(req)[ADMIN_COOKIE_NAME] || "";
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const token = getAdminSessionToken(req);
+  if (!token || !adminSessions.has(token)) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  next();
+}
+
+
+function normalizePin(value: string) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function extractJsonArray(text: string): any[] | null {
+  const cleaned = text
+    .replace(/```json\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && Array.isArray((parsed as { questions?: unknown }).questions)) {
+      return (parsed as { questions: any[] }).questions;
+    }
+    return [parsed];
+  } catch {
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    if (!match) return null;
+    try {
+      const parsed = JSON.parse(match[0]);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return null;
+    }
+  }
+}
+
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.post("/api/admin/login", async (req, res) => {
+    const { password } = req.body;
+    if (String(password || "") !== ADMIN_PASSWORD) {
+      return res.status(401).json({ message: "Invalid admin credentials" });
+    }
+    const token = crypto.randomBytes(24).toString("hex");
+    adminSessions.add(token);
+    res.cookie(ADMIN_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 1000 * 60 * 60 * 12,
+      path: "/",
+    });
+    res.json({ authenticated: true });
+  });
+
+  app.get("/api/admin/session", async (req, res) => {
+    const token = getAdminSessionToken(req);
+    res.json({ authenticated: Boolean(token && adminSessions.has(token)) });
+  });
+
+  app.post("/api/admin/logout", async (req, res) => {
+    const token = getAdminSessionToken(req);
+    if (token) adminSessions.delete(token);
+    res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
+    res.json({ success: true });
+  });
+
+  app.use("/api/admin", requireAdmin);
   app.get("/api/quizzes", async (_req, res) => {
     const quizzes = await storage.getQuizzes();
-    res.json(quizzes);
+    const sanitized = quizzes.map(({ pinCode, ...quiz }) => quiz);
+    res.json(sanitized);
   });
 
   app.get("/api/quizzes/:id", async (req, res) => {
     const quiz = await storage.getQuiz(parseInt(req.params.id));
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    res.json(quiz);
+    const { pinCode, ...safeQuiz } = quiz;
+    res.json(safeQuiz);
   });
 
   app.get("/api/quizzes/:id/questions", async (req, res) => {
     const quizId = parseInt(req.params.id);
+    const pin = normalizePin(String(req.query.pin || ""));
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+    if (!pin || pin !== normalizePin(quiz.pinCode)) {
+      return res.status(403).json({ message: "Invalid quiz PIN" });
+    }
     const qs = await storage.getQuestionsByQuizId(quizId);
     const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
@@ -63,9 +174,14 @@ export async function registerRoutes(
   });
 
   app.post("/api/check-submission", async (req, res) => {
-    const { quizId, firstName, lastName } = req.body;
-    if (!quizId || !firstName || !lastName) {
-      return res.status(400).json({ message: "quizId, firstName, and lastName required" });
+    const { quizId, firstName, lastName, pin } = req.body;
+    if (!quizId || !firstName || !lastName || !pin) {
+      return res.status(400).json({ message: "quizId, firstName, lastName, and pin required" });
+    }
+    const quiz = await storage.getQuiz(Number(quizId));
+    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+    if (normalizePin(String(pin)) !== normalizePin(quiz.pinCode)) {
+      return res.status(403).json({ message: "Invalid quiz PIN" });
     }
     const hasSubmitted = await storage.checkStudentSubmission(quizId, firstName, lastName);
     res.json({ hasSubmitted });
@@ -124,6 +240,7 @@ export async function registerRoutes(
       title,
       timeLimitMinutes,
       dueDate: new Date(dueDate),
+      pinCode: generatePinCode(),
     });
     res.json(quiz);
   });
@@ -172,14 +289,24 @@ export async function registerRoutes(
     res.json(submissions);
   });
 
-  app.post("/api/generate-questions", pdfUpload.single("pdf"), async (req, res) => {
+  app.delete("/api/admin/submissions/:id", async (req, res) => {
+    await storage.deleteSubmission(parseInt(req.params.id));
+    res.json({ success: true });
+  });
+
+  app.delete("/api/admin/quizzes/:id/submissions", async (req, res) => {
+    await storage.deleteSubmissionsByQuizId(parseInt(req.params.id));
+    res.json({ success: true });
+  });
+
+  app.post("/api/generate-questions", requireAdmin, pdfUpload.single("pdf"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No PDF file uploaded" });
 
       const model = getGeminiModel();
       const base64Pdf = req.file.buffer.toString("base64");
 
-      const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\( instead of \\(). Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
+      const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\frac instead of \\frac, and \\\\sqrt instead of \\sqrt) so the JSON parser does not strip them. Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
 
       const result = await model.generateContent([
         { text: prompt },
@@ -191,11 +318,8 @@ export async function registerRoutes(
         },
       ]);
 
-      let responseText = result.response.text();
-      responseText = responseText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-
-      const parsed = JSON.parse(responseText);
-      const questions = Array.isArray(parsed) ? parsed : [parsed];
+      const questions = extractJsonArray(result.response.text());
+      if (!questions) return res.status(500).json({ message: "AI did not return valid JSON" });
 
       res.json({ questions });
     } catch (err: any) {
@@ -204,7 +328,24 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/analyze-student", async (req, res) => {
+  app.post("/api/admin/copilot-chat", async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message) return res.status(400).json({ message: "message is required" });
+
+      const model = getGeminiModel();
+      const prompt = `You are a curriculum assistant for mathematics teachers. Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }]. Use double-escaped LaTeX in all math strings.`;
+
+      const result = await model.generateContent([{ text: prompt }, { text: String(message) }]);
+      const raw = result.response.text();
+      const drafts = extractJsonArray(raw) || [];
+      res.json({ reply: raw, drafts });
+    } catch (err: any) {
+      res.status(500).json({ message: `Copilot failed: ${err.message}` });
+    }
+  });
+
+  app.post("/api/analyze-student", requireAdmin, async (req, res) => {
     try {
       const { submission, questions } = req.body;
       if (!submission || !questions) {
@@ -212,7 +353,6 @@ export async function registerRoutes(
       }
 
       const model = getGeminiModel();
-
       const breakdown = Object.entries(submission.answersBreakdown).map(([qId, detail]: [string, any]) => {
         const question = questions.find((q: any) => String(q.id) === qId);
         return {
@@ -224,28 +364,56 @@ export async function registerRoutes(
         };
       });
 
-      const prompt = `You are an expert mathematics tutor. Analyze this student's quiz submission. Identify which specific mathematical concepts they are struggling with based on the questions they got wrong. Keep the analysis concise, actionable, and formatted in clean HTML.
-
-Student scored ${submission.totalScore}/${submission.maxPossibleScore}.
-
-Question breakdown:
-${JSON.stringify(breakdown, null, 2)}`;
+      const prompt = `You are an expert mathematics tutor. Analyze this student's quiz submission. Identify which specific mathematical concepts they are struggling with based on the questions they got wrong. Keep the analysis concise, actionable, and formatted in clean HTML.\n\nStudent scored ${submission.totalScore}/${submission.maxPossibleScore}.\n\nQuestion breakdown:\n${JSON.stringify(breakdown, null, 2)}`;
 
       const result = await model.generateContent(prompt);
       let html = result.response.text();
       html = html.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-
       res.json({ analysis: html });
     } catch (err: any) {
-      console.error("AI analysis error:", err);
       res.status(500).json({ message: `AI analysis failed: ${err.message}` });
     }
   });
 
-  app.post("/api/upload-image", upload.single("image"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No image uploaded" });
-    const url = `/uploads/${req.file.filename}`;
-    res.json({ url });
+  app.post("/api/analyze-class", requireAdmin, async (req, res) => {
+    try {
+      const { quizId } = req.body;
+      if (!quizId) return res.status(400).json({ message: "quizId required" });
+
+      const submissions = await storage.getSubmissionsByQuizId(Number(quizId));
+      const questions = await storage.getQuestionsByQuizId(Number(quizId));
+      const model = getGeminiModel();
+
+      const payload = submissions.map((s) => ({
+        student: `${s.student.firstName} ${s.student.lastName}`,
+        totalScore: s.totalScore,
+        maxPossibleScore: s.maxPossibleScore,
+        answersBreakdown: s.answersBreakdown,
+      }));
+
+      const prompt = `You are a master mathematics tutor. Analyze this cohort's quiz data. Identify macro-trends, the most commonly failed questions, and the specific mathematical concepts the class as a whole is struggling with. Output in clean, professional HTML.\n\nQuestions:\n${JSON.stringify(questions, null, 2)}\n\nSubmissions:\n${JSON.stringify(payload, null, 2)}`;
+
+      const result = await model.generateContent(prompt);
+      let html = result.response.text();
+      html = html.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+      res.json({ analysis: html, submissionCount: submissions.length });
+    } catch (err: any) {
+      res.status(500).json({ message: `Class analysis failed: ${err.message}` });
+    }
+  });
+
+  app.post("/api/upload-image", requireAdmin, (req, res) => {
+    upload.single("image")(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ message: "Image exceeds 5MB size limit" });
+        }
+        return res.status(400).json({ message: err.message || "Invalid image upload" });
+      }
+      if (!req.file) return res.status(400).json({ message: "No image uploaded" });
+      const url = `/uploads/${req.file.filename}`;
+      res.json({ url });
+    });
   });
 
   return httpServer;

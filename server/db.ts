@@ -2,12 +2,25 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL must be set.");
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.warn("DATABASE_URL is not set. Falling back to in-memory storage.");
 }
 
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+function shouldUseSsl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.includes("supabase.co") || lower.includes("sslmode=require") || process.env.PGSSLMODE === "require";
+}
 
-export const db = drizzle(pool, { schema });
+const pool = connectionString
+  ? new pg.Pool({
+      connectionString,
+      ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
+      max: Number(process.env.PG_POOL_MAX || 10),
+      connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 10000),
+      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || 30000),
+    })
+  : null;
+
+export const db = pool ? drizzle(pool, { schema }) : null;
