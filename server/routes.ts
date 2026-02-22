@@ -161,7 +161,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/quizzes/:id/questions", async (req, res) => {
     const quizId = parseInt(req.params.id);
-    const pin = normalizePin(String(req.body.pin || req.query.pin || ""));
+    const pin = normalizePin(String(req.query.pin || ""));
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     if (!pin || pin !== normalizePin(quiz.pinCode)) {

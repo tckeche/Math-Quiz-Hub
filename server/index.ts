@@ -80,13 +80,13 @@ httpServer.listen(
 );
 
 (async () => {
+  const { seedDatabase } = await import("./seed");
   try {
-    try {
-      const { seedDatabase } = await import("./seed");
-      await seedDatabase();
-    } catch (seedErr) {
-      console.error("Warning: Database seeding skipped due to error:", seedErr);
-    }
+    await seedDatabase();
+  } catch (error) {
+    log(`seed skipped due to database error: ${error instanceof Error ? error.message : String(error)}`, "bootstrap");
+  }
+  await registerRoutes(httpServer, app);
 
     await registerRoutes(httpServer, app);
 

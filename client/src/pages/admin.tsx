@@ -497,7 +497,7 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
-    contentRef: printRef,
+    content: () => printRef.current,
     documentTitle: `student-analysis-${submission.id}`,
   });
 

@@ -523,17 +523,6 @@ export default function QuizPage() {
     }
   }, [quizId]);
 
-  const registerMutation = useMutation({
-    mutationFn: async (data: { firstName: string; lastName: string }) => {
-      const res = await apiRequest("POST", "/api/students", data);
-      return res.json();
-    },
-    onSuccess: (data: { id: number }) => {
-      setStudentId(data.id);
-      setStarted(true);
-    },
-  });
-
   const handleStart = async (firstName: string, lastName: string, pin: string) => {
     setChecking(true);
     setPinError("");
@@ -545,14 +534,19 @@ export default function QuizPage() {
         localStorage.setItem(`completed_quiz_${quizId}`, "true");
         return;
       }
+      const studentRes = await apiRequest("POST", "/api/students", { firstName, lastName });
+      const studentData = await studentRes.json();
       setQuizPin(pin);
-      registerMutation.mutate({ firstName, lastName });
+      setStudentId(studentData.id);
+      setStarted(true);
     } catch (err: any) {
       const message = String(err?.message || "");
       if (message.includes("403")) {
         setPinError("Invalid PIN. Please check the quiz PIN and try again.");
       } else if (message.includes("404")) {
         setPinError("Quiz not found. Please verify the quiz link.");
+      } else if (message.includes("500") || message.includes("/api/students")) {
+        setPinError("Could not start quiz due to a server error. Please try again.");
       } else {
         setPinError("Could not verify your PIN right now. Please try again.");
       }
