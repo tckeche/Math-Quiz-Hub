@@ -62,18 +62,17 @@ function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
   );
 }
 
-function EntryGate({ quiz, onStart, checking, pinError: externalPinError }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean; pinError?: string }) {
+function EntryGate({ quiz, onStart, checking }: { quiz: Quiz; onStart: (firstName: string, lastName: string, pin: string) => void; checking: boolean }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [pin, setPin] = useState("");
-  const pinError = externalPinError || "";
 
   const isClosed = new Date(quiz.dueDate) < new Date();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim() || !pin.trim() || checking) return;
-    onStart(firstName.trim(), lastName.trim(), pin.trim());
+    onStart(firstName.trim(), lastName.trim(), pin.trim().toUpperCase());
   };
 
   return (
@@ -145,15 +144,8 @@ function EntryGate({ quiz, onStart, checking, pinError: externalPinError }: { qu
                   onChange={(e) => setPin(e.target.value.toUpperCase())}
                   placeholder="Enter 5-character PIN"
                   maxLength={5}
-                  className="font-mono text-center text-lg tracking-widest"
                   data-testid="input-quiz-pin"
                 />
-                {pinError && (
-                  <p className="text-sm text-destructive flex items-center gap-1" data-testid="text-pin-error">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    {pinError}
-                  </p>
-                )}
               </div>
               <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || !pin.trim() || checking} data-testid="button-begin-quiz">
                 {checking ? (
@@ -487,21 +479,23 @@ export default function QuizPage() {
   const [started, setStarted] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [pinError, setPinError] = useState("");
-  const [verifiedPin, setVerifiedPin] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [quizPin, setQuizPin] = useState("");
 
   const { data: quiz, isLoading: quizLoading } = useQuery<Quiz>({
     queryKey: ["/api/quizzes", quizId],
   });
 
   const { data: questions, isLoading: questionsLoading } = useQuery<Question[]>({
-    queryKey: ["/api/quizzes", quizId, "questions"],
+    queryKey: ["/api/quizzes", quizId, "questions", quizPin],
     queryFn: async () => {
-      const res = await apiRequest("POST", `/api/quizzes/${quizId}/questions`, { pin: verifiedPin });
+      const res = await fetch(`/api/quizzes/${quizId}/questions?pin=${encodeURIComponent(quizPin)}`, { credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || "Failed to load questions");
+      }
       return res.json();
     },
-    enabled: started && !!verifiedPin,
+    enabled: started && Boolean(quizPin),
   });
 
   useEffect(() => {
@@ -526,29 +520,18 @@ export default function QuizPage() {
     setChecking(true);
     setPinError("");
     try {
-      const pinRes = await apiRequest("POST", `/api/quizzes/${quizId}/verify-pin`, { pin });
-      const pinData = await pinRes.json();
-      if (!pinData.valid) {
-        setPinError("Invalid PIN. Please check and try again.");
-        setChecking(false);
-        return;
-      }
-      setVerifiedPin(pin);
-
-      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName });
+      const res = await apiRequest("POST", "/api/check-submission", { quizId, firstName, lastName, pin });
       const data = await res.json();
       if (data.hasSubmitted) {
         setBlocked(true);
         localStorage.setItem(`completed_quiz_${quizId}`, "true");
         return;
       }
+      setQuizPin(pin);
       registerMutation.mutate({ firstName, lastName });
-    } catch (err: any) {
-      if (err.message?.includes("403") || err.message?.includes("Invalid PIN")) {
-        setPinError("Invalid PIN. Please check and try again.");
-      } else {
-        registerMutation.mutate({ firstName, lastName });
-      }
+    } catch {
+      setQuizPin(pin);
+      registerMutation.mutate({ firstName, lastName });
     } finally {
       setChecking(false);
     }

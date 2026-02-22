@@ -478,7 +478,7 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
-    contentRef: printRef,
+    content: () => printRef.current,
     documentTitle: `student-analysis-${submission.id}`,
   });
 
@@ -696,12 +696,6 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           <Users className="w-4 h-4 mr-1" />
           View Results ({submissions?.length ?? 0})
         </Button>
-        <Link href={`/admin/analytics/${quizId}`}>
-          <Button variant="outline" size="sm" data-testid="button-analytics">
-            <BarChart3 className="w-4 h-4 mr-1" />
-            Analytics & Reports
-          </Button>
-        </Link>
         {submissions && submissions.length > 0 && (
           <>
             <Button variant="outline" size="sm" onClick={downloadCSV} data-testid="button-download-csv">
