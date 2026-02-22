@@ -84,5 +84,8 @@ export async function seedDatabase() {
     },
   ]);
 
-  console.log("Database seeded with sample quizzes and questions.");
+    console.log("Database seeded with sample quizzes and questions.");
+  } catch (err) {
+    console.error("Warning: Database seeding failed:", err);
+  }
 }
