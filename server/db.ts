@@ -3,6 +3,14 @@ import pg from "pg";
 import * as schema from "@shared/schema";
 
 function getConnectionConfig() {
+  const supabaseUrl = process.env.SUPABASE_DATABASE_URL;
+  if (supabaseUrl && supabaseUrl.startsWith("postgres")) {
+    return {
+      connectionString: supabaseUrl,
+      ssl: { rejectUnauthorized: false },
+    };
+  }
+
   if (process.env.PGHOST && process.env.PGUSER && process.env.PGDATABASE) {
     return {
       host: process.env.PGHOST,
