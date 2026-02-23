@@ -43,7 +43,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/upload-image` - Upload image for question attachment
 
 ### Key Features
-- Admin password: "Chomukamba" (client-side localStorage gate)
+- Admin password: Stored in ADMIN_PASSWORD env var; JWT sessions via JWT_SECRET env var
 - LaTeX rendering via react-katex (InlineMath/BlockMath)
 - Anti-cheat timer persisted in localStorage
 - Auto-submit on timer expiry

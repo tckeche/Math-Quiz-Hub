@@ -10,7 +10,8 @@ import OpenAI from "openai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import crypto from "crypto";
+import jwt from "jsonwebtoken";
+import rateLimit from "express-rate-limit";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
@@ -47,8 +48,18 @@ function getGeminiModel() {
 
 
 const ADMIN_COOKIE_NAME = "admin_session";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Chomukamba";
-const adminSessions = new Set<string>();
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET environment variable is required");
+  return secret;
+}
+
+function getAdminPassword(): string {
+  const pw = process.env.ADMIN_PASSWORD;
+  if (!pw) throw new Error("ADMIN_PASSWORD environment variable is required");
+  return pw;
+}
 
 function parseCookies(req: Request) {
   const raw = req.headers.cookie;
@@ -69,11 +80,24 @@ function getAdminSessionToken(req: Request) {
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const token = getAdminSessionToken(req);
-  if (!token || !adminSessions.has(token)) {
+  if (!token) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  next();
+  try {
+    jwt.verify(token, getJwtSecret());
+    next();
+  } catch {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 }
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { message: "Too many login attempts. Please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 
 function extractJsonArray(text: string): any[] | null {
@@ -101,13 +125,12 @@ function extractJsonArray(text: string): any[] | null {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  app.post("/api/admin/login", async (req, res) => {
+  app.post("/api/admin/login", loginLimiter, async (req, res) => {
     const { password } = req.body;
-    if (String(password || "") !== ADMIN_PASSWORD) {
+    if (String(password || "") !== getAdminPassword()) {
       return res.status(401).json({ message: "Invalid admin credentials" });
     }
-    const token = crypto.randomBytes(24).toString("hex");
-    adminSessions.add(token);
+    const token = jwt.sign({ role: "admin" }, getJwtSecret(), { expiresIn: "12h" });
     res.cookie(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
@@ -120,12 +143,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/admin/session", async (req, res) => {
     const token = getAdminSessionToken(req);
-    res.json({ authenticated: Boolean(token && adminSessions.has(token)) });
+    if (!token) return res.json({ authenticated: false });
+    try {
+      jwt.verify(token, getJwtSecret());
+      res.json({ authenticated: true });
+    } catch {
+      res.json({ authenticated: false });
+    }
   });
 
   app.post("/api/admin/logout", async (req, res) => {
-    const token = getAdminSessionToken(req);
-    if (token) adminSessions.delete(token);
     res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
     res.json({ success: true });
   });
