@@ -5,6 +5,8 @@ import { questionUploadSchema, submissions as submissionsTable } from "@shared/s
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -279,31 +281,142 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/generate-questions", requireAdmin, pdfUpload.single("pdf"), async (req, res) => {
-    try {
-      if (!req.file) return res.status(400).json({ message: "No PDF file uploaded" });
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
 
-      const model = getGeminiModel();
+    req.setTimeout(120_000);
+    res.setTimeout(120_000);
+
+    const sendEvent = (event: string, data: any) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 10_000);
+    let clientDisconnected = false;
+    req.on("close", () => {
+      clientDisconnected = true;
+      clearInterval(heartbeat);
+    });
+
+    try {
+      if (!req.file) {
+        sendEvent("error", { message: "No PDF file uploaded" });
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+
       const base64Pdf = req.file.buffer.toString("base64");
 
-      const prompt = `Extract multiple-choice questions from this math exam. Solve them to find the correct answer. Output strictly as a JSON array of objects matching this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number }]. You MUST use LaTeX for all mathematical notation. Crucially, because this is a JSON output, you MUST double-escape all LaTeX backslashes (e.g., use \\\\frac instead of \\frac, and \\\\sqrt instead of \\sqrt) so the JSON parser does not strip them. Do not include any markdown formatting, code fences, or explanations. Output ONLY the JSON array.`;
-
-      const result = await model.generateContent([
-        { text: prompt },
-        {
-          inlineData: {
-            mimeType: "application/pdf",
-            data: base64Pdf,
-          },
-        },
+      // --- STAGE 1: Gemini extracts raw text from PDF ---
+      sendEvent("stage", { stage: 1, label: "Gemini is reading the PDF..." });
+      const geminiModel = getGeminiModel();
+      const geminiResult = await geminiModel.generateContent([
+        { text: "Extract all multiple-choice mathematics questions, options, and text from this PDF document. Output only the raw extracted text, preserving all mathematical notation exactly as written." },
+        { inlineData: { mimeType: "application/pdf", data: base64Pdf } },
       ]);
+      const extractedText = geminiResult.response.text();
+      if (!extractedText || extractedText.trim().length < 20) {
+        sendEvent("error", { message: "Gemini could not extract meaningful text from the PDF" });
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+      sendEvent("stage_done", { stage: 1 });
+      if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
 
-      const questions = extractJsonArray(result.response.text());
-      if (!questions) return res.status(500).json({ message: "AI did not return valid JSON" });
+      // --- STAGE 2: DeepSeek solves the mathematics ---
+      sendEvent("stage", { stage: 2, label: "DeepSeek is solving the mathematics..." });
+      const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+      if (!deepseekApiKey) {
+        sendEvent("error", { message: "DEEPSEEK_API_KEY is not configured" });
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+      const deepseek = new OpenAI({ apiKey: deepseekApiKey, baseURL: "https://api.deepseek.com" });
+      const deepseekResult = await deepseek.chat.completions.create({
+        model: "deepseek-reasoner",
+        messages: [
+          { role: "user", content: `You are an elite mathematician. Below are multiple-choice questions extracted from a past mathematics exam paper. For EACH question:\n1. Show the step-by-step mathematical working.\n2. Identify the strictly correct option letter and its full text.\n3. Assign appropriate marks (1-5) based on difficulty.\n\nExtracted text:\n${extractedText}` },
+        ],
+      });
+      const solvedText = deepseekResult.choices[0]?.message?.content || "";
+      if (!solvedText || solvedText.trim().length < 20) {
+        sendEvent("error", { message: "DeepSeek did not return valid solutions" });
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+      sendEvent("stage_done", { stage: 2 });
+      if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
 
-      res.json({ questions });
+      // --- STAGE 3: Claude formats into LaTeX ---
+      sendEvent("stage", { stage: 3, label: "Claude is formatting the LaTeX..." });
+      const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+      if (!anthropicApiKey) {
+        sendEvent("error", { message: "ANTHROPIC_API_KEY is not configured" });
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+      const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+      const claudeResult = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 8192,
+        messages: [
+          { role: "user", content: `Take this mathematical working and question data. Your job is to restructure it into a list of multiple-choice questions. For each question, format ALL mathematical formulas, numbers, and equations into strict LaTeX syntax. You MUST double-escape all backslashes (e.g., \\\\frac, \\\\sqrt, \\\\times) because the output will be embedded inside a JSON string.\n\nFor each question output:\n- prompt_text: The question text with double-escaped LaTeX\n- options: Array of option strings with double-escaped LaTeX\n- correct_answer: The full text of the correct option with double-escaped LaTeX\n- marks_worth: Integer marks value\n\nOutput a structured list, one question per block. Do NOT output JSON yet — just clearly structured text with the four fields per question.\n\nMath data:\n${solvedText}` },
+        ],
+      });
+      const formattedText = claudeResult.content[0].type === "text" ? claudeResult.content[0].text : "";
+      if (!formattedText || formattedText.trim().length < 20) {
+        sendEvent("error", { message: "Claude did not return formatted content" });
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+      sendEvent("stage_done", { stage: 3 });
+      if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
+
+      // --- STAGE 4: GPT-4o validates into strict JSON ---
+      sendEvent("stage", { stage: 4, label: "ChatGPT is validating the database schema..." });
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      if (!openaiApiKey) {
+        sendEvent("error", { message: "OPENAI_API_KEY is not configured" });
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+      const gptResult = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: "You are a backend JSON inspector. Your ONLY job is to convert the input into a perfectly valid JSON array. Return ONLY the raw JSON array — no markdown, no code fences, no explanation." },
+          { role: "user", content: `Convert this structured question data into a strict JSON array matching this exact schema:\n[{ "prompt_text": string, "options": [string, string, string, string], "correct_answer": string, "marks_worth": number }]\n\nRules:\n- Every LaTeX backslash must be double-escaped (\\\\frac not \\frac)\n- The correct_answer must exactly match one of the options\n- marks_worth must be a positive integer\n- The JSON must be valid for JSON.parse()\n- Return ONLY the raw JSON array\n\nInput:\n${formattedText}` },
+        ],
+      });
+      const gptOutput = gptResult.choices[0]?.message?.content || "";
+      const questions = extractJsonArray(gptOutput);
+      if (!questions || questions.length === 0) {
+        sendEvent("error", { message: "GPT-4o could not produce valid JSON. Raw output logged to server." });
+        console.error("GPT-4o raw output:", gptOutput);
+        clearInterval(heartbeat);
+        res.end();
+        return;
+      }
+      sendEvent("stage_done", { stage: 4 });
+
+      sendEvent("result", { questions });
+      clearInterval(heartbeat);
+      res.end();
     } catch (err: any) {
-      console.error("AI generation error:", err);
-      res.status(500).json({ message: `AI generation failed: ${err.message}` });
+      console.error("AI pipeline error:", err);
+      sendEvent("error", { message: `AI pipeline failed: ${err.message}` });
+      clearInterval(heartbeat);
+      res.end();
     }
   });
 

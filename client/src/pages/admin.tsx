@@ -252,29 +252,82 @@ function QuestionUploader({ quizId, onDone }: { quizId: number; onDone: () => vo
   );
 }
 
+const PIPELINE_STAGES = [
+  { stage: 1, icon: "👁️", label: "Gemini is reading the PDF...", aiName: "Google Gemini" },
+  { stage: 2, icon: "🧠", label: "DeepSeek is solving the mathematics...", aiName: "DeepSeek R1" },
+  { stage: 3, icon: "✍️", label: "Claude is formatting the LaTeX...", aiName: "Claude Sonnet" },
+  { stage: 4, icon: "🔍", label: "ChatGPT is validating the database schema...", aiName: "GPT-4o" },
+];
+
 function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => void }) {
   const { toast } = useToast();
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[] | null>(null);
+  const [pipelineActive, setPipelineActive] = useState(false);
+  const [currentStage, setCurrentStage] = useState(0);
+  const [completedStages, setCompletedStages] = useState<Set<number>>(new Set());
+  const [stageLabel, setStageLabel] = useState("");
 
-  const generateMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append("pdf", file);
+  const startPipeline = async (file: File) => {
+    setPipelineActive(true);
+    setCurrentStage(0);
+    setCompletedStages(new Set());
+    setStageLabel("");
+
+    const formData = new FormData();
+    formData.append("pdf", file);
+
+    try {
       const res = await fetch("/api/generate-questions", { method: "POST", body: formData, credentials: "include" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(err.message || "Generation failed");
+      if (!res.ok || !res.body) {
+        throw new Error("Server connection failed");
       }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setGeneratedQuestions(data.questions);
-      toast({ title: `${data.questions.length} questions extracted from PDF` });
-    },
-    onError: (err: Error) => {
-      toast({ title: "PDF analysis failed", description: err.message, variant: "destructive" });
-    },
-  });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let pendingEventType = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            pendingEventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ") && pendingEventType) {
+            const evType = pendingEventType;
+            pendingEventType = "";
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (evType === "stage") {
+                setCurrentStage(data.stage);
+                setStageLabel(data.label);
+              } else if (evType === "stage_done") {
+                setCompletedStages(prev => { const next = new Set(Array.from(prev)); next.add(data.stage); return next; });
+              } else if (evType === "result") {
+                setGeneratedQuestions(data.questions);
+                toast({ title: `${data.questions.length} questions extracted via AI pipeline` });
+              } else if (evType === "error") {
+                throw new Error(data.message);
+              }
+            } catch (parseErr: any) {
+              if (parseErr.message && !parseErr.message.includes("JSON")) throw parseErr;
+            }
+          } else if (line.startsWith(":") || line.trim() === "") {
+            // heartbeat or empty line - ignore
+          }
+        }
+      }
+    } catch (err: any) {
+      toast({ title: "AI pipeline failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPipelineActive(false);
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: async (questions: GeneratedQuestion[]) =>
@@ -293,7 +346,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    generateMutation.mutate(file);
+    startPipeline(file);
   };
 
   const updateQuestion = (index: number, field: keyof GeneratedQuestion, value: any) => {
@@ -336,15 +389,51 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
     saveMutation.mutate(generatedQuestions);
   };
 
-  if (generateMutation.isPending) {
+  if (pipelineActive) {
     return (
       <Card>
-        <CardContent className="py-16 text-center">
-          <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary mb-4" />
-          <h3 className="font-serif text-lg font-semibold mb-2" data-testid="text-pdf-analyzing">Analyzing PDF...</h3>
-          <p className="text-sm text-muted-foreground">
-            Extracting questions and solving for correct answers. This may take 10-20 seconds.
-          </p>
+        <CardContent className="py-10" data-testid="pipeline-progress">
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="text-center mb-6">
+              <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary mb-3" />
+              <h3 className="font-serif text-lg font-semibold" data-testid="text-pdf-analyzing">AI Pipeline Active</h3>
+              <p className="text-sm text-muted-foreground mt-1">4 specialized AIs are working in sequence. This may take 45-90 seconds.</p>
+            </div>
+            {PIPELINE_STAGES.map((s) => {
+              const isDone = completedStages.has(s.stage);
+              const isActive = currentStage === s.stage && !isDone;
+              return (
+                <div
+                  key={s.stage}
+                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                    isDone ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800" :
+                    isActive ? "bg-primary/5 border-primary/30 shadow-sm" :
+                    "bg-muted/30 border-muted opacity-50"
+                  }`}
+                  data-testid={`pipeline-stage-${s.stage}`}
+                >
+                  <span className="text-xl flex-shrink-0">{s.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${isDone ? "text-green-700 dark:text-green-400" : isActive ? "text-primary" : "text-muted-foreground"}`}>
+                      {s.aiName}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {isDone ? "Complete" : isActive ? stageLabel : s.label.replace("...", "")}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    {isDone ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    ) : isActive ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full border-2 border-muted" />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
     );
@@ -475,8 +564,8 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
       <CardContent>
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Upload a math exam PDF and AI will extract multiple-choice questions with LaTeX notation.
-            You'll be able to review and edit before publishing.
+            Upload a math exam PDF and a 4-stage AI pipeline (Gemini, DeepSeek, Claude, ChatGPT) will
+            extract, solve, format, and validate multiple-choice questions. You'll be able to review and edit before publishing.
           </p>
           <div className="space-y-2">
             <Label htmlFor="pdfFile">Select PDF file</Label>
