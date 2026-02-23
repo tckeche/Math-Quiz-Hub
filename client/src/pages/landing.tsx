@@ -6,16 +6,16 @@ export default function Landing() {
       <div className="text-center z-10 relative">
         <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-20 w-auto object-contain mx-auto mb-8" />
 
-        <p className="text-sm md:text-base font-semibold tracking-[0.3em] text-violet-300 uppercase mb-4" data-testid="text-welcome">
+        <h1 className="text-4xl md:text-6xl font-black text-[#DDD6FE] drop-shadow-[0_0_20px_rgba(139,92,246,0.3)] tracking-tight mb-4" data-testid="text-main-title">
           Welcome to SOMA
-        </p>
-
-        <h1 className="text-4xl md:text-6xl font-black text-[#DDD6FE] drop-shadow-[0_0_20px_rgba(139,92,246,0.3)] tracking-tight mb-6" data-testid="text-main-title">
-          A Proprietary Assessment Platform.
         </h1>
 
-        <p className="text-sm md:text-lg font-light tracking-[0.2em] text-slate-400 uppercase" data-testid="text-subtitle">
-          By Melania Calvin Educational Consultants
+        <p className="text-sm md:text-lg font-light tracking-[0.2em] text-slate-400 uppercase mb-1" data-testid="text-subtitle">
+          An Intelligent Assessment Platform
+        </p>
+
+        <p className="text-sm md:text-base font-light tracking-[0.2em] text-slate-500 uppercase" data-testid="text-byline">
+          by MCEC
         </p>
 
         <Link href="/portal">
