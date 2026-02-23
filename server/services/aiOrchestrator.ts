@@ -1,23 +1,33 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"] as const;
-
-function getGenAI() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-  return new GoogleGenerativeAI(apiKey);
+interface ModelConfig {
+  provider: "google" | "openai" | "anthropic" | "deepseek";
+  model: string;
 }
+
+const AI_FALLBACK_CHAIN: ModelConfig[] = [
+  { provider: "google", model: "gemini-2.5-flash" },
+  { provider: "google", model: "gemini-2.5-pro" },
+  { provider: "google", model: "gemini-1.5-pro" },
+  { provider: "openai", model: "gpt-4o-mini" },
+  { provider: "anthropic", model: "claude-3-5-haiku-latest" },
+  { provider: "deepseek", model: "deepseek-chat" },
+];
 
 function convertToGeminiSchema(schema: any): any {
   if (!schema || typeof schema !== "object") return undefined;
 
-  const convert = (node: any): any => {
+  const convert = (node: any, defs?: any): any => {
     if (!node || typeof node !== "object") return node;
+    const definitions = defs || node.definitions;
 
-    if (node.$ref && node.definitions) {
+    if (node.$ref) {
       const refName = node.$ref.replace("#/definitions/", "");
-      if (node.definitions[refName]) {
-        return convert(node.definitions[refName]);
+      if (definitions?.[refName]) {
+        return convert(definitions[refName], definitions);
       }
     }
 
@@ -28,24 +38,14 @@ function convertToGeminiSchema(schema: any): any {
       if (node.properties) {
         result.properties = {};
         for (const [key, val] of Object.entries(node.properties) as any) {
-          if (val.$ref && node.definitions) {
-            const refName = val.$ref.replace("#/definitions/", "");
-            result.properties[key] = convert(node.definitions[refName]);
-          } else {
-            result.properties[key] = convert(val);
-          }
+          result.properties[key] = convert(val, definitions);
         }
       }
       if (node.required) result.required = node.required;
     } else if (node.type === "array") {
       result.type = SchemaType.ARRAY;
       if (node.items) {
-        if (node.items.$ref && node.definitions) {
-          const refName = node.items.$ref.replace("#/definitions/", "");
-          result.items = convert(node.definitions[refName]);
-        } else {
-          result.items = convert(node.items);
-        }
+        result.items = convert(node.items, definitions);
       }
     } else if (node.type === "string") {
       result.type = SchemaType.STRING;
@@ -68,17 +68,48 @@ function convertToGeminiSchema(schema: any): any {
     root = { ...schema.definitions[refName], definitions: schema.definitions };
   }
 
-  const converted = convert(root);
-  return converted;
+  return convert(root, schema.definitions);
 }
 
-async function tryGeminiModel(
-  modelName: string,
+function resolveJsonSchema(schema: any): any {
+  if (!schema || typeof schema !== "object") return schema;
+  if (schema.$ref && schema.definitions) {
+    const refName = schema.$ref.replace("#/definitions/", "");
+    if (schema.definitions[refName]) {
+      const resolved = JSON.parse(JSON.stringify(schema.definitions[refName]));
+      const resolveRefs = (node: any): any => {
+        if (!node || typeof node !== "object") return node;
+        if (node.$ref) {
+          const innerRef = node.$ref.replace("#/definitions/", "");
+          if (schema.definitions[innerRef]) {
+            return resolveRefs(JSON.parse(JSON.stringify(schema.definitions[innerRef])));
+          }
+        }
+        if (node.properties) {
+          for (const key of Object.keys(node.properties)) {
+            node.properties[key] = resolveRefs(node.properties[key]);
+          }
+        }
+        if (node.items) {
+          node.items = resolveRefs(node.items);
+        }
+        return node;
+      };
+      return resolveRefs(resolved);
+    }
+  }
+  return schema;
+}
+
+async function callGoogle(
+  model: string,
   systemPrompt: string,
   userPrompt: string,
   expectedSchema?: any
 ): Promise<string> {
-  const genAI = getGenAI();
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+  const genAI = new GoogleGenerativeAI(apiKey);
 
   const generationConfig: any = {};
   if (expectedSchema) {
@@ -86,18 +117,132 @@ async function tryGeminiModel(
     generationConfig.responseSchema = convertToGeminiSchema(expectedSchema);
   }
 
-  const model = genAI.getGenerativeModel({
-    model: modelName,
+  const geminiModel = genAI.getGenerativeModel({
+    model,
     ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
   });
 
   const prompt = `${systemPrompt}\n\n${userPrompt}`;
-  const result = await model.generateContent(prompt);
+  const result = await geminiModel.generateContent(prompt);
   const text = result.response.text();
   if (!text || text.trim().length === 0) {
-    throw new Error(`${modelName} returned empty response`);
+    throw new Error(`${model} returned empty response`);
   }
   return text;
+}
+
+async function callOpenAI(
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  expectedSchema?: any
+): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+  const client = new OpenAI({ apiKey });
+
+  const resolved = expectedSchema ? JSON.stringify(resolveJsonSchema(expectedSchema)) : null;
+
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: expectedSchema
+        ? `${systemPrompt}\n\nYou must respond with valid JSON matching this exact schema — no markdown, no code fences:\n${resolved}`
+        : systemPrompt,
+    },
+    { role: "user", content: userPrompt },
+  ];
+
+  const config: any = { model, messages };
+  if (expectedSchema) {
+    config.response_format = { type: "json_object" };
+  }
+
+  const response = await client.chat.completions.create(config);
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error(`${model} returned empty response`);
+  return content;
+}
+
+async function callAnthropic(
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  expectedSchema?: any
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+  const client = new Anthropic({ apiKey });
+
+  if (expectedSchema) {
+    const resolved = resolveJsonSchema(expectedSchema);
+    const toolDef = {
+      name: "structured_output",
+      description: "Return structured data matching the required schema",
+      input_schema: resolved,
+    };
+
+    const response = await client.messages.create({
+      model,
+      max_tokens: 8192,
+      system: systemPrompt,
+      tools: [toolDef as any],
+      tool_choice: { type: "tool" as const, name: "structured_output" },
+      messages: [{ role: "user", content: userPrompt }],
+    });
+
+    const toolBlock = response.content.find((b: any) => b.type === "tool_use");
+    if (!toolBlock || toolBlock.type !== "tool_use") {
+      throw new Error(`${model} did not return a tool_use block`);
+    }
+    return JSON.stringify(toolBlock.input);
+  }
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 8192,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const textBlock = response.content.find((b: any) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error(`${model} returned no text content`);
+  }
+  return textBlock.text;
+}
+
+async function callDeepSeek(
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  expectedSchema?: any
+): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error("DEEPSEEK_API_KEY is not configured");
+  const client = new OpenAI({ apiKey, baseURL: "https://api.deepseek.com" });
+
+  const resolved = expectedSchema ? JSON.stringify(resolveJsonSchema(expectedSchema)) : null;
+
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: expectedSchema
+        ? `${systemPrompt}\n\nIMPORTANT: You must output valid json matching this exact schema — no markdown, no code fences, only raw JSON:\n${resolved}`
+        : systemPrompt,
+    },
+    { role: "user", content: userPrompt },
+  ];
+
+  const config: any = { model, messages };
+  if (expectedSchema) {
+    config.response_format = { type: "json_object" };
+  }
+
+  const response = await client.chat.completions.create(config);
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error(`${model} returned empty response`);
+  return content;
 }
 
 export async function generateWithFallback(
@@ -105,25 +250,22 @@ export async function generateWithFallback(
   userPrompt: string,
   expectedSchema?: any
 ): Promise<string> {
-  try {
-    return await tryGeminiModel(GEMINI_MODELS[0], systemPrompt, userPrompt, expectedSchema);
-  } catch (error: any) {
-    console.error("2.5-Flash failed:", error);
-    console.warn("2.5-Flash exhausted, falling back to 2.5-Pro...");
+  for (const config of AI_FALLBACK_CHAIN) {
+    try {
+      switch (config.provider) {
+        case "google":
+          return await callGoogle(config.model, systemPrompt, userPrompt, expectedSchema);
+        case "openai":
+          return await callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema);
+        case "anthropic":
+          return await callAnthropic(config.model, systemPrompt, userPrompt, expectedSchema);
+        case "deepseek":
+          return await callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema);
+      }
+    } catch (error: any) {
+      console.warn(`[${config.provider} - ${config.model}] failed: ${error.message}. Attempting next model...`);
+    }
   }
 
-  try {
-    return await tryGeminiModel(GEMINI_MODELS[1], systemPrompt, userPrompt, expectedSchema);
-  } catch (error: any) {
-    console.error("2.5-Pro failed:", error);
-    console.warn("2.5-Pro exhausted, falling back to 1.5-Pro...");
-  }
-
-  try {
-    return await tryGeminiModel(GEMINI_MODELS[2], systemPrompt, userPrompt, expectedSchema);
-  } catch (error: any) {
-    console.error("1.5-Pro failed:", error);
-  }
-
-  throw new Error("All Gemini free-tier quotas are temporarily exhausted. Please wait 60 seconds.");
+  throw new Error("All AI providers and fallback models are currently exhausted.");
 }

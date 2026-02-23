@@ -1,0 +1,32 @@
+Architecture Overhaul: Dynamic Nested AI Fallback Array
+
+Instructions:
+
+Context Review: Open server/services/aiOrchestrator.ts. We are completely refactoring the fallback logic to use a scalable array-based routing system instead of nested try/catch blocks.
+
+The Fallback Chain: Define an array of model configurations inside the file. The priority is to exhaust Google's free tiers first, then cascade to lower-tier models within each paid provider before switching to the next provider:
+
+JavaScript
+const AI_FALLBACK_CHAIN = [
+  { provider: 'google', model: 'gemini-2.5-flash' },
+  { provider: 'google', model: 'gemini-2.5-pro' },
+  { provider: 'google', model: 'gemini-1.5-pro' },
+  { provider: 'openai', model: 'gpt-4o-mini' },
+  { provider: 'anthropic', model: 'claude-3-5-haiku-latest' },
+  { provider: 'deepseek', model: 'deepseek-chat' }
+];
+The Router Logic: >    - Inside generateWithFallback(systemPrompt, userPrompt, expectedSchema), create a for...of loop to iterate through AI_FALLBACK_CHAIN.
+
+Inside the loop, wrap the logic in a single try/catch.
+
+Use a switch (config.provider) to route the request to the correct SDK (GoogleGenerativeAI, OpenAI, or Anthropic) using config.model dynamically.
+
+Ensure that if expectedSchema is provided, the strict JSON structure/tool-calling format specific to that provider is applied correctly. (Remember DeepSeek requires the word "json" in the prompt and response_format: { type: "json_object" }).
+
+Success and Failure Handling:
+
+If the SDK call succeeds, instantly return the parsed JSON object (this breaks the loop and sends the data back to the frontend).
+
+If the try block fails, catch the error, log a warning: console.warn(\[${config.provider} - ${config.model}] failed: ${error.message}. Attempting next model...`);`, and allow the loop to continue to the next iteration.
+
+Final Failsafe: If the loop finishes executing all models in the array and nothing has returned successfully, throw a final error outside the loop: new Error("All AI providers and fallback models are currently exhausted.")
