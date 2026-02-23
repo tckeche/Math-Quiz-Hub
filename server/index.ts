@@ -80,8 +80,24 @@ httpServer.listen(
     host: "0.0.0.0",
     reusePort: true,
   },
-  () => {
+  async () => {
     log(`serving on port ${port}`);
+
+    // ── AI provider key diagnostics ──────────────────────────────────────────
+    try {
+      const { getProviderStatus } = await import("./services/aiOrchestrator");
+      const status = getProviderStatus();
+      const lines = Object.entries(status).map(
+        ([name, ok]) => `${name}=${ok ? "✓" : "✗ MISSING"}`,
+      );
+      log(`AI key status: ${lines.join(" | ")}`, "bootstrap");
+      const missing = Object.entries(status).filter(([, ok]) => !ok).map(([k]) => k.toUpperCase() + "_API_KEY");
+      if (missing.length > 0) {
+        log(`WARNING: Missing AI keys → ${missing.join(", ")}. Add them as Replit Secrets and restart.`, "bootstrap");
+      }
+    } catch (err) {
+      log(`AI key check failed: ${err instanceof Error ? err.message : String(err)}`, "bootstrap");
+    }
   },
 );
 
