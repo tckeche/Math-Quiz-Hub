@@ -871,14 +871,18 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
                     <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.03] p-3">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Marks Breakdown</p>
                       <div className="grid gap-1">
-                        {Object.entries(s.answersBreakdown).map(([questionId, detail]) => (
+                        {Object.entries(s.answersBreakdown).map(([questionId, detail]) => {
+                          const qIndex = questions?.findIndex(q => String(q.id) === questionId) ?? -1;
+                          const displayNum = qIndex !== -1 ? qIndex + 1 : questionId;
+                          return (
                           <div key={questionId} className="text-sm flex items-center justify-between gap-2">
-                            <span className="text-slate-300">Q{questionId}: {detail.answer || "No answer"}</span>
+                            <span className="text-slate-300">Q{displayNum}: {detail.answer || "No answer"}</span>
                             <span className={detail.correct ? "text-emerald-400" : "text-slate-500"}>
                               {detail.correct ? `+${detail.marksEarned}` : "0"}
                             </span>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                     <div className="mt-3">

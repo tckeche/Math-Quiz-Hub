@@ -154,6 +154,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/students", async (req, res) => {
     const { firstName, lastName } = req.body;
     if (!firstName || !lastName) return res.status(400).json({ message: "First and last name required" });
+    const existing = await storage.findStudentByName(firstName, lastName);
+    if (existing) return res.json(existing);
     const student = await storage.createStudent({ firstName, lastName });
     res.json(student);
   });

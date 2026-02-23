@@ -452,11 +452,6 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
               <Button
                 className="glow-button-outline"
                 onClick={() => {
-                  setAnswers((prev) => {
-                    const copy = { ...prev };
-                    delete copy[question.id];
-                    return copy;
-                  });
                   setCurrentIndex((i) => Math.min(questions.length - 1, i + 1));
                 }}
                 data-testid="button-skip-question"
