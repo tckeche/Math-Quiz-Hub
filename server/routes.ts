@@ -6,14 +6,13 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { generateAuditedQuiz } from "./services/aiPipeline";
+import { generateWithFallback } from "./services/aiOrchestrator";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
@@ -377,25 +376,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       sendEvent("stage_done", { stage: 1 });
       if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
 
-      // --- STAGE 2: DeepSeek solves the mathematics ---
-      sendEvent("stage", { stage: 2, label: "DeepSeek is solving the mathematics..." });
-      const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
-      if (!deepseekApiKey) {
-        sendEvent("error", { message: "DEEPSEEK_API_KEY is not configured" });
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-      const deepseek = new OpenAI({ apiKey: deepseekApiKey, baseURL: "https://api.deepseek.com" });
-      const deepseekResult = await deepseek.chat.completions.create({
-        model: "deepseek-reasoner",
-        messages: [
-          { role: "user", content: `You are an elite mathematician. Below are multiple-choice questions extracted from a past mathematics exam paper. For EACH question:\n1. Show the step-by-step mathematical working.\n2. Identify the strictly correct option letter and its full text.\n3. Assign appropriate marks (1-5) based on difficulty.\n\nExtracted text:\n${extractedText}` },
-        ],
-      });
-      const solvedText = deepseekResult.choices[0]?.message?.content || "";
+      // --- STAGE 2: AI solves the mathematics (waterfall fallback) ---
+      sendEvent("stage", { stage: 2, label: "AI is solving the mathematics..." });
+      const solvedText = await generateWithFallback(
+        `You are an elite mathematician. For EACH multiple-choice question extracted from a past mathematics exam paper:\n1. Show the step-by-step mathematical working.\n2. Identify the strictly correct option letter and its full text.\n3. Assign appropriate marks (1-5) based on difficulty.`,
+        `Extracted text:\n${extractedText}`
+      );
       if (!solvedText || solvedText.trim().length < 20) {
-        sendEvent("error", { message: "DeepSeek did not return valid solutions" });
+        sendEvent("error", { message: "AI did not return valid solutions" });
         clearInterval(heartbeat);
         res.end();
         return;
@@ -403,26 +391,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       sendEvent("stage_done", { stage: 2 });
       if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
 
-      // --- STAGE 3: Claude formats into LaTeX ---
-      sendEvent("stage", { stage: 3, label: "Claude is formatting the LaTeX..." });
-      const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-      if (!anthropicApiKey) {
-        sendEvent("error", { message: "ANTHROPIC_API_KEY is not configured" });
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-      const anthropic = new Anthropic({ apiKey: anthropicApiKey });
-      const claudeResult = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8192,
-        messages: [
-          { role: "user", content: `Take this mathematical working and question data. Your job is to restructure it into a list of multiple-choice questions. For each question, format ALL mathematical formulas, numbers, and equations into strict LaTeX syntax. You MUST double-escape all backslashes (e.g., \\\\frac, \\\\sqrt, \\\\times) because the output will be embedded inside a JSON string.\n\nFor each question output:\n- prompt_text: The question text with double-escaped LaTeX\n- options: Array of option strings with double-escaped LaTeX\n- correct_answer: The full text of the correct option with double-escaped LaTeX\n- marks_worth: Integer marks value\n\nOutput a structured list, one question per block. Do NOT output JSON yet — just clearly structured text with the four fields per question.\n\nMath data:\n${solvedText}` },
-        ],
-      });
-      const formattedText = claudeResult.content[0].type === "text" ? claudeResult.content[0].text : "";
+      // --- STAGE 3: AI formats into LaTeX (waterfall fallback) ---
+      sendEvent("stage", { stage: 3, label: "AI is formatting the LaTeX..." });
+      const formattedText = await generateWithFallback(
+        `You restructure mathematical working into multiple-choice questions. Format ALL mathematical formulas, numbers, and equations into strict LaTeX syntax. You MUST double-escape all backslashes (e.g., \\\\frac, \\\\sqrt, \\\\times) because the output will be embedded inside a JSON string.\n\nFor each question output:\n- prompt_text: The question text with double-escaped LaTeX\n- options: Array of option strings with double-escaped LaTeX\n- correct_answer: The full text of the correct option with double-escaped LaTeX\n- marks_worth: Integer marks value\n\nOutput a structured list, one question per block. Do NOT output JSON yet — just clearly structured text with the four fields per question.`,
+        `Math data:\n${solvedText}`
+      );
       if (!formattedText || formattedText.trim().length < 20) {
-        sendEvent("error", { message: "Claude did not return formatted content" });
+        sendEvent("error", { message: "AI did not return formatted content" });
         clearInterval(heartbeat);
         res.end();
         return;
@@ -430,28 +406,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       sendEvent("stage_done", { stage: 3 });
       if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
 
-      // --- STAGE 4: GPT-4o validates into strict JSON ---
-      sendEvent("stage", { stage: 4, label: "ChatGPT is validating the database schema..." });
-      const openaiApiKey = process.env.OPENAI_API_KEY;
-      if (!openaiApiKey) {
-        sendEvent("error", { message: "OPENAI_API_KEY is not configured" });
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-      const openai = new OpenAI({ apiKey: openaiApiKey });
-      const gptResult = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: "You are a backend JSON inspector. Your ONLY job is to convert the input into a perfectly valid JSON array. Return ONLY the raw JSON array — no markdown, no code fences, no explanation." },
-          { role: "user", content: `Convert this structured question data into a strict JSON array matching this exact schema:\n[{ "prompt_text": string, "options": [string, string, string, string], "correct_answer": string, "marks_worth": number }]\n\nRules:\n- Every LaTeX backslash must be double-escaped (\\\\frac not \\frac)\n- The correct_answer must exactly match one of the options\n- marks_worth must be a positive integer\n- The JSON must be valid for JSON.parse()\n- Return ONLY the raw JSON array\n\nInput:\n${formattedText}` },
-        ],
-      });
-      const gptOutput = gptResult.choices[0]?.message?.content || "";
+      // --- STAGE 4: AI validates into strict JSON (waterfall fallback) ---
+      sendEvent("stage", { stage: 4, label: "AI is validating the database schema..." });
+      const stage4Schema = {
+        type: "object",
+        properties: {
+          questions: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                prompt_text: { type: "string" },
+                options: { type: "array", items: { type: "string" } },
+                correct_answer: { type: "string" },
+                marks_worth: { type: "integer" },
+              },
+              required: ["prompt_text", "options", "correct_answer", "marks_worth"],
+            },
+          },
+        },
+        required: ["questions"],
+      };
+      const gptOutput = await generateWithFallback(
+        "You are a backend JSON inspector. Your ONLY job is to convert the input into a perfectly valid JSON object with a 'questions' array. Return ONLY valid JSON — no markdown, no code fences, no explanation.",
+        `Convert this structured question data into a JSON object with a "questions" array matching this schema:\n{ "questions": [{ "prompt_text": string, "options": [string, string, string, string], "correct_answer": string, "marks_worth": number }] }\n\nRules:\n- Every LaTeX backslash must be double-escaped (\\\\frac not \\frac)\n- The correct_answer must exactly match one of the options\n- marks_worth must be a positive integer\n- The JSON must be valid for JSON.parse()\n- Return ONLY the raw JSON object\n\nInput:\n${formattedText}`,
+        stage4Schema
+      );
       const questions = extractJsonArray(gptOutput);
       if (!questions || questions.length === 0) {
-        sendEvent("error", { message: "GPT-4o could not produce valid JSON. Raw output logged to server." });
-        console.error("GPT-4o raw output:", gptOutput);
+        sendEvent("error", { message: "AI could not produce valid JSON. Raw output logged to server." });
+        console.error("AI JSON validation raw output:", gptOutput);
         clearInterval(heartbeat);
         res.end();
         return;
@@ -474,11 +458,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { message } = req.body;
       if (!message) return res.status(400).json({ message: "message is required" });
 
-      const model = getGeminiModel();
-      const prompt = `You are a curriculum assistant for mathematics teachers. Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }]. Use double-escaped LaTeX in all math strings.`;
+      const systemPrompt = `You are a curriculum assistant for mathematics teachers. Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }]. Use double-escaped LaTeX in all math strings.`;
 
-      const result = await model.generateContent([{ text: prompt }, { text: String(message) }]);
-      const raw = result.response.text();
+      const raw = await generateWithFallback(systemPrompt, String(message));
       const drafts = extractJsonArray(raw) || [];
       res.json({ reply: raw, drafts });
     } catch (err: any) {
@@ -493,7 +475,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "submission and questions required" });
       }
 
-      const model = getGeminiModel();
       let questionNumber = 0;
       const breakdown = Object.entries(submission.answersBreakdown).map(([qId, detail]: [string, any]) => {
         const question = questions.find((q: any) => String(q.id) === qId);
@@ -508,9 +489,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
       });
 
-      const prompt = `You are an expert mathematics tutor. Analyze this student's quiz submission and provide a detailed performance report.
-
-Student scored ${submission.totalScore}/${submission.maxPossibleScore}.
+      const systemPrompt = `You are an expert mathematics tutor. Analyze student quiz submissions and provide detailed performance reports.
 
 IMPORTANT FORMATTING RULES:
 1. Reference questions using their "questionNumber" field (e.g., "Question 1", "Question 2"), NOT their database IDs.
@@ -523,13 +502,11 @@ Sections to include:
 - Overall Performance Summary
 - Areas of Strength (concepts the student demonstrated well)
 - Areas of Improvement (specific concepts to work on, as <ul><li> items)
-- Recommended Next Steps (actionable study tips, as <ul><li> items)
+- Recommended Next Steps (actionable study tips, as <ul><li> items)`;
 
-Question breakdown:
-${JSON.stringify(breakdown, null, 2)}`;
+      const userPrompt = `Student scored ${submission.totalScore}/${submission.maxPossibleScore}.\n\nQuestion breakdown:\n${JSON.stringify(breakdown, null, 2)}`;
 
-      const result = await model.generateContent(prompt);
-      let html = result.response.text();
+      let html = await generateWithFallback(systemPrompt, userPrompt);
       html = html.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
       res.json({ analysis: html });
     } catch (err: any) {
@@ -544,7 +521,6 @@ ${JSON.stringify(breakdown, null, 2)}`;
 
       const submissions = await storage.getSubmissionsByQuizId(Number(quizId));
       const questions = await storage.getQuestionsByQuizId(Number(quizId));
-      const model = getGeminiModel();
 
       const payload = submissions.map((s) => ({
         student: `${s.student.firstName} ${s.student.lastName}`,
@@ -553,10 +529,11 @@ ${JSON.stringify(breakdown, null, 2)}`;
         answersBreakdown: s.answersBreakdown,
       }));
 
-      const prompt = `You are a master mathematics tutor. Analyze this cohort's quiz data. Identify macro-trends, the most commonly failed questions, and the specific mathematical concepts the class as a whole is struggling with. Output in clean, professional HTML.\n\nQuestions:\n${JSON.stringify(questions, null, 2)}\n\nSubmissions:\n${JSON.stringify(payload, null, 2)}`;
+      const systemPrompt = `You are a master mathematics tutor. Analyze cohort quiz data. Identify macro-trends, the most commonly failed questions, and the specific mathematical concepts the class as a whole is struggling with. Output in clean, professional HTML — no markdown, no code fences.`;
 
-      const result = await model.generateContent(prompt);
-      let html = result.response.text();
+      const userPrompt = `Questions:\n${JSON.stringify(questions, null, 2)}\n\nSubmissions:\n${JSON.stringify(payload, null, 2)}`;
+
+      let html = await generateWithFallback(systemPrompt, userPrompt);
       html = html.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
       res.json({ analysis: html, submissionCount: submissions.length });
     } catch (err: any) {

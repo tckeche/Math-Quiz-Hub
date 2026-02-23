@@ -20,6 +20,36 @@ function getOpenAIClient() {
   return new OpenAI({ apiKey });
 }
 
+function resolveSchema(expectedSchema: any): any {
+  if (typeof expectedSchema === "object" && expectedSchema !== null) {
+    if (expectedSchema.$ref && expectedSchema.definitions) {
+      const refName = expectedSchema.$ref.replace("#/definitions/", "");
+      if (expectedSchema.definitions[refName]) {
+        const resolved = { ...expectedSchema.definitions[refName] };
+        if (resolved.properties) {
+          for (const [key, val] of Object.entries(resolved.properties) as any) {
+            if (val.$ref) {
+              const innerRef = val.$ref.replace("#/definitions/", "");
+              if (expectedSchema.definitions[innerRef]) {
+                resolved.properties[key] = expectedSchema.definitions[innerRef];
+              }
+            }
+            if (val.items && val.items.$ref) {
+              const innerRef = val.items.$ref.replace("#/definitions/", "");
+              if (expectedSchema.definitions[innerRef]) {
+                resolved.properties[key] = { ...val, items: expectedSchema.definitions[innerRef] };
+              }
+            }
+          }
+        }
+        return resolved;
+      }
+    }
+    return expectedSchema;
+  }
+  return expectedSchema;
+}
+
 async function tryAnthropic(
   systemPrompt: string,
   userPrompt: string,
@@ -28,16 +58,12 @@ async function tryAnthropic(
   const client = getAnthropicClient();
 
   if (expectedSchema) {
-    const schemaJson = typeof expectedSchema === "function" && expectedSchema._def
-      ? zodToJsonSchema(expectedSchema)
-      : expectedSchema;
+    const resolved = resolveSchema(expectedSchema);
 
     const toolDef = {
       name: "structured_output",
       description: "Return structured data matching the required schema",
-      input_schema: schemaJson.definitions
-        ? schemaJson.definitions[Object.keys(schemaJson.definitions)[0]]
-        : schemaJson,
+      input_schema: resolved,
     };
 
     const response = await client.messages.create({
@@ -76,12 +102,13 @@ async function tryDeepSeek(
   expectedSchema?: any
 ): Promise<string> {
   const client = getDeepSeekClient();
+  const schemaStr = expectedSchema ? JSON.stringify(resolveSchema(expectedSchema)) : null;
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     {
       role: "system",
       content: expectedSchema
-        ? `${systemPrompt}\n\nYou must output valid JSON matching this schema. Write 'json' in your response.\nSchema: ${JSON.stringify(typeof expectedSchema === "function" && expectedSchema._def ? zodToJsonSchema(expectedSchema) : expectedSchema)}`
+        ? `${systemPrompt}\n\nIMPORTANT: You must output valid json matching this exact schema — no markdown, no code fences, only raw JSON:\n${schemaStr}`
         : systemPrompt,
     },
     { role: "user", content: userPrompt },
@@ -108,9 +135,15 @@ async function tryOpenAI(
   expectedSchema?: any
 ): Promise<string> {
   const client = getOpenAIClient();
+  const schemaStr = expectedSchema ? JSON.stringify(resolveSchema(expectedSchema)) : null;
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: systemPrompt },
+    {
+      role: "system",
+      content: expectedSchema
+        ? `${systemPrompt}\n\nIMPORTANT: You must respond with valid JSON matching this exact schema — no markdown, no code fences:\n${schemaStr}`
+        : systemPrompt,
+    },
     { role: "user", content: userPrompt },
   ];
 
@@ -121,10 +154,6 @@ async function tryOpenAI(
 
   if (expectedSchema) {
     config.response_format = { type: "json_object" };
-    messages[0] = {
-      role: "system",
-      content: `${systemPrompt}\n\nYou must respond with valid JSON matching the required schema.`,
-    };
   }
 
   const response = await client.chat.completions.create(config);
