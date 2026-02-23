@@ -4,7 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz, Question, Submission, Student } from "@shared/schema";
 import DOMPurify from "dompurify";
 import { useReactToPrint } from "react-to-print";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,30 @@ import {
   Scan, Search
 } from "lucide-react";
 import { format } from "date-fns";
+import 'katex/dist/katex.min.css';
+import { BlockMath, InlineMath } from 'react-katex';
+
+const unescapeLatex = (str: string) => str.replace(/\\\\/g, '\\');
+
+function renderLatex(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('\\(') && part.endsWith('\\)')) {
+      return <InlineMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('\\[') && part.endsWith('\\]')) {
+      return <BlockMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('$$') && part.endsWith('$$')) {
+      return <BlockMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
+      return <InlineMath key={i} math={part.slice(1, -1)} />;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
 
 interface GeneratedQuestion {
   prompt_text: string;
@@ -467,6 +491,9 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
                   className="glass-input font-mono text-sm min-h-[60px]"
                   data-testid={`input-generated-prompt-${idx}`}
                 />
+                <div className="text-sm text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg p-3" data-testid={`preview-generated-prompt-${idx}`}>
+                  {renderLatex(unescapeLatex(q.prompt_text))}
+                </div>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-slate-500">Image URL (optional)</Label>
@@ -945,10 +972,9 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
 export default function AdminPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
-  const [authVersion, setAuthVersion] = useState(0);
 
   const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
-    queryKey: ["/api/admin/session", authVersion],
+    queryKey: ["/api/admin/session"],
     queryFn: async () => {
       const res = await fetch("/api/admin/session", { credentials: "include" });
       return res.json();
@@ -962,9 +988,12 @@ export default function AdminPage() {
     enabled: authenticated,
   });
 
+  const [, navigate] = useLocation();
+
   const handleLogout = async () => {
     await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
-    window.location.href = "/";
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/session"] });
+    navigate("/");
   };
 
   if (sessionLoading) {
@@ -976,7 +1005,7 @@ export default function AdminPage() {
   }
 
   if (!authenticated) {
-    return <AdminLogin onLogin={() => setAuthVersion((v) => v + 1)} />;
+    return <AdminLogin onLogin={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/session"] })} />;
   }
 
   return (

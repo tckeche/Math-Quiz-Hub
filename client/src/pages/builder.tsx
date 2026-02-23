@@ -9,6 +9,30 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, Send, Loader2, Sparkles, FileStack, Upload, Trash2 } from "lucide-react";
+import 'katex/dist/katex.min.css';
+import { BlockMath, InlineMath } from 'react-katex';
+
+const unescapeLatex = (str: string) => str.replace(/\\\\/g, '\\');
+
+function renderLatex(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('\\(') && part.endsWith('\\)')) {
+      return <InlineMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('\\[') && part.endsWith('\\]')) {
+      return <BlockMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('$$') && part.endsWith('$$')) {
+      return <BlockMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
+      return <InlineMath key={i} math={part.slice(1, -1)} />;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
 
 type DraftQuestion = {
   prompt_text: string;
@@ -95,7 +119,7 @@ export default function BuilderPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="glass-card p-8 text-center">
-          <p className="text-slate-300">Please log in via <Link href="/admin"><a className="text-violet-400 underline">/admin</a></Link> first.</p>
+          <p className="text-slate-300">Please log in via <Link href="/admin" className="text-violet-400 underline">/admin</Link> first.</p>
         </div>
       </div>
     );
@@ -205,6 +229,11 @@ export default function BuilderPage() {
                     placeholder="Question text"
                     data-testid={`input-draft-prompt-${idx}`}
                   />
+                  {d.prompt_text && (
+                    <div className="text-sm text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg p-2">
+                      {renderLatex(unescapeLatex(d.prompt_text))}
+                    </div>
+                  )}
                   {d.options.map((o, oi) => (
                     <Input
                       key={oi}

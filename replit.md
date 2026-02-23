@@ -56,3 +56,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - **AI Student Analysis**: Per-submission "Analyze with AI" button → Gemini identifies weak areas and provides actionable feedback (HTML sanitized with DOMPurify)
 - **Single-Attempt Enforcement**: Server-side check via POST /api/check-submission (name matching with sanitization) + localStorage cache for fast client-side blocking
 - **Image Upload**: Attach images to questions during review/edit stage, stored in client/public/uploads/
+- **SPA Navigation**: All internal links use wouter `<Link>` (no `<a>` tags or `window.location.href`) to prevent full-page reloads and session loss. Admin session query uses stable key with cache invalidation.
+- **LaTeX Preview**: Review & Edit and AI Builder draft UIs show live LaTeX preview with `unescapeLatex()` for visual rendering while keeping double-escaped JSON for database storage.
+- **Closed Quiz UX**: Past-due quizzes show disabled "Assessment Closed" button with "Closed" badge on student portal.
+- **Class Analytics Error Handling**: AI analysis mutation shows toast on error or empty result instead of hanging silently.

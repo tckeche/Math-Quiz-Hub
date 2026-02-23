@@ -92,7 +92,11 @@ export default function Home() {
                       <span>Due: {format(new Date(quiz.dueDate), "PPP 'at' p")}</span>
                     </div>
                   </div>
-                  {!isClosed && (
+                  {isClosed ? (
+                    <Button className="w-full glow-button opacity-50 cursor-not-allowed" size="lg" disabled data-testid={`button-start-quiz-${quiz.id}`}>
+                      Assessment Closed
+                    </Button>
+                  ) : (
                     <Link href={`/quiz/${quiz.id}`}>
                       <Button className="w-full glow-button" size="lg" data-testid={`button-start-quiz-${quiz.id}`}>
                         Start Assessment

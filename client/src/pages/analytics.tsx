@@ -7,6 +7,7 @@ import type { Quiz, Submission, Student } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { ArrowLeft, Download, Loader2, Sparkles } from "lucide-react";
 
@@ -15,6 +16,7 @@ export default function AnalyticsPage() {
   const quizId = Number(params.id || 0);
   const reportRef = useRef<HTMLDivElement>(null);
   const [analysis, setAnalysis] = useState<string>("");
+  const { toast } = useToast();
 
   const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
     queryKey: ["/api/admin/session"],
@@ -37,7 +39,17 @@ export default function AnalyticsPage() {
       const res = await apiRequest("POST", "/api/analyze-class", { quizId });
       return res.json();
     },
-    onSuccess: (data) => setAnalysis(data.analysis || ""),
+    onSuccess: (data) => {
+      const result = data.analysis || "";
+      if (!result.trim()) {
+        toast({ title: "No analysis generated", description: "The AI returned an empty report. Please try again.", variant: "destructive" });
+        return;
+      }
+      setAnalysis(result);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Analysis failed", description: err.message || "Something went wrong. Please try again.", variant: "destructive" });
+    },
   });
 
   const handlePrint = useReactToPrint({
@@ -57,7 +69,7 @@ export default function AnalyticsPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="glass-card p-8 text-center">
-          <p className="text-slate-300">Please log in via <Link href="/admin"><a className="text-violet-400 underline">/admin</a></Link> first.</p>
+          <p className="text-slate-300">Please log in via <Link href="/admin" className="text-violet-400 underline">/admin</Link> first.</p>
         </div>
       </div>
     );
