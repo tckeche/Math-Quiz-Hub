@@ -5,7 +5,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 
 ## Tech Stack
 - **Frontend:** React (Vite), Tailwind CSS, Shadcn UI, react-katex for LaTeX rendering, DOMPurify for XSS protection
-- **Backend:** Node.js, Express, @google/generative-ai (Gemini), multer for file uploads
+- **Backend:** Node.js, Express, @google/generative-ai (Gemini), @anthropic-ai/sdk (Claude), openai (GPT-4o & DeepSeek), multer for file uploads
 - **Database:** PostgreSQL with Drizzle ORM
 - **Routing:** wouter
 
@@ -38,7 +38,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/admin/quizzes/:id/questions` - Upload questions
 - `DELETE /api/admin/questions/:id` - Delete question
 - `GET /api/admin/quizzes/:id/submissions` - View submissions
-- `POST /api/generate-questions` - Upload PDF, Gemini AI extracts MCQs with LaTeX (multipart/form-data)
+- `POST /api/generate-questions` - Upload PDF, 4-stage AI pipeline extracts MCQs (SSE streaming, multipart/form-data)
 - `POST /api/analyze-student` - AI analysis of student performance (sends submission + questions to Gemini)
 - `POST /api/upload-image` - Upload image for question attachment
 
@@ -51,7 +51,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - Summary screen before final submission
 - CSV export for results
 - JSON question upload (file or paste) with error handling
-- **AI PDF Quiz Generation**: Upload math exam PDF → Gemini extracts MCQs → Review & Edit stage → Publish
+- **AI PDF Quiz Generation (Mixture of Experts)**: Upload math exam PDF → 4-stage pipeline: Gemini 2.5 Flash (PDF vision extraction) → DeepSeek R1 (mathematical reasoning/solving) → Claude Sonnet (LaTeX formatting) → GPT-4o (JSON schema validation) → Review & Edit stage → Publish. Uses SSE streaming with real-time stage progress UI. Route timeout: 120s.
 - **Review & Edit Stage**: Edit prompt text, options, correct answer, marks; attach/remove images per question; remove individual questions
 - **AI Student Analysis**: Per-submission "Analyze with AI" button → Gemini identifies weak areas and provides actionable feedback (HTML sanitized with DOMPurify)
 - **Single-Attempt Enforcement**: Server-side check via POST /api/check-submission (name matching with sanitization) + localStorage cache for fast client-side blocking
