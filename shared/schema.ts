@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, integer, timestamp, json, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -60,3 +60,61 @@ export const questionUploadSchema = z.array(z.object({
 }));
 
 export type QuestionUpload = z.infer<typeof questionUploadSchema>;
+
+export const somaQuizzes = pgTable("soma_quizzes", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  topic: text("topic").notNull(),
+  curriculumContext: text("curriculum_context"),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const somaQuestions = pgTable("soma_questions", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => somaQuizzes.id, { onDelete: "cascade" }),
+  stem: text("stem").notNull(),
+  options: json("options").$type<string[]>().notNull(),
+  correctAnswer: text("correct_answer").notNull(),
+  explanation: text("explanation"),
+  marks: integer("marks").notNull().default(1),
+});
+
+export const somaReports = pgTable("soma_reports", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => somaQuizzes.id, { onDelete: "cascade" }),
+  studentName: text("student_name").notNull(),
+  score: integer("score").notNull(),
+  aiFeedbackHtml: text("ai_feedback_html"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const somaQuizzesRelations = relations(somaQuizzes, ({ many }) => ({
+  questions: many(somaQuestions),
+  reports: many(somaReports),
+}));
+
+export const somaQuestionsRelations = relations(somaQuestions, ({ one }) => ({
+  quiz: one(somaQuizzes, {
+    fields: [somaQuestions.quizId],
+    references: [somaQuizzes.id],
+  }),
+}));
+
+export const somaReportsRelations = relations(somaReports, ({ one }) => ({
+  quiz: one(somaQuizzes, {
+    fields: [somaReports.quizId],
+    references: [somaQuizzes.id],
+  }),
+}));
+
+export const insertSomaQuizSchema = createInsertSchema(somaQuizzes).omit({ id: true, createdAt: true });
+export const insertSomaQuestionSchema = createInsertSchema(somaQuestions).omit({ id: true });
+export const insertSomaReportSchema = createInsertSchema(somaReports).omit({ id: true, createdAt: true });
+
+export type SomaQuiz = typeof somaQuizzes.$inferSelect;
+export type InsertSomaQuiz = z.infer<typeof insertSomaQuizSchema>;
+export type SomaQuestion = typeof somaQuestions.$inferSelect;
+export type InsertSomaQuestion = z.infer<typeof insertSomaQuestionSchema>;
+export type SomaReport = typeof somaReports.$inferSelect;
+export type InsertSomaReport = z.infer<typeof insertSomaReportSchema>;
