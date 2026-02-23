@@ -46,7 +46,7 @@ export default function BuilderPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [msg, setMsg] = useState("");
-  const [chat, setChat] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const [chat, setChat] = useState<{ role: "user" | "ai"; text: string; metadata?: { provider: string; model: string; durationMs: number } }[]>([]);
   const [drafts, setDrafts] = useState<DraftQuestion[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
 
@@ -71,7 +71,7 @@ export default function BuilderPage() {
       return res.json();
     },
     onSuccess: (data, message) => {
-      setChat((prev) => [...prev, { role: "user", text: message }, { role: "ai", text: data.reply }]);
+      setChat((prev) => [...prev, { role: "user", text: message }, { role: "ai", text: data.reply, metadata: data.metadata }]);
       if (Array.isArray(data.drafts) && data.drafts.length > 0) {
         setDrafts(data.drafts);
         toast({ title: `Loaded ${data.drafts.length} draft questions` });
@@ -163,6 +163,12 @@ export default function BuilderPage() {
                       : "bg-white/5 text-slate-300 border border-white/5"
                   }`}>
                     {m.text}
+                    {m.metadata && (
+                      <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-md bg-slate-900/50 border border-white/5 text-[10px] text-slate-400 font-mono tracking-wider" data-testid={`badge-telemetry-${i}`}>
+                        <span>⚡ {m.metadata.model}</span>
+                        <span>⏱️ {(m.metadata.durationMs / 1000).toFixed(2)}s</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
