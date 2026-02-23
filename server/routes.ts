@@ -166,7 +166,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const quiz = await storage.getQuiz(Number(quizId));
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     const hasSubmitted = await storage.checkStudentSubmission(quizId, firstName, lastName);
-    res.json({ hasSubmitted });
+    if (hasSubmitted) {
+      const submission = await storage.getStudentSubmission(quizId, firstName, lastName);
+      return res.json({ hasSubmitted: true, totalScore: submission?.totalScore ?? 0, maxPossibleScore: submission?.maxPossibleScore ?? 0 });
+    }
+    res.json({ hasSubmitted: false });
   });
 
   app.post("/api/submissions", async (req, res) => {
@@ -445,9 +449,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const model = getGeminiModel();
+      let questionNumber = 0;
       const breakdown = Object.entries(submission.answersBreakdown).map(([qId, detail]: [string, any]) => {
         const question = questions.find((q: any) => String(q.id) === qId);
+        questionNumber++;
         return {
+          questionNumber: question?.displayNumber || questionNumber,
           question: question?.promptText || "Unknown",
           studentAnswer: detail.answer || "No answer",
           correct: detail.correct,
@@ -456,7 +463,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
       });
 
-      const prompt = `You are an expert mathematics tutor. Analyze this student's quiz submission. Identify which specific mathematical concepts they are struggling with based on the questions they got wrong. Keep the analysis concise, actionable, and formatted in clean HTML.\n\nStudent scored ${submission.totalScore}/${submission.maxPossibleScore}.\n\nQuestion breakdown:\n${JSON.stringify(breakdown, null, 2)}`;
+      const prompt = `You are an expert mathematics tutor. Analyze this student's quiz submission and provide a detailed performance report.
+
+Student scored ${submission.totalScore}/${submission.maxPossibleScore}.
+
+IMPORTANT FORMATTING RULES:
+1. Reference questions using their "questionNumber" field (e.g., "Question 1", "Question 2"), NOT their database IDs.
+2. Format all "Areas of Improvement" and explanations as clean HTML bulleted lists using <ul> and <li> tags.
+3. Use <h3> tags for section headings.
+4. Be concise, specific, and actionable.
+5. Output clean HTML only — no markdown, no code fences.
+
+Sections to include:
+- Overall Performance Summary
+- Areas of Strength (concepts the student demonstrated well)
+- Areas of Improvement (specific concepts to work on, as <ul><li> items)
+- Recommended Next Steps (actionable study tips, as <ul><li> items)
+
+Question breakdown:
+${JSON.stringify(breakdown, null, 2)}`;
 
       const result = await model.generateContent(prompt);
       let html = result.response.text();

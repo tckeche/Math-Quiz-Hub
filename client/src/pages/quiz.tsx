@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
   Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2,
-  Circle, Send, ArrowLeft, Home, ShieldAlert, Loader2
+  Circle, Send, ArrowLeft, Home, ShieldAlert, Loader2, Award, FileText
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { BlockMath, InlineMath } from 'react-katex';
@@ -37,21 +37,37 @@ function renderLatex(text: string) {
   });
 }
 
-function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
+function ResultsView({ quizTitle, totalScore, maxPossibleScore }: { quizTitle: string; totalScore: number; maxPossibleScore: number }) {
+  const percentage = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="glass-card w-full max-w-md text-center p-10">
-        <ShieldAlert className="w-16 h-16 mx-auto text-red-400/60 mb-4" />
-        <h2 className="text-2xl font-bold mb-2 gradient-text" data-testid="text-already-taken">
-          This test has already been taken.
+        <div className="w-20 h-20 rounded-full bg-violet-500/10 flex items-center justify-center mx-auto mb-5 border border-violet-500/30">
+          <Award className="w-10 h-10 text-violet-400" />
+        </div>
+        <h2 className="text-2xl font-bold mb-1 gradient-text" data-testid="text-results-title">
+          Assessment Complete
         </h2>
-        <p className="text-slate-400 mb-6">
-          You have already submitted your answers for "{quizTitle}". Each student is allowed only one attempt.
+        <p className="text-sm text-slate-400 mb-6">{quizTitle}</p>
+
+        <div className="bg-white/5 rounded-2xl p-6 border border-white/10 mb-6">
+          <p className="text-5xl font-black text-violet-300 drop-shadow-[0_0_15px_rgba(139,92,246,0.4)]" data-testid="text-grade-percentage">
+            {percentage}%
+          </p>
+          <p className="text-sm text-slate-400 mt-2" data-testid="text-grade-score">
+            {totalScore} / {maxPossibleScore} marks
+          </p>
+        </div>
+
+        <p className="text-sm text-slate-400 italic mb-8" data-testid="text-wait-message">
+          Please wait for your tutor to evaluate your points of weakness.
         </p>
+
         <Link href="/portal">
-          <Button className="glow-button" data-testid="button-back-home-taken">
+          <Button className="glow-button w-full" data-testid="button-back-home">
             <Home className="w-4 h-4 mr-1.5" />
-            Return Home
+            Return to Portal
           </Button>
         </Link>
       </div>
@@ -194,6 +210,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showSummary, setShowSummary] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<{ totalScore: number; maxPossibleScore: number } | null>(null);
   const submittingRef = useRef(false);
 
   const storageKey = `quiz_${quiz.id}_student_${studentId}`;
@@ -220,13 +237,17 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
   }, [answers, answersKey]);
 
   const submitMutation = useMutation({
-    mutationFn: async (data: { studentId: number; quizId: number; answers: Record<number, string> }) =>
-      apiRequest("POST", "/api/submissions", data),
-    onSuccess: () => {
+    mutationFn: async (data: { studentId: number; quizId: number; answers: Record<number, string> }) => {
+      const res = await apiRequest("POST", "/api/submissions", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
       setSubmitted(true);
+      setSubmissionResult({ totalScore: data.totalScore, maxPossibleScore: data.maxPossibleScore });
       localStorage.removeItem(startTimeKey);
       localStorage.removeItem(answersKey);
       localStorage.setItem(`completed_quiz_${quiz.id}`, "true");
+      localStorage.setItem(`quiz_result_${quiz.id}`, JSON.stringify({ totalScore: data.totalScore, maxPossibleScore: data.maxPossibleScore }));
     },
     onError: (err: Error) => {
       submittingRef.current = false;
@@ -248,27 +269,13 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
     setAnswers((prev) => ({ ...prev, [questionId]: option }));
   };
 
-  if (submitted) {
+  if (submitted && submissionResult) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="glass-card w-full max-w-md text-center p-10">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4 border border-emerald-500/30">
-            <CheckCircle2 className="w-9 h-9 text-emerald-400" />
-          </div>
-          <h2 className="text-2xl font-bold mb-2 gradient-text" data-testid="text-submission-success">
-            Assessment Submitted
-          </h2>
-          <p className="text-slate-400 mb-6">
-            Your answers have been recorded. Thank you for completing the assessment.
-          </p>
-          <Link href="/portal">
-            <Button className="glow-button" data-testid="button-back-home">
-              <Home className="w-4 h-4 mr-1.5" />
-              Return Home
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <ResultsView
+        quizTitle={quiz.title}
+        totalScore={submissionResult.totalScore}
+        maxPossibleScore={submissionResult.maxPossibleScore}
+      />
     );
   }
 
@@ -440,21 +447,40 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
             ))}
           </div>
 
-          {currentIndex === questions.length - 1 ? (
-            <Button className="glow-button" onClick={() => setShowSummary(true)} data-testid="button-review-submit">
-              Review & Submit
-              <Send className="w-4 h-4 ml-1" />
-            </Button>
-          ) : (
-            <Button
-              className="glow-button"
-              onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
-              data-testid="button-next-question"
-            >
-              Next
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {currentIndex < questions.length - 1 && (
+              <Button
+                className="glow-button-outline"
+                onClick={() => {
+                  setAnswers((prev) => {
+                    const copy = { ...prev };
+                    delete copy[question.id];
+                    return copy;
+                  });
+                  setCurrentIndex((i) => Math.min(questions.length - 1, i + 1));
+                }}
+                data-testid="button-skip-question"
+              >
+                Skip
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            )}
+            {currentIndex === questions.length - 1 ? (
+              <Button className="glow-button" onClick={() => setShowSummary(true)} data-testid="button-review-submit">
+                Review & Submit
+                <Send className="w-4 h-4 ml-1" />
+              </Button>
+            ) : (
+              <Button
+                className="glow-button"
+                onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+                data-testid="button-next-question"
+              >
+                Next
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -507,6 +533,9 @@ export default function QuizPage() {
       if (data.hasSubmitted) {
         setBlocked(true);
         localStorage.setItem(`completed_quiz_${quizId}`, "true");
+        if (data.totalScore !== undefined) {
+          localStorage.setItem(`quiz_result_${quizId}`, JSON.stringify({ totalScore: data.totalScore, maxPossibleScore: data.maxPossibleScore }));
+        }
         return;
       }
       const studentRes = await apiRequest("POST", "/api/students", { firstName, lastName });
@@ -568,7 +597,23 @@ export default function QuizPage() {
   }
 
   if (blocked) {
-    return <AlreadyTakenScreen quizTitle={quiz.title} />;
+    const savedResult = localStorage.getItem(`quiz_result_${quizId}`);
+    let totalScore = 0;
+    let maxPossibleScore = 0;
+    if (savedResult) {
+      try {
+        const parsed = JSON.parse(savedResult);
+        totalScore = parsed.totalScore;
+        maxPossibleScore = parsed.maxPossibleScore;
+      } catch {}
+    }
+    return (
+      <ResultsView
+        quizTitle={quiz.title}
+        totalScore={totalScore}
+        maxPossibleScore={maxPossibleScore}
+      />
+    );
   }
 
   if (!started || !studentId) {

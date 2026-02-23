@@ -565,20 +565,21 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
   );
 }
 
-function StudentAnalysis({ submission, questions }: { submission: Submission & { student: Student }; questions: Question[] }) {
+function StudentAnalysis({ submission, questions, quizTitle }: { submission: Submission & { student: Student }; questions: Question[]; quizTitle: string }) {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
-    documentTitle: `student-analysis-${submission.id}`,
+    documentTitle: `Performance_Report_${submission.student.firstName}_${submission.student.lastName}`,
   });
 
   const handleAnalyze = async () => {
     setLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/analyze-student", { submission, questions });
+      const numberedQuestions = questions.map((q, idx) => ({ ...q, displayNumber: idx + 1 }));
+      const res = await apiRequest("POST", "/api/analyze-student", { submission, questions: numberedQuestions });
       const data = await res.json();
       setAnalysis(data.analysis);
     } catch (err: any) {
@@ -587,6 +588,12 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
       setLoading(false);
     }
   };
+
+  const percentage = submission.maxPossibleScore > 0
+    ? Math.round((submission.totalScore / submission.maxPossibleScore) * 100)
+    : 0;
+
+  const submittedDate = submission.submittedAt ? format(new Date(submission.submittedAt), "PPP") : "N/A";
 
   return (
     <div>
@@ -609,17 +616,38 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
               <Brain className="w-4 h-4 text-violet-400" />
               AI Analysis
             </h4>
-            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" onClick={() => setAnalysis(null)}>Close</Button>
+            <div className="flex items-center gap-2">
+              <Button className="glow-button-outline text-sm" size="sm" onClick={handlePrint}>
+                <Download className="w-4 h-4 mr-1" />
+                Download PDF
+              </Button>
+              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" onClick={() => setAnalysis(null)}>Close</Button>
+            </div>
           </div>
-          <div className="mb-2">
-            <Button className="glow-button-outline text-sm" size="sm" onClick={handlePrint}>Download Report as PDF</Button>
+          <div ref={printRef} className="print-report">
+            <div className="hidden print:block mb-6" style={{ borderBottom: '2px solid #7c3aed', paddingBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
+                <img src="/MCEC - White Logo.png" alt="MCEC Logo" style={{ height: '48px', width: 'auto' }} />
+                <div>
+                  <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>SOMA Assessment Platform</h1>
+                  <p style={{ fontSize: '12px', color: '#666', margin: 0 }}>By Melania Calvin Educational Consultants</p>
+                </div>
+              </div>
+              <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: '8px 0 4px' }}>
+                Performance Report for {submission.student.firstName} {submission.student.lastName}
+              </h2>
+              <p style={{ fontSize: '13px', color: '#444', margin: '2px 0' }}>Topic: {quizTitle}</p>
+              <p style={{ fontSize: '13px', color: '#444', margin: '2px 0' }}>Date Taken: {submittedDate}</p>
+              <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '8px 0 0', color: '#7c3aed' }}>
+                Grade: {percentage}% ({submission.totalScore}/{submission.maxPossibleScore})
+              </p>
+            </div>
+            <div
+              className="prose prose-sm prose-invert max-w-none text-sm text-slate-300 print:prose print:text-black"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }}
+              data-testid={`text-analysis-${submission.id}`}
+            />
           </div>
-          <div
-            ref={printRef}
-            className="prose prose-sm prose-invert max-w-none text-sm text-slate-300"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }}
-            data-testid={`text-analysis-${submission.id}`}
-          />
         </div>
       )}
     </div>
@@ -721,7 +749,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
       <div className="flex items-center gap-3 flex-wrap">
         <Button className="glow-button-outline" size="sm" onClick={onBack} data-testid="button-back-admin">
           <ArrowLeft className="w-4 h-4 mr-1" />
-          Back
+          Back to Assessments
         </Button>
         <Button
           size="sm"
@@ -854,7 +882,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
                       </div>
                     </div>
                     <div className="mt-3">
-                      <StudentAnalysis submission={s} questions={questions || []} />
+                      <StudentAnalysis submission={s} questions={questions || []} quizTitle={quiz.title} />
                     </div>
                   </div>
                 ))}
@@ -936,7 +964,7 @@ export default function AdminPage() {
 
   const handleLogout = async () => {
     await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
-    setAuthVersion((v) => v + 1);
+    window.location.href = "/";
   };
 
   if (sessionLoading) {

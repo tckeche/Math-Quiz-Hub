@@ -31,6 +31,7 @@ export interface IStorage {
   deleteSubmission(id: number): Promise<void>;
   deleteSubmissionsByQuizId(quizId: number): Promise<void>;
   checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean>;
+  getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -133,6 +134,19 @@ class DatabaseStorage implements IStorage {
     return false;
   }
 
+  async getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined> {
+    const fn = sanitizeName(firstName);
+    const ln = sanitizeName(lastName);
+    const matchingStudents = await this.database.select().from(students)
+      .where(and(eq(students.firstName, fn), eq(students.lastName, ln)));
+    for (const student of matchingStudents) {
+      const [sub] = await this.database.select().from(submissions)
+        .where(and(eq(submissions.studentId, student.id), eq(submissions.quizId, quizId)));
+      if (sub) return sub;
+    }
+    return undefined;
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -224,6 +238,12 @@ class MemoryStorage implements IStorage {
     const student = await this.findStudentByName(firstName, lastName);
     if (!student) return false;
     return this.submissions.some((s) => s.quizId === quizId && s.studentId === student.id);
+  }
+
+  async getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined> {
+    const student = await this.findStudentByName(firstName, lastName);
+    if (!student) return undefined;
+    return this.submissions.find((s) => s.quizId === quizId && s.studentId === student.id);
   }
 
 }
