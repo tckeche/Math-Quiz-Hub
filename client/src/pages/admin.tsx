@@ -550,7 +550,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
       </h3>
       <div className="space-y-4">
         <p className="text-sm text-slate-400">
-          Upload a math exam PDF and a 4-stage AI pipeline (Gemini, DeepSeek, Claude, ChatGPT) will
+          Upload a math assessment PDF and a 4-stage AI pipeline (Gemini, DeepSeek, Claude, ChatGPT) will
           extract, solve, format, and validate multiple-choice questions. You'll be able to review and edit before publishing.
         </p>
         <div className="space-y-2">
@@ -659,11 +659,11 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
       apiRequest("DELETE", `/api/admin/quizzes/${quizId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
-      toast({ title: "Exam deleted", description: "Quiz, questions, and submissions were removed." });
+      toast({ title: "Assessment deleted", description: "Assessment, questions, and submissions were removed." });
       onDeleted();
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to delete exam", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to delete assessment", description: err.message, variant: "destructive" });
     },
   });
 
@@ -727,7 +727,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           size="sm"
           className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl"
           onClick={() => {
-            if (confirm("Delete this entire exam? This will remove questions and all submitted tests.")) {
+            if (confirm("Delete this entire assessment? This will remove questions and all submitted results.")) {
               deleteQuizMutation.mutate();
             }
           }}
@@ -735,7 +735,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           data-testid="button-delete-exam"
         >
           <Trash2 className="w-4 h-4 mr-1" />
-          {deleteQuizMutation.isPending ? "Deleting..." : "Delete Exam"}
+          {deleteQuizMutation.isPending ? "Deleting..." : "Delete Assessment"}
         </Button>
         <div className="flex-1 min-w-0">
           <h2 className="text-xl font-bold truncate gradient-text" data-testid="text-quiz-detail-title">{quiz.title}</h2>

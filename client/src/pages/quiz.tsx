@@ -85,9 +85,9 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
           {isClosed ? (
             <div className="text-center py-6">
               <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
-              <h3 className="text-lg font-semibold text-red-400">Examination Closed</h3>
+              <h3 className="text-lg font-semibold text-red-400">Assessment Closed</h3>
               <p className="text-sm text-slate-400 mt-2">
-                This examination closed on {new Date(quiz.dueDate).toLocaleDateString()}.
+                This assessment closed on {new Date(quiz.dueDate).toLocaleDateString()}.
               </p>
               <Link href="/">
                 <Button className="glow-button-outline mt-4" data-testid="button-back-home-closed">
@@ -101,10 +101,10 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
               <div className="bg-white/5 rounded-xl p-4 text-sm space-y-1 border border-white/5">
                 <p className="font-medium text-slate-200">Instructions:</p>
                 <ul className="list-disc list-inside text-slate-400 space-y-0.5">
-                  <li>You have <strong className="text-slate-200">{quiz.timeLimitMinutes} minutes</strong> to complete this examination.</li>
+                  <li>You have <strong className="text-slate-200">{quiz.timeLimitMinutes} minutes</strong> to complete this assessment.</li>
                   <li>The timer will start as soon as you click "Begin".</li>
                   <li>If you refresh, the timer will <strong className="text-slate-200">not</strong> reset.</li>
-                  <li>The examination will auto-submit when time expires.</li>
+                  <li>The assessment will auto-submit when time expires.</li>
                   <li>You are allowed <strong className="text-slate-200">one attempt only</strong>.</li>
                 </ul>
               </div>
@@ -142,7 +142,7 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
                     Checking...
                   </>
                 ) : (
-                  "Begin Examination"
+                  "Begin Assessment"
                 )}
               </Button>
             </form>
@@ -256,10 +256,10 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
             <CheckCircle2 className="w-9 h-9 text-emerald-400" />
           </div>
           <h2 className="text-2xl font-bold mb-2 gradient-text" data-testid="text-submission-success">
-            Examination Submitted
+            Assessment Submitted
           </h2>
           <p className="text-slate-400 mb-6">
-            Your answers have been recorded. Thank you for completing the examination.
+            Your answers have been recorded. Thank you for completing the assessment.
           </p>
           <Link href="/">
             <Button className="glow-button" data-testid="button-back-home">
@@ -326,7 +326,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                   data-testid="button-final-submit"
                 >
                   <Send className="w-4 h-4 mr-1.5" />
-                  {submitMutation.isPending ? "Submitting..." : "Submit Examination"}
+                  {submitMutation.isPending ? "Submitting..." : "Submit Assessment"}
                 </Button>
               </div>
             </div>
@@ -555,7 +555,7 @@ export default function QuizPage() {
         <div className="glass-card w-full max-w-md text-center p-10">
           <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
           <h2 className="text-xl font-bold text-slate-100">Quiz Not Found</h2>
-          <p className="text-sm text-slate-400 mt-2">This examination does not exist.</p>
+          <p className="text-sm text-slate-400 mt-2">This assessment does not exist.</p>
           <Link href="/">
             <Button className="glow-button-outline mt-4" data-testid="button-back-home-notfound">
               <Home className="w-4 h-4 mr-1.5" />
@@ -604,7 +604,7 @@ export default function QuizPage() {
         <div className="glass-card w-full max-w-md text-center p-10">
           <AlertCircle className="w-12 h-12 mx-auto text-slate-600 mb-3" />
           <h2 className="text-xl font-bold text-slate-100">No Questions</h2>
-          <p className="text-sm text-slate-400 mt-2">This examination has no questions yet.</p>
+          <p className="text-sm text-slate-400 mt-2">This assessment has no questions yet.</p>
         </div>
       </div>
     );

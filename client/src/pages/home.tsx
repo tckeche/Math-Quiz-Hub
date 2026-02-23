@@ -52,7 +52,7 @@ export default function Home() {
         ) : !quizzes || quizzes.length === 0 ? (
           <div className="text-center py-20">
             <BookOpen className="w-16 h-16 mx-auto text-slate-600 mb-4" />
-            <h2 className="text-xl font-semibold text-slate-400 mb-2">No Examinations Available</h2>
+            <h2 className="text-xl font-semibold text-slate-400 mb-2">No Assessments Available</h2>
             <p className="text-sm text-slate-500">Check back later for upcoming assessments.</p>
           </div>
         ) : (
@@ -93,7 +93,7 @@ export default function Home() {
                   {!isClosed && (
                     <Link href={`/quiz/${quiz.id}`}>
                       <Button className="w-full glow-button" size="lg" data-testid={`button-start-quiz-${quiz.id}`}>
-                        Start Examination
+                        Start Assessment
                         <ArrowRight className="w-4 h-4 ml-1.5" />
                       </Button>
                     </Link>
