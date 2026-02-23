@@ -1,0 +1,71 @@
+This is an incredibly ambitious and cutting-edge approach. What you are describing is known in the industry as a "Mixture of Experts" (MoE) Orchestration pipeline.
+
+Instead of relying on one AI to do everything, you use the specific superpower of each AI company. DeepSeek has recently shocked the industry with its advanced mathematical reasoning (especially the DeepSeek-R1 model), making it the perfect addition to this chain.
+
+Here is the ultimate 4-step, four-brain architecture:
+
+The Eye (Google Gemini 2.5): Gemini has the best multimodal vision capability. It reads the raw Cambridge PDF and extracts the text and numbers.
+
+The Brain (DeepSeek-R1): DeepSeek is fed the raw text. Its only job is to do the heavy mathematical reasoning, solve the equations step-by-step, and determine the absolutely correct answer.
+
+The Typesetter (Anthropic Claude 3.5 Sonnet): Claude is the industry leader at formatting. It takes DeepSeek's raw math output and converts it into perfectly structured, double-escaped LaTeX so your frontend can render it beautifully.
+
+The Inspector (OpenAI ChatGPT-4o): ChatGPT takes Claude's LaTeX and forces it into a strict, unbreakable JSON array that matches your PostgreSQL database schema, catching any missing commas or formatting errors before it hits your server.
+
+If you want to build this absolute powerhouse of an engine, here is the master prompt to feed into your Replit Agent to update the backend:
+
+Copy and Paste This into Your Coding Agent:
+Feature Update: 4-Stage "Mixture of Experts" AI Generation Pipeline
+
+We are upgrading the /api/generate-questions endpoint to use a 4-step sequential AI pipeline using Gemini, DeepSeek, Claude, and OpenAI.
+
+1. Dependency Setup & Environment Variables:
+
+Ensure the following SDKs are installed: @google/generative-ai, @anthropic-ai/sdk, and openai (The official OpenAI SDK will be used to call BOTH ChatGPT and DeepSeek, as DeepSeek's API is OpenAI-compatible).
+
+Ensure the backend reads these secrets: GEMINI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, and OPENAI_API_KEY.
+
+2. The 4-Step Pipeline (POST /api/generate-questions):
+Because this chain will take 45-90 seconds, you MUST increase the Express route timeout and Vite proxy timeout to at least 120 seconds.
+
+Step 1: The Vision Extractor (Gemini 2.5 Flash)
+
+Convert the uploaded PDF to base64 inlineData.
+
+Prompt: "Extract all multiple-choice mathematics questions, options, and text from this PDF document. Output only the raw extracted text."
+
+Pass the output string to Step 2.
+
+Step 2: The Math Solver (DeepSeek via OpenAI SDK)
+
+Instantiate the OpenAI client pointing to baseURL: 'https://api.deepseek.com' using the DEEPSEEK_API_KEY. Use model deepseek-reasoner.
+
+Prompt: "You are an elite mathematician. Solve these multiple-choice questions extracted from a past paper. Provide the step-by-step mathematical working and identify the strictly correct option. Ignore any formatting rules, just focus on 100% mathematical accuracy."
+
+Pass the output string to Step 3.
+
+Step 3: The LaTeX Formatter (Claude 3.5 Sonnet)
+
+Call the Anthropic SDK.
+
+Prompt: "Take this mathematical working and question data. Your only job is to format all mathematical formulas, numbers, and equations into strict LaTeX. You MUST double-escape all backslashes (e.g., \\\\frac). Do not change the math, just format it into beautiful KaTeX syntax."
+
+Pass the output string to Step 4.
+
+Step 4: The JSON Validator (OpenAI GPT-4o)
+
+Instantiate the standard OpenAI client using OPENAI_API_KEY. Use model gpt-4o.
+
+Prompt: "You are a backend JSON inspector. Take this LaTeX-formatted math data and convert it strictly into a JSON array of objects matching this exact schema: [{ prompt_text: string, options: [string], correct_answer: string, marks_worth: number }]. Ensure the JSON is perfectly valid and safe for JSON.parse(). Return ONLY the raw JSON array, do not wrap it in markdown blockquotes."
+
+3. Frontend Progress UI:
+
+Update the Admin staging area UI to show a multi-stage loading tracker so the user knows the system has not frozen:
+
+"Gemini is reading the PDF..."
+
+"DeepSeek is solving the mathematics..."
+
+"Claude is formatting the LaTeX..."
+
+"ChatGPT is validating the database schema..."
