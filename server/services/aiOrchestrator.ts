@@ -111,7 +111,7 @@ async function callGoogle(
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  const generationConfig: any = {};
+  const generationConfig: any = { temperature: 0.1 };
   if (expectedSchema) {
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = convertToGeminiSchema(expectedSchema);
@@ -119,7 +119,7 @@ async function callGoogle(
 
   const geminiModel = genAI.getGenerativeModel({
     model,
-    ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
+    generationConfig,
   });
 
   const prompt = `${systemPrompt}\n\n${userPrompt}`;
@@ -153,7 +153,7 @@ async function callOpenAI(
     { role: "user", content: userPrompt },
   ];
 
-  const config: any = { model, messages };
+  const config: any = { model, messages, temperature: 0.1 };
   if (expectedSchema) {
     config.response_format = { type: "json_object" };
   }
@@ -185,6 +185,7 @@ async function callAnthropic(
     const response = await client.messages.create({
       model,
       max_tokens: 8192,
+      temperature: 0.1,
       system: systemPrompt,
       tools: [toolDef as any],
       tool_choice: { type: "tool" as const, name: "structured_output" },
@@ -201,6 +202,7 @@ async function callAnthropic(
   const response = await client.messages.create({
     model,
     max_tokens: 8192,
+    temperature: 0.1,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   });
@@ -234,7 +236,7 @@ async function callDeepSeek(
     { role: "user", content: userPrompt },
   ];
 
-  const config: any = { model, messages };
+  const config: any = { model, messages, temperature: 0.1 };
   if (expectedSchema) {
     config.response_format = { type: "json_object" };
   }
