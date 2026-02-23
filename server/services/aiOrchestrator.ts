@@ -169,20 +169,20 @@ export async function generateWithFallback(
 ): Promise<string> {
   try {
     return await tryAnthropic(systemPrompt, userPrompt, expectedSchema);
-  } catch (err: any) {
-    console.warn(`[AI Orchestrator] Claude failed (${err?.message || "unknown"}), falling back to DeepSeek...`);
+  } catch (error: any) {
+    console.error("Claude failed:", error);
   }
 
   try {
     return await tryDeepSeek(systemPrompt, userPrompt, expectedSchema);
-  } catch (err: any) {
-    console.warn(`[AI Orchestrator] DeepSeek failed (${err?.message || "unknown"}), falling back to OpenAI...`);
+  } catch (error: any) {
+    console.error("DeepSeek failed:", error);
   }
 
   try {
     return await tryOpenAI(systemPrompt, userPrompt, expectedSchema);
-  } catch (err: any) {
-    console.warn(`[AI Orchestrator] OpenAI failed (${err?.message || "unknown"})`);
+  } catch (error: any) {
+    console.error("OpenAI failed:", error);
   }
 
   throw new Error("All AI providers are currently unavailable due to high traffic.");
