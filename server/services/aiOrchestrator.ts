@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 function getAnthropicClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -162,28 +161,48 @@ async function tryOpenAI(
   return content;
 }
 
+/** Check which AI providers have API keys configured. */
+export function getProviderStatus(): Record<string, boolean> {
+  return {
+    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+    deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+    openai: Boolean(process.env.OPENAI_API_KEY),
+    gemini: Boolean(process.env.GEMINI_API_KEY),
+  };
+}
+
 export async function generateWithFallback(
   systemPrompt: string,
   userPrompt: string,
   expectedSchema?: any
 ): Promise<string> {
+  const errors: string[] = [];
+
   try {
     return await tryAnthropic(systemPrompt, userPrompt, expectedSchema);
   } catch (error: any) {
-    console.error("Claude failed:", error);
+    const msg = error?.message ?? String(error);
+    errors.push(`Anthropic: ${msg}`);
+    console.error("[AI Orchestrator] Anthropic failed:", msg);
   }
 
   try {
     return await tryDeepSeek(systemPrompt, userPrompt, expectedSchema);
   } catch (error: any) {
-    console.error("DeepSeek failed:", error);
+    const msg = error?.message ?? String(error);
+    errors.push(`DeepSeek: ${msg}`);
+    console.error("[AI Orchestrator] DeepSeek failed:", msg);
   }
 
   try {
     return await tryOpenAI(systemPrompt, userPrompt, expectedSchema);
   } catch (error: any) {
-    console.error("OpenAI failed:", error);
+    const msg = error?.message ?? String(error);
+    errors.push(`OpenAI: ${msg}`);
+    console.error("[AI Orchestrator] OpenAI failed:", msg);
   }
 
-  throw new Error("All AI providers are currently unavailable due to high traffic.");
+  // Surface the actual per-provider errors so the admin can diagnose the root cause
+  const detail = errors.join(" | ");
+  throw new Error(`All AI providers failed. Details: ${detail}`);
 }

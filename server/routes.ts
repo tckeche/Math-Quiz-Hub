@@ -12,7 +12,7 @@ import fs from "fs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { generateAuditedQuiz } from "./services/aiPipeline";
-import { generateWithFallback } from "./services/aiOrchestrator";
+import { generateWithFallback, getProviderStatus } from "./services/aiOrchestrator";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
@@ -156,6 +156,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/logout", async (req, res) => {
     res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
     res.json({ success: true });
+  });
+
+  // AI provider health check — shows which API keys are configured (values never exposed)
+  app.get("/api/admin/ai-health", requireAdmin, (_req, res) => {
+    const status = getProviderStatus();
+    const configured = Object.entries(status).filter(([, v]) => v).map(([k]) => k);
+    const missing = Object.entries(status).filter(([, v]) => !v).map(([k]) => k);
+    res.json({
+      status: missing.length === 0 ? "ok" : missing.length === 4 ? "no_keys" : "partial",
+      configured,
+      missing,
+      message: missing.length > 0
+        ? `Missing API keys: ${missing.map(k => `${k.toUpperCase()}_API_KEY`).join(", ")}. Add these as Replit Secrets.`
+        : "All AI providers are configured.",
+    });
   });
 
   app.use("/api/admin", requireAdmin);

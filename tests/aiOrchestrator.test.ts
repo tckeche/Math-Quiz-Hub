@@ -85,7 +85,7 @@ describe("generateWithFallback: Anthropic success", () => {
   it("throws when Anthropic returns no text block and fallbacks also fail", async () => {
     mocks.anthropicCreate.mockResolvedValueOnce({ content: [] });
     mocks.openAICreate.mockRejectedValue(new Error("all fail"));
-    await expect(generateWithFallback("System", "User")).rejects.toThrow(/unavailable/i);
+    await expect(generateWithFallback("System", "User")).rejects.toThrow(/All AI providers failed/i);
   });
 });
 
@@ -141,14 +141,20 @@ describe("generateWithFallback: OpenAI (GPT-4o-mini) fallback", () => {
       .mockRejectedValueOnce(new Error("DeepSeek down"))
       .mockRejectedValueOnce(new Error("OpenAI down"));
     await expect(generateWithFallback("System", "User")).rejects.toThrow(
-      /All AI providers are currently unavailable/i
+      /All AI providers failed/i
     );
   });
 
-  it("error message mentions 'high traffic'", async () => {
-    mocks.anthropicCreate.mockRejectedValue(new Error("down"));
-    mocks.openAICreate.mockRejectedValue(new Error("down"));
-    await expect(generateWithFallback("s", "u")).rejects.toThrow(/high traffic/i);
+  it("error message includes per-provider details", async () => {
+    mocks.anthropicCreate.mockRejectedValue(new Error("rate limited"));
+    mocks.openAICreate.mockRejectedValue(new Error("auth error"));
+    try {
+      await generateWithFallback("s", "u");
+    } catch (e: any) {
+      expect(e.message).toMatch(/Anthropic/i);
+      expect(e.message).toMatch(/DeepSeek/i);
+      expect(e.message).toMatch(/OpenAI/i);
+    }
   });
 
   it("passes json_object format to OpenAI when schema provided", async () => {
@@ -221,7 +227,7 @@ describe("generateWithFallback: Missing API key handling", () => {
       const result = await generateWithFallback("System", "User");
       expect(typeof result).toBe("string");
     } catch (e: any) {
-      expect(e.message).toMatch(/unavailable|API_KEY|configured/i);
+      expect(e.message).toMatch(/failed|API_KEY|configured/i);
     } finally {
       process.env.ANTHROPIC_API_KEY = saved;
     }

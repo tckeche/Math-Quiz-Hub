@@ -5,7 +5,7 @@
  * student registration, submission handling, single-attempt enforcement,
  * Soma routes, rate limiting, security, and edge cases.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import express from "express";
 import { createServer } from "http";
 import supertest from "supertest";
@@ -21,11 +21,16 @@ vi.mock("express-rate-limit", () => ({
 }));
 
 // ─── Mock AI services to avoid real API calls ─────────────────────────────────
-vi.mock("../server/services/aiOrchestrator", () => ({
-  generateWithFallback: vi.fn().mockResolvedValue(
-    "<h3>Analysis</h3><ul><li>Good performance</li></ul>"
-  ),
-}));
+vi.mock("../server/services/aiOrchestrator", async (importOriginal) => {
+  // Use the real getProviderStatus (it only reads process.env — no SDK calls)
+  const actual = await importOriginal<typeof import("../server/services/aiOrchestrator")>();
+  return {
+    generateWithFallback: vi.fn().mockResolvedValue(
+      "<h3>Analysis</h3><ul><li>Good performance</li></ul>"
+    ),
+    getProviderStatus: actual.getProviderStatus,
+  };
+});
 
 vi.mock("../server/services/aiPipeline", () => ({
   generateAuditedQuiz: vi.fn().mockResolvedValue({
@@ -863,5 +868,65 @@ describe("Edge cases", () => {
     const res = await request.get(`/api/quizzes/${quiz.id}/questions`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
+  });
+});
+
+// ─── AI HEALTH: Diagnostic endpoint ─────────────────────────────────────────
+describe("GET /api/admin/ai-health", () => {
+  let cookie: string;
+  beforeAll(async () => { cookie = await loginAsAdmin(); });
+
+  it("returns 401 without admin cookie", async () => {
+    const res = await request.get("/api/admin/ai-health");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 200 with provider status for admin", async () => {
+    const res = await request.get("/api/admin/ai-health").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBeDefined();
+    expect(Array.isArray(res.body.configured)).toBe(true);
+    expect(Array.isArray(res.body.missing)).toBe(true);
+    expect(typeof res.body.message).toBe("string");
+  });
+
+  it("reports status 'no_keys' when no AI API keys are set", async () => {
+    // In test env all AI API keys are set to test values (from setup.ts)
+    // Remove them temporarily to simulate missing keys
+    const saved = {
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    };
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    const res = await request.get("/api/admin/ai-health").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("no_keys");
+    expect(res.body.missing).toContain("anthropic");
+    expect(res.body.message).toMatch(/Missing API keys/i);
+
+    // Restore
+    Object.assign(process.env, saved);
+  });
+
+  it("reports status 'ok' when all AI API keys are present", async () => {
+    // Keys are set from setup.ts (test values)
+    const res = await request.get("/api/admin/ai-health").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("ok");
+    expect(res.body.missing).toHaveLength(0);
+  });
+
+  it("does NOT expose the actual API key values", async () => {
+    const res = await request.get("/api/admin/ai-health").set("Cookie", cookie);
+    const body = JSON.stringify(res.body);
+    expect(body).not.toMatch(/test-anthropic-key/);
+    expect(body).not.toMatch(/test-deepseek-key/);
+    expect(body).not.toMatch(/test-openai-key/);
   });
 });
