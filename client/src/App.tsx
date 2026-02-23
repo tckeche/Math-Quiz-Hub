@@ -10,6 +10,7 @@ import AdminPage from "@/pages/admin";
 import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
 import AnalyticsPage from "@/pages/analytics";
+import SomaQuizEngine from "@/pages/soma-quiz";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 function Router() {
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/admin/builder" component={BuilderPage} />
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
       <Route path="/quiz/:id" component={QuizPage} />
+      <Route path="/soma/quiz/:id" component={SomaQuizEngine} />
       <Route component={NotFound} />
     </Switch>
   );

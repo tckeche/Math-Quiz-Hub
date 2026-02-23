@@ -3,7 +3,10 @@ import {
   type Question, type InsertQuestion,
   type Student, type InsertStudent,
   type Submission, type InsertSubmission,
+  type SomaQuiz, type InsertSomaQuiz,
+  type SomaQuestion, type InsertSomaQuestion,
   quizzes, questions, students, submissions,
+  somaQuizzes, somaQuestions,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -32,6 +35,12 @@ export interface IStorage {
   deleteSubmissionsByQuizId(quizId: number): Promise<void>;
   checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean>;
   getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined>;
+
+  createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz>;
+  getSomaQuizzes(): Promise<SomaQuiz[]>;
+  getSomaQuiz(id: number): Promise<SomaQuiz | undefined>;
+  createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]>;
+  getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -155,6 +164,33 @@ class DatabaseStorage implements IStorage {
     return undefined;
   }
 
+  async createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz> {
+    const [result] = await this.database.insert(somaQuizzes).values(quiz).returning();
+    return result;
+  }
+
+  async getSomaQuizzes(): Promise<SomaQuiz[]> {
+    return this.database.select().from(somaQuizzes).orderBy(somaQuizzes.createdAt);
+  }
+
+  async getSomaQuiz(id: number): Promise<SomaQuiz | undefined> {
+    const [result] = await this.database.select().from(somaQuizzes).where(eq(somaQuizzes.id, id));
+    return result;
+  }
+
+  async createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]> {
+    if (questionList.length === 0) return [];
+    const normalized = questionList.map((q) => ({
+      ...q,
+      options: Array.isArray(q.options) ? [...q.options] as string[] : [],
+    }));
+    return this.database.insert(somaQuestions).values(normalized).returning();
+  }
+
+  async getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]> {
+    return this.database.select().from(somaQuestions).where(eq(somaQuestions.quizId, quizId));
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -162,10 +198,14 @@ class MemoryStorage implements IStorage {
   private questions: Question[] = [];
   private students: Student[] = [];
   private submissions: Submission[] = [];
+  private somaQuizzesList: SomaQuiz[] = [];
+  private somaQuestionsList: SomaQuestion[] = [];
   private quizId = 1;
   private questionId = 1;
   private studentId = 1;
   private submissionId = 1;
+  private somaQuizId = 1;
+  private somaQuestionId = 1;
 
   async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
     const created: Quiz = { id: this.quizId++, createdAt: new Date(), ...quiz };
@@ -256,6 +296,31 @@ class MemoryStorage implements IStorage {
     const student = await this.findStudentByName(firstName, lastName);
     if (!student) return undefined;
     return this.submissions.find((s) => s.quizId === quizId && s.studentId === student.id);
+  }
+
+  async createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz> {
+    const created: SomaQuiz = { id: this.somaQuizId++, createdAt: new Date(), ...quiz, curriculumContext: quiz.curriculumContext ?? null, status: quiz.status ?? "draft" };
+    this.somaQuizzesList.push(created);
+    return created;
+  }
+
+  async getSomaQuizzes(): Promise<SomaQuiz[]> { return [...this.somaQuizzesList]; }
+  async getSomaQuiz(id: number): Promise<SomaQuiz | undefined> { return this.somaQuizzesList.find((q) => q.id === id); }
+
+  async createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]> {
+    const created = questionList.map((q) => ({
+      id: this.somaQuestionId++,
+      ...q,
+      options: Array.isArray(q.options) ? [...(q.options as string[])] : [],
+      explanation: q.explanation ?? null,
+      marks: q.marks ?? 1,
+    }));
+    this.somaQuestionsList.push(...created);
+    return created;
+  }
+
+  async getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]> {
+    return this.somaQuestionsList.filter((q) => q.quizId === quizId);
   }
 
 }

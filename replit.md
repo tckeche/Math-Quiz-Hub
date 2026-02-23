@@ -60,3 +60,10 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - **LaTeX Preview**: Review & Edit and AI Builder draft UIs show live LaTeX preview with `unescapeLatex()` for visual rendering while keeping double-escaped JSON for database storage.
 - **Closed Quiz UX**: Past-due quizzes show disabled "Assessment Closed" button with "Closed" badge on student portal.
 - **Class Analytics Error Handling**: AI analysis mutation shows toast on error or empty result instead of hanging silently.
+- **Soma Intelligence Pipeline**: Multi-agent AI quiz generation (Claude Sonnet → DeepSeek → Gemini) using structured outputs (Tool Use, JSON Schema, responseSchema). Service: `server/services/aiPipeline.ts`. Routes: `/api/soma/generate` (admin), `/api/soma/quizzes`, `/api/soma/quizzes/:id`, `/api/soma/quizzes/:id/questions`.
+- **Soma Quiz Engine**: Student-facing quiz UI at `/soma/quiz/:id` with glassmorphism cards, LaTeX rendering, option selection, navigation dots, skip/next, and summary view. Answers stored in React state only (no submission endpoint yet).
+
+### Soma Pipeline Tables
+- `soma_quizzes` - id, title, topic, curriculum_context, status (draft/published), created_at
+- `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation, marks
+- `soma_reports` - id, quiz_id (FK → soma_quizzes), student_name, score, ai_feedback_html, created_at

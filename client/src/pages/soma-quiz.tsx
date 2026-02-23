@@ -1,0 +1,405 @@
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useParams } from "wouter";
+import { Link } from "wouter";
+import type { SomaQuiz } from "@shared/schema";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ChevronRight, SkipForward, Send, ArrowLeft, Home,
+  AlertCircle, Loader2, CheckCircle2, Circle, BookOpen
+} from "lucide-react";
+import 'katex/dist/katex.min.css';
+import { BlockMath, InlineMath } from 'react-katex';
+
+type StudentQuestion = {
+  id: number;
+  quizId: number;
+  stem: string;
+  options: string[];
+  marks: number;
+};
+
+function renderLatex(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('\\(') && part.endsWith('\\)')) {
+      return <InlineMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('\\[') && part.endsWith('\\]')) {
+      return <BlockMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('$$') && part.endsWith('$$')) {
+      return <BlockMath key={i} math={part.slice(2, -2)} />;
+    }
+    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
+      return <InlineMath key={i} math={part.slice(1, -1)} />;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="w-full max-w-3xl">
+        <div className="glass-card p-8 mb-6">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 rounded-xl bg-violet-500/20 animate-pulse" />
+            <div className="flex-1">
+              <Skeleton className="h-6 w-48 mb-2 bg-white/10" />
+              <Skeleton className="h-4 w-32 bg-white/10" />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-8 w-full bg-white/10" />
+            <Skeleton className="h-6 w-3/4 bg-white/10" />
+          </div>
+        </div>
+        <div className="grid gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="glass-card p-5 animate-pulse" style={{ animationDelay: `${i * 100}ms` }}>
+              <Skeleton className="h-5 w-full bg-white/10" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 flex justify-center">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+            <span className="text-sm text-slate-400">Loading assessment...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorView({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="glass-card w-full max-w-md text-center p-10">
+        <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-5 border border-red-500/30">
+          <AlertCircle className="w-8 h-8 text-red-400" />
+        </div>
+        <h2 className="text-xl font-bold mb-2 text-slate-100">Failed to Load</h2>
+        <p className="text-sm text-slate-400 mb-6">{message}</p>
+        <Link href="/portal">
+          <Button className="glow-button" data-testid="button-error-back">
+            <Home className="w-4 h-4 mr-1.5" />
+            Return to Portal
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function SummaryView({
+  quiz,
+  questions,
+  answers,
+  onBack,
+}: {
+  quiz: SomaQuiz;
+  questions: StudentQuestion[];
+  answers: Record<number, string>;
+  onBack: () => void;
+}) {
+  const answeredCount = Object.keys(answers).length;
+  const totalMarks = questions.reduce((s, q) => s + q.marks, 0);
+
+  return (
+    <div className="min-h-screen bg-background px-4 py-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="glass-card p-8 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center border border-violet-500/30">
+              <BookOpen className="w-5 h-5 text-violet-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold gradient-text" data-testid="text-summary-title">Assessment Summary</h2>
+              <p className="text-xs text-slate-400">{quiz.title}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10 text-center">
+              <p className="text-2xl font-bold text-violet-300" data-testid="text-summary-answered">{answeredCount}</p>
+              <p className="text-xs text-slate-400">Answered</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10 text-center">
+              <p className="text-2xl font-bold text-slate-300" data-testid="text-summary-total">{questions.length}</p>
+              <p className="text-xs text-slate-400">Total</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10 text-center">
+              <p className="text-2xl font-bold text-cyan-300" data-testid="text-summary-marks">{totalMarks}</p>
+              <p className="text-xs text-slate-400">Marks</p>
+            </div>
+          </div>
+
+          <div className="space-y-2 mb-6">
+            {questions.map((q, idx) => (
+              <div
+                key={q.id}
+                className="flex items-center gap-3 bg-white/[0.03] rounded-lg p-3 border border-white/5"
+              >
+                <span className="text-xs font-mono text-slate-500 w-6 text-right">{idx + 1}</span>
+                {answers[q.id] ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <Circle className="w-4 h-4 text-slate-600 shrink-0" />
+                )}
+                <span className="text-sm text-slate-300 truncate flex-1">
+                  {q.stem.slice(0, 60)}{q.stem.length > 60 ? "..." : ""}
+                </span>
+                <Badge className={`text-xs ${answers[q.id] ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-white/5 text-slate-500 border-white/10"}`}>
+                  [{q.marks}]
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 glow-button-outline"
+            onClick={onBack}
+            data-testid="button-summary-back"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1.5" />
+            Review Answers
+          </Button>
+          <Button
+            className="flex-1 glow-button"
+            disabled
+            data-testid="button-summary-submit"
+          >
+            <Send className="w-4 h-4 mr-1.5" />
+            Submit (Coming Soon)
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function SomaQuizEngine() {
+  const params = useParams<{ id: string }>();
+  const quizId = parseInt(params.id || "0");
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [showSummary, setShowSummary] = useState(false);
+
+  const { data: quiz, isLoading: quizLoading, error: quizError } = useQuery<SomaQuiz>({
+    queryKey: ["/api/soma/quizzes", quizId],
+    queryFn: async () => {
+      const res = await fetch(`/api/soma/quizzes/${quizId}`);
+      if (!res.ok) throw new Error("Failed to load quiz");
+      return res.json();
+    },
+    enabled: quizId > 0,
+  });
+
+  const { data: questions, isLoading: questionsLoading, error: questionsError } = useQuery<StudentQuestion[]>({
+    queryKey: ["/api/soma/quizzes", quizId, "questions"],
+    queryFn: async () => {
+      const res = await fetch(`/api/soma/quizzes/${quizId}/questions`);
+      if (!res.ok) throw new Error("Failed to load questions");
+      return res.json();
+    },
+    enabled: quizId > 0,
+  });
+
+  const isLoading = quizLoading || questionsLoading;
+  const error = quizError || questionsError;
+
+  const currentQuestion = useMemo(() => {
+    if (!questions || questions.length === 0) return null;
+    return questions[currentIndex] || null;
+  }, [questions, currentIndex]);
+
+  const totalMarks = useMemo(() => {
+    if (!questions) return 0;
+    return questions.reduce((s, q) => s + q.marks, 0);
+  }, [questions]);
+
+  const handleSelectAnswer = (questionId: number, option: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: option }));
+  };
+
+  const handleNext = () => {
+    if (!questions) return;
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((i) => i + 1);
+    } else {
+      setShowSummary(true);
+    }
+  };
+
+  const handleSkip = () => {
+    if (!questions) return;
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((i) => i + 1);
+    } else {
+      setShowSummary(true);
+    }
+  };
+
+  const handleDotClick = (idx: number) => {
+    setCurrentIndex(idx);
+    setShowSummary(false);
+  };
+
+  if (isLoading) return <LoadingSkeleton />;
+  if (error) return <ErrorView message={(error as Error).message} />;
+  if (!quiz || !questions || questions.length === 0) {
+    return <ErrorView message="No questions found for this assessment." />;
+  }
+
+  if (showSummary) {
+    return (
+      <SummaryView
+        quiz={quiz}
+        questions={questions}
+        answers={answers}
+        onBack={() => setShowSummary(false)}
+      />
+    );
+  }
+
+  if (!currentQuestion) return <ErrorView message="Question not found." />;
+
+  const selectedAnswer = answers[currentQuestion.id];
+  const answeredCount = Object.keys(answers).length;
+
+  return (
+    <div className="min-h-screen bg-background px-4 py-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <Link href="/portal">
+            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" data-testid="button-soma-back">
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Exit
+            </Button>
+          </Link>
+          <div className="flex items-center gap-3">
+            <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30" data-testid="badge-progress">
+              {currentIndex + 1} / {questions.length}
+            </Badge>
+            <Badge className="bg-white/5 text-slate-400 border-white/10" data-testid="badge-marks">
+              {totalMarks} marks
+            </Badge>
+          </div>
+        </div>
+
+        <div className="glass-card p-8 mb-6" style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(12px)" }}>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/30 to-cyan-500/20 flex items-center justify-center border border-violet-500/30 text-lg font-bold text-violet-300">
+                {currentIndex + 1}
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Question {currentIndex + 1} of {questions.length}</p>
+                <p className="text-xs text-violet-400/70">{currentQuestion.marks} mark{currentQuestion.marks > 1 ? "s" : ""}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-lg text-slate-100 leading-relaxed mb-2" data-testid="text-question-stem">
+            {renderLatex(currentQuestion.stem)}
+          </div>
+        </div>
+
+        <div className="grid gap-3 mb-8">
+          {currentQuestion.options.map((option, idx) => {
+            const letter = String.fromCharCode(65 + idx);
+            const isSelected = selectedAnswer === option;
+            return (
+              <button
+                key={idx}
+                onClick={() => handleSelectAnswer(currentQuestion.id, option)}
+                className={`w-full text-left p-5 rounded-2xl border transition-all duration-200 ${
+                  isSelected
+                    ? "bg-violet-500/15 border-violet-500/40 shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+                    : "bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-white/20"
+                }`}
+                data-testid={`button-option-${idx}`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-semibold ${
+                    isSelected
+                      ? "bg-violet-500/30 text-violet-200 border border-violet-500/50"
+                      : "bg-white/5 text-slate-500 border border-white/10"
+                  }`}>
+                    {letter}
+                  </div>
+                  <div className="text-sm text-slate-200 pt-1 flex-1">
+                    {renderLatex(option)}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-3 mb-8">
+          <Button
+            variant="outline"
+            className="flex-1 glow-button-outline"
+            onClick={handleSkip}
+            data-testid="button-skip"
+          >
+            <SkipForward className="w-4 h-4 mr-1.5" />
+            Skip
+          </Button>
+          {currentIndex === questions.length - 1 ? (
+            <Button
+              className="flex-1 glow-button"
+              onClick={() => setShowSummary(true)}
+              data-testid="button-submit-exam"
+            >
+              <Send className="w-4 h-4 mr-1.5" />
+              Review & Submit
+            </Button>
+          ) : (
+            <Button
+              className="flex-1 glow-button"
+              onClick={handleNext}
+              data-testid="button-next"
+            >
+              Next Question
+              <ChevronRight className="w-4 h-4 ml-1.5" />
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-center gap-2 flex-wrap" data-testid="nav-dots">
+          {questions.map((q, idx) => (
+            <button
+              key={q.id}
+              onClick={() => handleDotClick(idx)}
+              className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                idx === currentIndex
+                  ? "bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.6)] scale-125"
+                  : answers[q.id]
+                    ? "bg-emerald-500/60"
+                    : "bg-white/15 hover:bg-white/30"
+              }`}
+              data-testid={`dot-question-${idx}`}
+            />
+          ))}
+        </div>
+
+        <div className="text-center mt-4">
+          <p className="text-xs text-slate-500">
+            {answeredCount} of {questions.length} answered
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

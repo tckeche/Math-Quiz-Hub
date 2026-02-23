@@ -1,9 +1,10 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { questionUploadSchema, submissions as submissionsTable } from "@shared/schema";
+import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -12,6 +13,7 @@ import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
+import { generateAuditedQuiz } from "./services/aiPipeline";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
@@ -574,6 +576,91 @@ ${JSON.stringify(breakdown, null, 2)}`;
       const url = `/uploads/${req.file.filename}`;
       res.json({ url });
     });
+  });
+
+  const somaGenerateSchema = z.object({
+    topic: z.string().min(1, "topic is required"),
+    title: z.string().optional(),
+    curriculumContext: z.string().optional(),
+  });
+
+  app.post("/api/soma/generate", requireAdmin, async (req, res) => {
+    try {
+      const parsed = somaGenerateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const { topic, title, curriculumContext } = parsed.data;
+      const quizTitle = title || `${topic} Quiz`;
+
+      const result = await generateAuditedQuiz(topic);
+
+      const quiz = await storage.createSomaQuiz({
+        title: quizTitle,
+        topic,
+        curriculumContext: curriculumContext || null,
+        status: "draft",
+      });
+
+      const insertedQuestions = await storage.createSomaQuestions(
+        result.questions.map((q) => ({
+          quizId: quiz.id,
+          stem: q.stem,
+          options: q.options,
+          correctAnswer: q.correct_answer,
+          explanation: q.explanation || null,
+          marks: q.marks,
+        }))
+      );
+
+      res.json({
+        quiz,
+        questions: insertedQuestions,
+        pipeline: {
+          stages: ["Claude 3.5 Sonnet → Generation", "DeepSeek R1 → Math Audit", "Gemini 2.5 Flash → Syllabus Audit"],
+          totalQuestions: insertedQuestions.length,
+        },
+      });
+    } catch (err: any) {
+      console.error("[SOMA] Generation failed:", err);
+      res.status(500).json({ message: `Pipeline failed: ${err.message}` });
+    }
+  });
+
+  app.get("/api/soma/quizzes", async (_req, res) => {
+    try {
+      const allQuizzes = await storage.getSomaQuizzes();
+      res.json(allQuizzes);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/soma/quizzes/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid quiz ID" });
+
+      const quiz = await storage.getSomaQuiz(id);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      res.json(quiz);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/soma/quizzes/:id/questions", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid quiz ID" });
+
+      const allQuestions = await storage.getSomaQuestionsByQuizId(id);
+      const sanitized = allQuestions.map(({ correctAnswer, explanation, ...rest }) => rest);
+      res.json(sanitized);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   return httpServer;
