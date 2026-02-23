@@ -1,0 +1,39 @@
+Premium Landing Page (/) with Gradient Background
+
+Please build a stunning, immersive landing page for the root route (/). We are using a pure CSS gradient background to match our futuristic dark theme.
+
+1. Futuristic Gradient Background (The Foundation):
+
+Create a full-screen container (min-h-screen w-full relative overflow-hidden flex flex-col items-center justify-center px-4).
+
+Set the background to a deep space navy with a subtle, glowing purple radial gradient at the top center:
+
+Apply these exact Tailwind classes: bg-[#0A0F1C] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(139,92,246,0.25),rgba(10,15,28,1))]
+
+This creates a soft, premium "tech spotlight" effect without needing an external image file.
+
+2. The Typography (Center Stage):
+
+Ensure the text elements are stacked cleanly in the center (text-center z-10 relative).
+
+The Welcome: <p className="text-sm md:text-base font-semibold tracking-[0.3em] text-violet-300 uppercase mb-4">Welcome to SOMA</p>
+
+The Main Title: <h1 className="text-4xl md:text-6xl font-black text-[#DDD6FE] drop-shadow-[0_0_20px_rgba(139,92,246,0.3)] tracking-tight mb-6">A Proprietary Assessment Platform.</h1>
+
+The Subtitle: <p className="text-sm md:text-lg font-light tracking-[0.2em] text-slate-400 uppercase">By Melania Calvin Educational Consultants</p>
+
+3. The Entry Actions:
+
+Below the text, provide the entry points.
+
+Primary Button: "Enter Student Portal" (Routes to the quiz selection/entry screen).
+
+Classes: bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-[0_0_20px_rgba(139,92,246,0.6)] text-white font-medium rounded-full px-8 py-4 mt-10 transition-all block w-fit mx-auto
+
+Secondary Link: "Admin Access" (Routes to /admin).
+
+Classes: text-xs text-slate-500 hover:text-violet-400 mt-6 tracking-widest uppercase transition-colors block mx-auto
+
+4. Routing:
+
+Ensure React Router is configured so that / points to this new Landing Page, and the previous quiz selection or login interfaces are properly nested under their respective routes.

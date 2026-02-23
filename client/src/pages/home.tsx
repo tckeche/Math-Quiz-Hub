@@ -19,15 +19,17 @@ export default function Home() {
       <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-12 w-auto object-contain" />
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight gradient-text drop-shadow-[0_0_15px_rgba(139,92,246,0.5)]" data-testid="text-site-title">
-                  SOMA
-                </h1>
-                <p className="text-xs text-slate-400 mt-0.5">An Assessment Portal by MCEC</p>
+            <Link href="/">
+              <div className="flex items-center gap-4 cursor-pointer">
+                <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-12 w-auto object-contain" />
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight gradient-text drop-shadow-[0_0_15px_rgba(139,92,246,0.5)]" data-testid="text-site-title">
+                    SOMA
+                  </h1>
+                  <p className="text-xs text-slate-400 mt-0.5">An Assessment Portal by MCEC</p>
+                </div>
               </div>
-            </div>
+            </Link>
             <Link href="/admin">
               <Button variant="outline" size="sm" className="glow-button-outline text-sm" data-testid="link-admin">
                 <ShieldCheck className="w-4 h-4 mr-1.5" />

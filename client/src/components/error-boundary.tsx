@@ -33,7 +33,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
               <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
               <h2 className="font-serif text-xl font-bold">{this.props.title || "Something went wrong"}</h2>
               <p className="text-sm text-muted-foreground mt-2">Please refresh the page and try again.</p>
-              <Link href="/">
+              <Link href="/portal">
                 <Button variant="outline" className="mt-4">
                   <Home className="w-4 h-4 mr-1.5" />
                   Return Home

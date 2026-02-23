@@ -48,7 +48,7 @@ function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
         <p className="text-slate-400 mb-6">
           You have already submitted your answers for "{quizTitle}". Each student is allowed only one attempt.
         </p>
-        <Link href="/">
+        <Link href="/portal">
           <Button className="glow-button" data-testid="button-back-home-taken">
             <Home className="w-4 h-4 mr-1.5" />
             Return Home
@@ -89,7 +89,7 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
               <p className="text-sm text-slate-400 mt-2">
                 This assessment closed on {new Date(quiz.dueDate).toLocaleDateString()}.
               </p>
-              <Link href="/">
+              <Link href="/portal">
                 <Button className="glow-button-outline mt-4" data-testid="button-back-home-closed">
                   <Home className="w-4 h-4 mr-1.5" />
                   Return Home
@@ -261,7 +261,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
           <p className="text-slate-400 mb-6">
             Your answers have been recorded. Thank you for completing the assessment.
           </p>
-          <Link href="/">
+          <Link href="/portal">
             <Button className="glow-button" data-testid="button-back-home">
               <Home className="w-4 h-4 mr-1.5" />
               Return Home
@@ -556,7 +556,7 @@ export default function QuizPage() {
           <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
           <h2 className="text-xl font-bold text-slate-100">Quiz Not Found</h2>
           <p className="text-sm text-slate-400 mt-2">This assessment does not exist.</p>
-          <Link href="/">
+          <Link href="/portal">
             <Button className="glow-button-outline mt-4" data-testid="button-back-home-notfound">
               <Home className="w-4 h-4 mr-1.5" />
               Return Home
