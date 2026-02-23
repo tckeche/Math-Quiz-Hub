@@ -237,7 +237,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
   }, [answers, answersKey]);
 
   const submitMutation = useMutation({
-    mutationFn: async (data: { studentId: number; quizId: number; answers: Record<number, string> }) => {
+    mutationFn: async (data: { studentId: number; quizId: number; answers: Record<number, string>; startTime: number }) => {
       const res = await apiRequest("POST", "/api/submissions", data);
       return res.json();
     },
@@ -258,8 +258,12 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
   const handleSubmit = useCallback(() => {
     if (submittingRef.current) return;
     submittingRef.current = true;
-    submitMutation.mutate({ studentId, quizId: quiz.id, answers });
-  }, [studentId, quiz.id, answers, submitMutation]);
+    const cleanAnswers: Record<number, string> = {};
+    for (const [k, v] of Object.entries(answers)) {
+      cleanAnswers[Number(k)] = v != null ? v : "";
+    }
+    submitMutation.mutate({ studentId, quizId: quiz.id, answers: cleanAnswers, startTime });
+  }, [studentId, quiz.id, answers, startTime, submitMutation]);
 
   const handleTimeUp = useCallback(() => {
     handleSubmit();
@@ -280,7 +284,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
   }
 
   if (showSummary) {
-    const answeredCount = Object.keys(answers).length;
+    const answeredCount = Object.values(answers).filter((v) => v != null && v !== "").length;
     return (
       <div className="min-h-screen bg-background">
         <div className="sticky top-0 z-50 bg-white/[0.03] backdrop-blur-lg border-b border-white/5 px-4 py-3">
@@ -300,7 +304,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
             <div>
               <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2 mb-6">
                 {questions.map((q, idx) => {
-                  const isAnswered = answers[q.id] !== undefined;
+                  const isAnswered = answers[q.id] != null && answers[q.id] !== "";
                   return (
                     <button
                       key={q.id}
@@ -438,7 +442,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                 className={`w-2.5 h-2.5 rounded-full transition-colors ${
                   idx === currentIndex
                     ? "bg-violet-500 shadow-[0_0_6px_rgba(139,92,246,0.6)]"
-                    : answers[q.id] !== undefined
+                    : (answers[q.id] != null && answers[q.id] !== "")
                     ? "bg-violet-500/40"
                     : "bg-white/10"
                 }`}
@@ -452,11 +456,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
               <Button
                 className="glow-button-outline"
                 onClick={() => {
-                  setAnswers((prev) => {
-                    const copy = { ...prev };
-                    delete copy[question.id];
-                    return copy;
-                  });
+                  setAnswers((prev) => ({ ...prev, [question.id]: null as any }));
                   setCurrentIndex((i) => Math.min(questions.length - 1, i + 1));
                 }}
                 data-testid="button-skip-question"

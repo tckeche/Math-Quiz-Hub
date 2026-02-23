@@ -181,7 +181,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/students", async (req, res) => {
     const { firstName, lastName } = req.body;
     if (!firstName || !lastName) return res.status(400).json({ message: "First and last name required" });
-    const student = await storage.createStudent({ firstName, lastName });
+    const student = await storage.findOrCreateStudent({ firstName, lastName });
     res.json(student);
   });
 
@@ -201,8 +201,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/submissions", async (req, res) => {
-    const { studentId, quizId, answers } = req.body;
+    const { studentId, quizId, answers, startTime } = req.body;
     if (!studentId || !quizId) return res.status(400).json({ message: "studentId and quizId required" });
+    if (typeof startTime !== "number" || !Number.isFinite(startTime)) {
+      return res.status(400).json({ message: "startTime is required" });
+    }
+
+    const quiz = await storage.getQuiz(quizId);
+    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+
+    const now = Date.now();
+    if (startTime > now + 5000) {
+      return res.status(400).json({ message: "Submission rejected: invalid start time" });
+    }
+    const elapsed = (now - startTime) / 1000;
+    const allowedSeconds = quiz.timeLimitMinutes * 60 + 30;
+    if (elapsed > allowedSeconds) {
+      return res.status(400).json({ message: "Submission rejected: time limit exceeded" });
+    }
 
     const allQuestions = await storage.getQuestionsByQuizId(quizId);
     let totalScore = 0;

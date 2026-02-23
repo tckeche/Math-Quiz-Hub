@@ -22,7 +22,7 @@ export interface IStorage {
   getQuestionsByQuizId(quizId: number): Promise<Question[]>;
   deleteQuestion(id: number): Promise<void>;
 
-  createStudent(student: InsertStudent): Promise<Student>;
+  findOrCreateStudent(student: InsertStudent): Promise<Student>;
   getStudent(id: number): Promise<Student | undefined>;
   findStudentByName(firstName: string, lastName: string): Promise<Student | undefined>;
 
@@ -74,13 +74,19 @@ class DatabaseStorage implements IStorage {
     await this.database.delete(questions).where(eq(questions.id, id));
   }
 
-  async createStudent(student: InsertStudent): Promise<Student> {
-    const sanitized = {
-      firstName: sanitizeName(student.firstName),
-      lastName: sanitizeName(student.lastName),
-    };
-    const [result] = await this.database.insert(students).values(sanitized).returning();
-    return result;
+  async findOrCreateStudent(student: InsertStudent): Promise<Student> {
+    const fn = sanitizeName(student.firstName);
+    const ln = sanitizeName(student.lastName);
+    const existing = await this.findStudentByName(fn, ln);
+    if (existing) return existing;
+    try {
+      const [result] = await this.database.insert(students).values({ firstName: fn, lastName: ln }).returning();
+      return result;
+    } catch {
+      const fallback = await this.findStudentByName(fn, ln);
+      if (fallback) return fallback;
+      throw new Error("Failed to create or find student");
+    }
   }
 
   async getStudent(id: number): Promise<Student | undefined> {
@@ -102,13 +108,15 @@ class DatabaseStorage implements IStorage {
   }
 
   async getSubmissionsByQuizId(quizId: number): Promise<(Submission & { student: Student })[]> {
-    const subs = await this.database.select().from(submissions).where(eq(submissions.quizId, quizId));
-    const results: (Submission & { student: Student })[] = [];
-    for (const sub of subs) {
-      const [student] = await this.database.select().from(students).where(eq(students.id, sub.studentId));
-      if (student) results.push({ ...sub, student });
-    }
-    return results;
+    const rows = await this.database
+      .select({
+        submission: submissions,
+        student: students,
+      })
+      .from(submissions)
+      .innerJoin(students, eq(submissions.studentId, students.id))
+      .where(eq(submissions.quizId, quizId));
+    return rows.map((r) => ({ ...r.submission, student: r.student }));
   }
 
 
@@ -194,11 +202,15 @@ class MemoryStorage implements IStorage {
     this.questions = this.questions.filter((q) => q.id !== id);
   }
 
-  async createStudent(student: InsertStudent): Promise<Student> {
+  async findOrCreateStudent(student: InsertStudent): Promise<Student> {
+    const fn = sanitizeName(student.firstName);
+    const ln = sanitizeName(student.lastName);
+    const existing = await this.findStudentByName(fn, ln);
+    if (existing) return existing;
     const created: Student = {
       id: this.studentId++,
-      firstName: sanitizeName(student.firstName),
-      lastName: sanitizeName(student.lastName),
+      firstName: fn,
+      lastName: ln,
     };
     this.students.push(created);
     return created;

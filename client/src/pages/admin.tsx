@@ -720,7 +720,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
       `${s.student.firstName} ${s.student.lastName}`,
       s.totalScore.toString(),
       s.maxPossibleScore.toString(),
-      ((s.totalScore / s.maxPossibleScore) * 100).toFixed(1) + "%",
+      (s.maxPossibleScore > 0 ? ((s.totalScore / s.maxPossibleScore) * 100).toFixed(1) : "0.0") + "%",
       format(new Date(s.submittedAt), "PPP p"),
     ]);
     const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
