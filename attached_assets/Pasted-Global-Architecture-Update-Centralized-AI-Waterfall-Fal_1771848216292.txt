@@ -1,0 +1,29 @@
+Global Architecture Update: Centralized AI Waterfall Fallback Service
+
+Instructions:
+
+Context Review: Review all files in the server/ directory (specifically routes.ts and services/aiPipeline.ts). Identify every place where an AI SDK (Google/Gemini, Anthropic, or OpenAI) is currently being called.
+
+Create the Central Utility: Create a new file server/services/aiOrchestrator.ts.
+
+The Universal Function: Build an exported async function generateWithFallback(systemPrompt: string, userPrompt: string, expectedSchema?: any).
+
+This function must implement a 3-tier try/catch waterfall.
+
+Tier 1 (Anthropic): Attempt to use claude-3-5-sonnet-latest. If expectedSchema is provided, use Anthropic's tool-calling/JSON mode to enforce the schema. If it throws a rate-limit/500 error, console.warn("Claude failed, falling back to DeepSeek") and proceed to Tier 2.
+
+Tier 2 (DeepSeek): Attempt to use the OpenAI SDK with baseURL: "https://api.deepseek.com" and model deepseek-chat. If expectedSchema is provided, use response_format: { type: "json_object" } and append to the system prompt: "You must output valid JSON matching this schema. Write 'json' in your response." If it fails, console.warn("DeepSeek failed, falling back to OpenAI") and proceed to Tier 3.
+
+Tier 3 (OpenAI Failsafe): Attempt standard OpenAI SDK using gpt-4o-mini with structured outputs if a schema is provided.
+
+Failure State: If all three fail, throw a standardized new Error("All AI providers are currently unavailable due to high traffic.").
+
+Global Refactoring: >    - Go back to your routes (/api/copilot, /api/generate-questions, /api/soma/submit, etc.).
+
+Strip out the individual, hardcoded SDK calls (remove the direct Gemini/Claude calls).
+
+Replace them with calls to our new generateWithFallback(systemPrompt, userPrompt, schema) utility.
+
+Ensure the routes still properly return the data to the frontend React components exactly as they did before.
+
+Goal: The entire application must now rely on this single, resilient waterfall service. No AI feature should ever crash due to a single provider's rate limit.
