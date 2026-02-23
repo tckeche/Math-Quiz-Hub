@@ -19,6 +19,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/portal" component={Home} />
       <Route path="/admin" component={AdminPage} />
+      <Route path="/admin/builder/:id" component={BuilderPage} />
       <Route path="/admin/builder" component={BuilderPage} />
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
       <Route path="/quiz/:id" component={QuizPage} />

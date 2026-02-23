@@ -1,7 +1,7 @@
 # Math MCQ Quiz Generation & Assessment Platform
 
 ## Overview
-A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students can take timed, interactive multiple-choice math quizzes with LaTeX-rendered mathematical notation. Admins can create quizzes, upload JSON question banks, generate questions from PDFs via Google Gemini AI, and view/export results with AI-powered student analysis.
+A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students can take timed, interactive multiple-choice math quizzes with LaTeX-rendered mathematical notation. Admins create and edit quizzes via a unified builder UI with AI copilot chat, PDF-based question generation, and manual entry. Results viewable with AI-powered student analysis.
 
 ## Tech Stack
 - **Frontend:** React (Vite), Tailwind CSS, Shadcn UI, react-katex for LaTeX rendering, DOMPurify for XSS protection
@@ -12,7 +12,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 ## Project Architecture
 
 ### Database Schema
-- `quizzes` - id, title, time_limit_minutes, due_date, created_at
+- `quizzes` - id, title, time_limit_minutes, due_date, syllabus, level, subject, created_at
 - `questions` - id, quiz_id, prompt_text (LaTeX), image_url, options (JSON array), correct_answer, marks_worth
 - `students` - id, first_name, last_name (sanitized to lowercase, trimmed)
 - `submissions` - id, student_id, quiz_id, total_score, max_possible_score, answers_breakdown (JSON), submitted_at
@@ -24,7 +24,8 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `server/routes.ts` - All API routes including AI endpoints
 - `server/seed.ts` - Database seeding with sample quizzes
 - `client/src/pages/home.tsx` - Homepage with quiz listing
-- `client/src/pages/admin.tsx` - Admin dashboard (login, quiz management, question upload, PDF generation, AI analysis)
+- `client/src/pages/admin.tsx` - Admin dashboard (login, quiz listing, quiz detail view with results, PDF generation, AI analysis)
+- `client/src/pages/builder.tsx` - Unified quiz builder/editor: 2-column layout with quiz params (left) and AI copilot + questions (right). Supports create (`/admin/builder`) and edit (`/admin/builder/:id`) modes.
 - `client/src/pages/quiz.tsx` - Student quiz interface (entry gate, exam view, timer, submission, single-attempt enforcement)
 
 ### API Endpoints
@@ -35,6 +36,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/check-submission` - Check if student already submitted (single-attempt enforcement)
 - `POST /api/submissions` - Submit quiz answers (auto-scored)
 - `GET/POST /api/admin/quizzes` - Admin quiz management
+- `PUT /api/admin/quizzes/:id` - Update quiz metadata (title, time, due date, syllabus, level, subject)
 - `POST /api/admin/quizzes/:id/questions` - Upload questions
 - `DELETE /api/admin/questions/:id` - Delete question
 - `GET /api/admin/quizzes/:id/submissions` - View submissions
@@ -50,7 +52,6 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - One question at a time with navigation dots
 - Summary screen before final submission
 - CSV export for results
-- JSON question upload (file or paste) with error handling
 - **AI PDF Quiz Generation (Mixture of Experts)**: Upload math exam PDF → 4-stage pipeline: Gemini 2.5 Flash (PDF vision extraction) → DeepSeek R1 (mathematical reasoning/solving) → Claude Sonnet (LaTeX formatting) → GPT-4o (JSON schema validation) → Review & Edit stage → Publish. Uses SSE streaming with real-time stage progress UI. Route timeout: 120s.
 - **Review & Edit Stage**: Edit prompt text, options, correct answer, marks; attach/remove images per question; remove individual questions
 - **AI Student Analysis**: Per-submission "Analyze with AI" button → identifies weak areas and provides actionable feedback (HTML sanitized with DOMPurify)

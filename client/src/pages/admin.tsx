@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz, Question, Submission, Student } from "@shared/schema";
@@ -12,10 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Plus, Upload, FileJson, Eye, Download, ArrowLeft, Trash2,
+  Plus, Eye, Download, ArrowLeft, Trash2,
   BookOpen, Clock, Calendar, Users, CheckCircle2, AlertCircle, LogOut,
   FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, BarChart3, MessageSquare,
   Scan, Search
@@ -52,20 +51,6 @@ interface GeneratedQuestion {
   correct_answer: string;
   marks_worth: number;
   image_url?: string | null;
-}
-
-function normalizeJsonPayload(text: string) {
-  const cleaned = text
-    .replace(/```json\s*/gi, "")
-    .replace(/```/g, "")
-    .trim();
-
-  const parsed = JSON.parse(cleaned);
-  if (Array.isArray(parsed)) return parsed;
-  if (parsed && Array.isArray((parsed as { questions?: unknown }).questions)) {
-    return (parsed as { questions: unknown[] }).questions;
-  }
-  return [parsed];
 }
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
@@ -178,93 +163,6 @@ function CreateQuizForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function QuestionUploader({ quizId, onDone }: { quizId: number; onDone: () => void }) {
-  const { toast } = useToast();
-  const [jsonText, setJsonText] = useState("");
-  const [parseError, setParseError] = useState("");
-
-  const uploadMutation = useMutation({
-    mutationFn: async (questions: any[]) =>
-      apiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "questions"] });
-      toast({ title: "Questions uploaded successfully" });
-      setJsonText("");
-      setParseError("");
-      onDone();
-    },
-    onError: (err: Error) => {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const parseAndUpload = useCallback((text: string) => {
-    setParseError("");
-    try {
-      const questions = normalizeJsonPayload(text);
-      uploadMutation.mutate(questions);
-    } catch (err: any) {
-      setParseError(`Invalid JSON: ${err.message}`);
-    }
-  }, [uploadMutation]);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      setJsonText(text);
-    };
-    reader.readAsText(file);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!jsonText.trim()) return;
-    parseAndUpload(jsonText);
-  };
-
-  return (
-    <div className="glass-card p-6">
-      <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-        <Upload className="w-5 h-5 text-violet-400" />
-        Upload Questions (JSON)
-      </h3>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="jsonFile" className="text-slate-300">Upload .json file</Label>
-          <Input id="jsonFile" type="file" accept=".json" onChange={handleFileUpload} className="glass-input" data-testid="input-question-file" />
-        </div>
-        <Separator className="bg-white/5" />
-        <div className="space-y-2">
-          <Label htmlFor="jsonText" className="text-slate-300">Or paste raw JSON</Label>
-          <Textarea
-            id="jsonText"
-            value={jsonText}
-            onChange={(e) => { setJsonText(e.target.value); setParseError(""); }}
-            placeholder={`[\n  {\n    "prompt_text": "Solve \\\\(x^2 + 3x + 2 = 0\\\\)",\n    "options": ["x = -1, -2", "x = 1, 2", "x = -1, 2", "x = 1, -2"],\n    "correct_answer": "x = -1, -2",\n    "marks_worth": 3,\n    "image_url": null\n  }\n]`}
-            className="glass-input min-h-[200px] font-mono text-sm"
-            data-testid="input-question-json"
-          />
-        </div>
-        {parseError && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-300 flex items-start gap-2" data-testid="text-json-error">
-            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-            {parseError}
-          </div>
-        )}
-        <div className="flex gap-2 justify-end">
-          <Button type="button" className="glow-button-outline" onClick={onDone} data-testid="button-cancel-upload">Cancel</Button>
-          <Button type="submit" className="glow-button" disabled={uploadMutation.isPending} data-testid="button-upload-questions">
-            <FileJson className="w-4 h-4 mr-1.5" />
-            {uploadMutation.isPending ? "Uploading..." : "Upload Questions"}
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
-}
 
 const PIPELINE_STAGES = [
   { stage: 1, icon: "scan", label: "Gemini is reading the PDF...", aiName: "Google Gemini" },
@@ -682,7 +580,6 @@ function StudentAnalysis({ submission, questions, quizTitle }: { submission: Sub
 }
 
 function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () => void; onDeleted: () => void }) {
-  const [showUploader, setShowUploader] = useState(false);
   const [showPdfGen, setShowPdfGen] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
@@ -802,16 +699,12 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        <Button className="glow-button-outline text-sm" size="sm" onClick={() => { setShowUploader(!showUploader); setShowPdfGen(false); }} data-testid="button-toggle-uploader">
-          <Upload className="w-4 h-4 mr-1" />
-          Add Questions (JSON)
-        </Button>
-        <Button className="glow-button-outline text-sm" size="sm" onClick={() => { setShowPdfGen(!showPdfGen); setShowUploader(false); }} data-testid="button-toggle-pdf">
+        <Button className="glow-button-outline text-sm" size="sm" onClick={() => setShowPdfGen(!showPdfGen)} data-testid="button-toggle-pdf">
           <FileText className="w-4 h-4 mr-1" />
           Generate from PDF
         </Button>
-        <Link href="/admin/builder">
-          <Button className="glow-button-outline text-sm" size="sm">AI Builder</Button>
+        <Link href={`/admin/builder/${quizId}`}>
+          <Button className="glow-button-outline text-sm" size="sm">Edit in Builder</Button>
         </Link>
         <Link href={`/admin/analytics/${quizId}`}>
           <Button className="glow-button-outline text-sm" size="sm">Class Analytics</Button>
@@ -844,10 +737,6 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           </>
         )}
       </div>
-
-      {showUploader && (
-        <QuestionUploader quizId={quizId} onDone={() => setShowUploader(false)} />
-      )}
 
       {showPdfGen && (
         <PdfQuizGenerator quizId={quizId} onDone={() => setShowPdfGen(false)} />
@@ -932,8 +821,8 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
             </div>
           ) : !questions || questions.length === 0 ? (
             <div className="text-center py-8">
-              <FileJson className="w-10 h-10 mx-auto mb-2 text-slate-600" />
-              <p className="text-sm text-slate-500">No questions added yet. Upload JSON or generate from a PDF.</p>
+              <BookOpen className="w-10 h-10 mx-auto mb-2 text-slate-600" />
+              <p className="text-sm text-slate-500">No questions added yet. Use the Builder to add questions via AI or PDF.</p>
             </div>
           ) : (
             <div className="space-y-3">
