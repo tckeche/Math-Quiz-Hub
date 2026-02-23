@@ -203,13 +203,47 @@ Return the final audited quiz.`;
   return parsed;
 }
 
+async function auditWithDeepSeekSyllabus(deepSeekLogicOutput: QuizResult): Promise<QuizResult> {
+  console.log("[SOMA Pipeline] Step 3 Fallback: DeepSeek - Syllabus audit fallback...");
+  const client = getDeepSeekClient();
+
+  const response = await client.chat.completions.create({
+    model: "deepseek-chat",
+    messages: [
+      {
+        role: "system",
+        content: `You are an expert Cambridge syllabus auditor. Output your response strictly in JSON format matching this exact schema: ${JSON.stringify(zodToJsonSchema(QuizResultSchema))}. Data to audit: ${JSON.stringify(deepSeekLogicOutput)}`,
+      },
+      {
+        role: "user",
+        content: `Review and finalize these quiz questions for syllabus compliance, pedagogical quality, clean LaTeX formatting, and fair marks allocation. Return the audited quiz as json.`,
+      },
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("DeepSeek syllabus fallback returned empty response");
+
+  const parsed = QuizResultSchema.parse(JSON.parse(content));
+  console.log(`[SOMA Pipeline] Step 3 Fallback complete: ${parsed.questions.length} questions finalized via DeepSeek`);
+  return parsed;
+}
+
 export async function generateAuditedQuiz(topic: string): Promise<QuizResult> {
   console.log(`[SOMA Pipeline] Starting multi-agent pipeline for topic: "${topic}"`);
 
   const claudeResult = await step1Claude(topic);
   const deepseekResult = await step2DeepSeek(claudeResult, topic);
-  const geminiResult = await step3Gemini(deepseekResult, topic);
+
+  let finalResult: QuizResult;
+  try {
+    finalResult = await step3Gemini(deepseekResult, topic);
+  } catch (error: any) {
+    console.warn(`[SOMA Pipeline] Gemini failed (${error?.message || "unknown error"}), falling back to DeepSeek...`);
+    finalResult = await auditWithDeepSeekSyllabus(deepseekResult);
+  }
 
   console.log("[SOMA Pipeline] Pipeline complete!");
-  return geminiResult;
+  return finalResult;
 }
