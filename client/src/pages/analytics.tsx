@@ -5,8 +5,10 @@ import DOMPurify from "dompurify";
 import { useReactToPrint } from "react-to-print";
 import type { Quiz, Submission, Student } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
+import { Link } from "wouter";
+import { ArrowLeft, BarChart3, Download, Loader2, Sparkles } from "lucide-react";
 
 export default function AnalyticsPage() {
   const params = useParams<{ id: string }>();
@@ -43,25 +45,77 @@ export default function AnalyticsPage() {
     documentTitle: `${quiz?.title || "class"}-analytics-report`,
   });
 
-  if (sessionLoading) return <div className="p-6">Loading...</div>;
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
+      </div>
+    );
+  }
 
-  if (!authenticated) return <div className="p-6">Please log in via /admin first.</div>;
+  if (!authenticated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="glass-card p-8 text-center">
+          <p className="text-slate-300">Please log in via <Link href="/admin"><a className="text-violet-400 underline">/admin</a></Link> first.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen p-6 space-y-4">
-      <Card>
-        <CardHeader><CardTitle>Class Analytics: {quiz?.title || "..."}</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">Submissions: {submissions?.length ?? 0}</p>
-          <div className="flex gap-2">
-            <Button onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending}>{analyzeMutation.isPending ? "Analyzing..." : "Generate Class AI Analysis"}</Button>
-            <Button variant="outline" onClick={handlePrint} disabled={!analysis}>Download Report as PDF</Button>
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-4">
+          <Link href="/admin">
+            <Button className="glow-button-outline" size="sm" data-testid="button-back-admin">
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back
+            </Button>
+          </Link>
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-violet-400" />
+            <h1 className="text-lg font-bold gradient-text">Class Analytics: {quiz?.title || "..."}</h1>
           </div>
-        </CardContent>
-      </Card>
-      <div ref={reportRef} className="bg-white text-black p-6 rounded border min-h-[200px]">
-        {!analysis ? <p>No report generated yet.</p> : <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }} />}
-      </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        <div className="glass-card p-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">{quiz?.title || "..."}</h2>
+              <p className="text-sm text-slate-400 mt-1">Submissions: {submissions?.length ?? 0}</p>
+            </div>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <Button
+              className="glow-button"
+              onClick={() => analyzeMutation.mutate()}
+              disabled={analyzeMutation.isPending}
+              data-testid="button-generate-analysis"
+            >
+              {analyzeMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Analyzing...</>
+              ) : (
+                <><Sparkles className="w-4 h-4 mr-1.5" />Generate Class AI Analysis</>
+              )}
+            </Button>
+            <Button className="glow-button-outline" onClick={handlePrint} disabled={!analysis} data-testid="button-download-report">
+              <Download className="w-4 h-4 mr-1.5" />
+              Download Report as PDF
+            </Button>
+          </div>
+        </div>
+
+        <div ref={reportRef} className="bg-white text-gray-900 p-8 rounded-2xl min-h-[200px] shadow-lg">
+          {!analysis ? (
+            <p className="text-gray-400 text-center py-8">No report generated yet. Click "Generate Class AI Analysis" to begin.</p>
+          ) : (
+            <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }} />
+          )}
+        </div>
+      </main>
     </div>
   );
 }

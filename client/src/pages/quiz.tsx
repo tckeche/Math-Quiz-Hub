@@ -4,7 +4,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { useParams } from "wouter";
 import type { Quiz, Question } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -41,23 +40,21 @@ function renderLatex(text: string) {
 function AlreadyTakenScreen({ quizTitle }: { quizTitle: string }) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Card className="w-full max-w-md text-center">
-        <CardContent className="py-12">
-          <ShieldAlert className="w-16 h-16 mx-auto text-destructive/60 mb-4" />
-          <h2 className="font-serif text-2xl font-bold mb-2" data-testid="text-already-taken">
-            This test has already been taken.
-          </h2>
-          <p className="text-muted-foreground mb-6">
-            You have already submitted your answers for "{quizTitle}". Each student is allowed only one attempt.
-          </p>
-          <Link href="/">
-            <Button data-testid="button-back-home-taken">
-              <Home className="w-4 h-4 mr-1.5" />
-              Return Home
-            </Button>
-          </Link>
-        </CardContent>
-      </Card>
+      <div className="glass-card w-full max-w-md text-center p-10">
+        <ShieldAlert className="w-16 h-16 mx-auto text-red-400/60 mb-4" />
+        <h2 className="text-2xl font-bold mb-2 gradient-text" data-testid="text-already-taken">
+          This test has already been taken.
+        </h2>
+        <p className="text-slate-400 mb-6">
+          You have already submitted your answers for "{quizTitle}". Each student is allowed only one attempt.
+        </p>
+        <Link href="/">
+          <Button className="glow-button" data-testid="button-back-home-taken">
+            <Home className="w-4 h-4 mr-1.5" />
+            Return Home
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }
@@ -76,26 +73,26 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Card className="w-full max-w-lg">
-        <CardHeader className="text-center pb-4">
-          <div className="w-16 h-16 rounded-md bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <GraduationCap className="w-8 h-8 text-primary" />
+      <div className="glass-card w-full max-w-lg p-8">
+        <div className="text-center pb-6">
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-[0_0_25px_rgba(139,92,246,0.4)]">
+            <GraduationCap className="w-8 h-8 text-white" />
           </div>
-          <CardTitle className="font-serif text-2xl" data-testid="text-quiz-entry-title">{quiz.title}</CardTitle>
-          <div className="flex items-center justify-center gap-4 mt-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{quiz.timeLimitMinutes} minutes</span>
+          <h2 className="text-2xl font-bold gradient-text" data-testid="text-quiz-entry-title">{quiz.title}</h2>
+          <div className="flex items-center justify-center gap-4 mt-3 text-sm text-slate-400">
+            <span className="flex items-center gap-1"><Clock className="w-4 h-4 text-violet-400" />{quiz.timeLimitMinutes} minutes</span>
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div>
           {isClosed ? (
             <div className="text-center py-6">
-              <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
-              <h3 className="font-serif text-lg font-semibold text-destructive">Examination Closed</h3>
-              <p className="text-sm text-muted-foreground mt-2">
+              <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
+              <h3 className="text-lg font-semibold text-red-400">Examination Closed</h3>
+              <p className="text-sm text-slate-400 mt-2">
                 This examination closed on {new Date(quiz.dueDate).toLocaleDateString()}.
               </p>
               <Link href="/">
-                <Button variant="outline" className="mt-4" data-testid="button-back-home-closed">
+                <Button className="glow-button-outline mt-4" data-testid="button-back-home-closed">
                   <Home className="w-4 h-4 mr-1.5" />
                   Return Home
                 </Button>
@@ -103,42 +100,44 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="bg-muted/50 rounded-md p-4 text-sm space-y-1">
-                <p className="font-medium">Instructions:</p>
-                <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
-                  <li>You have <strong>{quiz.timeLimitMinutes} minutes</strong> to complete this examination.</li>
+              <div className="bg-white/5 rounded-xl p-4 text-sm space-y-1 border border-white/5">
+                <p className="font-medium text-slate-200">Instructions:</p>
+                <ul className="list-disc list-inside text-slate-400 space-y-0.5">
+                  <li>You have <strong className="text-slate-200">{quiz.timeLimitMinutes} minutes</strong> to complete this examination.</li>
                   <li>The timer will start as soon as you click "Begin".</li>
-                  <li>If you refresh, the timer will <strong>not</strong> reset.</li>
+                  <li>If you refresh, the timer will <strong className="text-slate-200">not</strong> reset.</li>
                   <li>The examination will auto-submit when time expires.</li>
-                  <li>You are allowed <strong>one attempt only</strong>.</li>
+                  <li>You are allowed <strong className="text-slate-200">one attempt only</strong>.</li>
                 </ul>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
+                  <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
                   <Input
                     id="firstName"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="Enter first name"
+                    className="glass-input"
                     data-testid="input-first-name"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
+                  <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
                   <Input
                     id="lastName"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Enter last name"
+                    className="glass-input"
                     data-testid="input-last-name"
                   />
                 </div>
               </div>
               {error && (
-                <p className="text-sm text-destructive" data-testid="text-entry-error">{error}</p>
+                <p className="text-sm text-red-400" data-testid="text-entry-error">{error}</p>
               )}
-              <Button type="submit" className="w-full" size="lg" disabled={!firstName.trim() || !lastName.trim() || checking} data-testid="button-begin-quiz">
+              <Button type="submit" className="w-full glow-button py-3 text-base" size="lg" disabled={!firstName.trim() || !lastName.trim() || checking} data-testid="button-begin-quiz">
                 {checking ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
@@ -150,8 +149,8 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
               </Button>
             </form>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -183,7 +182,7 @@ function Timer({ startTime, timeLimitMinutes, onTimeUp }: { startTime: number; t
 
   return (
     <div
-      className={`font-mono text-lg font-bold tabular-nums ${isCritical ? "text-destructive animate-pulse" : isLow ? "text-orange-500 dark:text-orange-400" : ""}`}
+      className={`font-mono text-lg font-bold tabular-nums ${isCritical ? "text-red-400 animate-pulse" : isLow ? "text-orange-400" : "text-violet-300"}`}
       data-testid="text-timer"
     >
       {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
@@ -254,23 +253,23 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
   if (submitted) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="py-12">
-            <CheckCircle2 className="w-16 h-16 mx-auto text-primary mb-4" />
-            <h2 className="font-serif text-2xl font-bold mb-2" data-testid="text-submission-success">
-              Examination Submitted
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              Your answers have been recorded. Thank you for completing the examination.
-            </p>
-            <Link href="/">
-              <Button data-testid="button-back-home">
-                <Home className="w-4 h-4 mr-1.5" />
-                Return Home
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <div className="glass-card w-full max-w-md text-center p-10">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4 border border-emerald-500/30">
+            <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2 gradient-text" data-testid="text-submission-success">
+            Examination Submitted
+          </h2>
+          <p className="text-slate-400 mb-6">
+            Your answers have been recorded. Thank you for completing the examination.
+          </p>
+          <Link href="/">
+            <Button className="glow-button" data-testid="button-back-home">
+              <Home className="w-4 h-4 mr-1.5" />
+              Return Home
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -279,21 +278,21 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
     const answeredCount = Object.keys(answers).length;
     return (
       <div className="min-h-screen bg-background">
-        <div className="sticky top-0 z-50 bg-card border-b px-4 py-3">
+        <div className="sticky top-0 z-50 bg-white/[0.03] backdrop-blur-lg border-b border-white/5 px-4 py-3">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
-            <h2 className="font-serif font-bold text-lg">Review & Submit</h2>
+            <h2 className="font-bold text-lg text-slate-100">Review & Submit</h2>
             <Timer startTime={startTime} timeLimitMinutes={quiz.timeLimitMinutes} onTimeUp={handleTimeUp} />
           </div>
         </div>
         <div className="max-w-3xl mx-auto px-4 py-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-serif">Answer Summary</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
+          <div className="glass-card p-6">
+            <div className="mb-4">
+              <h3 className="font-semibold text-lg text-slate-100">Answer Summary</h3>
+              <p className="text-sm text-slate-400 mt-1">
                 {answeredCount} of {questions.length} questions answered
               </p>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div>
               <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2 mb-6">
                 {questions.map((q, idx) => {
                   const isAnswered = answers[q.id] !== undefined;
@@ -301,10 +300,10 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                     <button
                       key={q.id}
                       onClick={() => { setCurrentIndex(idx); setShowSummary(false); }}
-                      className={`w-full aspect-square rounded-md flex items-center justify-center text-sm font-medium border transition-colors ${
+                      className={`w-full aspect-square rounded-lg flex items-center justify-center text-sm font-medium border transition-all ${
                         isAnswered
-                          ? "bg-primary/10 border-primary/30 text-foreground"
-                          : "bg-muted/50 border-border text-muted-foreground"
+                          ? "bg-violet-500/10 border-violet-500/30 text-violet-300"
+                          : "bg-white/5 border-white/10 text-slate-500"
                       }`}
                       data-testid={`button-summary-q-${idx + 1}`}
                     >
@@ -313,27 +312,27 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                   );
                 })}
               </div>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground mb-6">
-                <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-primary" /> Answered</span>
+              <div className="flex items-center gap-4 text-sm text-slate-400 mb-6">
+                <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-violet-400" /> Answered</span>
                 <span className="flex items-center gap-1.5"><Circle className="w-4 h-4" /> Unanswered</span>
               </div>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setShowSummary(false)} data-testid="button-back-to-questions">
+                <Button className="glow-button-outline" onClick={() => setShowSummary(false)} data-testid="button-back-to-questions">
                   <ArrowLeft className="w-4 h-4 mr-1" />
                   Back to Questions
                 </Button>
                 <Button
                   onClick={handleSubmit}
                   disabled={submitMutation.isPending}
-                  className="flex-1"
+                  className="flex-1 glow-button"
                   data-testid="button-final-submit"
                 >
                   <Send className="w-4 h-4 mr-1.5" />
                   {submitMutation.isPending ? "Submitting..." : "Submit Examination"}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -344,33 +343,33 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-50 bg-card border-b px-4 py-3">
+      <div className="sticky top-0 z-50 bg-white/[0.03] backdrop-blur-lg border-b border-white/5 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
-            <span className="font-serif font-bold truncate max-w-[200px]">{quiz.title}</span>
-            <Badge variant="secondary">
+            <span className="font-bold truncate max-w-[200px] text-slate-200">{quiz.title}</span>
+            <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30">
               Q{currentIndex + 1}/{questions.length}
             </Badge>
           </div>
           <div className="flex items-center gap-3">
-            <Clock className="w-4 h-4 text-muted-foreground" />
+            <Clock className="w-4 h-4 text-slate-500" />
             <Timer startTime={startTime} timeLimitMinutes={quiz.timeLimitMinutes} onTimeUp={handleTimeUp} />
           </div>
         </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="mb-8">
+        <div className="glass-card p-6 md:p-8 mb-8">
           <div className="flex items-start justify-between gap-4 mb-6">
-            <h3 className="font-serif text-lg font-semibold" data-testid={`text-question-number-${currentIndex + 1}`}>
+            <h3 className="text-lg font-semibold text-slate-100" data-testid={`text-question-number-${currentIndex + 1}`}>
               Question {currentIndex + 1}
             </h3>
-            <span className="text-sm font-bold font-serif whitespace-nowrap bg-muted/70 px-3 py-1 rounded-md" data-testid={`text-marks-${currentIndex + 1}`}>
+            <span className="text-sm font-bold whitespace-nowrap bg-violet-500/10 text-violet-300 px-3 py-1 rounded-lg border border-violet-500/20" data-testid={`text-marks-${currentIndex + 1}`}>
               [{question.marksWorth}]
             </span>
           </div>
 
-          <div className="font-serif text-base leading-relaxed mb-6" style={{ fontFamily: "'Source Serif 4', 'Times New Roman', serif" }} data-testid={`text-question-prompt-${currentIndex + 1}`}>
+          <div className="text-base leading-relaxed mb-6 text-slate-200" data-testid={`text-question-prompt-${currentIndex + 1}`}>
             {renderLatex(question.promptText)}
           </div>
 
@@ -379,7 +378,7 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
               <img
                 src={question.imageUrl}
                 alt={`Diagram for question ${currentIndex + 1}`}
-                className="max-w-full max-h-96 object-contain rounded-md border"
+                className="max-w-full max-h-96 object-contain rounded-lg border border-white/10"
                 data-testid={`img-question-${currentIndex + 1}`}
               />
             </div>
@@ -392,21 +391,21 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                 <button
                   key={idx}
                   onClick={() => selectAnswer(question.id, option)}
-                  className={`w-full text-left rounded-md border-2 p-4 flex items-start gap-3 transition-colors ${
+                  className={`w-full text-left rounded-xl border-2 p-4 flex items-start gap-3 transition-all duration-200 ${
                     isSelected
-                      ? "border-primary bg-primary/5"
-                      : "border-border"
+                      ? "border-violet-500 bg-violet-500/10 shadow-[0_0_15px_rgba(139,92,246,0.15)]"
+                      : "border-white/10 bg-white/[0.02] hover:border-violet-500/30 hover:bg-white/5"
                   }`}
                   data-testid={`button-option-${optionLabels[idx]}`}
                 >
-                  <span className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 text-sm font-bold ${
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold transition-colors ${
                     isSelected
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
+                      ? "bg-gradient-to-br from-violet-600 to-indigo-600 text-white"
+                      : "bg-white/5 text-slate-400 border border-white/10"
                   }`}>
                     {optionLabels[idx]}
                   </span>
-                  <span className="font-serif pt-1" style={{ fontFamily: "'Source Serif 4', 'Times New Roman', serif" }}>
+                  <span className="pt-1 text-slate-200">
                     {renderLatex(option)}
                   </span>
                 </button>
@@ -415,9 +414,9 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 pt-4 border-t">
+        <div className="flex items-center justify-between gap-3 pt-4">
           <Button
-            variant="outline"
+            className="glow-button-outline"
             onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
             disabled={currentIndex === 0}
             data-testid="button-prev-question"
@@ -433,10 +432,10 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                 onClick={() => setCurrentIndex(idx)}
                 className={`w-2.5 h-2.5 rounded-full transition-colors ${
                   idx === currentIndex
-                    ? "bg-primary"
+                    ? "bg-violet-500 shadow-[0_0_6px_rgba(139,92,246,0.6)]"
                     : answers[q.id] !== undefined
-                    ? "bg-primary/40"
-                    : "bg-muted"
+                    ? "bg-violet-500/40"
+                    : "bg-white/10"
                 }`}
                 data-testid={`button-dot-${idx + 1}`}
               />
@@ -444,12 +443,13 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
           </div>
 
           {currentIndex === questions.length - 1 ? (
-            <Button onClick={() => setShowSummary(true)} data-testid="button-review-submit">
+            <Button className="glow-button" onClick={() => setShowSummary(true)} data-testid="button-review-submit">
               Review & Submit
               <Send className="w-4 h-4 ml-1" />
             </Button>
           ) : (
             <Button
+              className="glow-button"
               onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
               data-testid="button-next-question"
             >
@@ -475,13 +475,11 @@ export default function QuizPage() {
   if (!Number.isFinite(quizId) || quizId <= 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="py-12">
-            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
-            <h2 className="font-serif text-xl font-bold">Invalid Quiz Link</h2>
-            <p className="text-sm text-muted-foreground mt-2">Please use a valid quiz URL.</p>
-          </CardContent>
-        </Card>
+        <div className="glass-card w-full max-w-md text-center p-10">
+          <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
+          <h2 className="text-xl font-bold text-slate-100">Invalid Quiz Link</h2>
+          <p className="text-sm text-slate-400 mt-2">Please use a valid quiz URL.</p>
+        </div>
       </div>
     );
   }
@@ -534,24 +532,21 @@ export default function QuizPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-4 w-full max-w-md px-4">
-          <Skeleton className="h-8 w-3/4 mx-auto" />
-          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-8 w-3/4 mx-auto bg-white/10" />
+          <Skeleton className="h-40 w-full bg-white/10" />
         </div>
       </div>
     );
   }
 
-
   if (quizError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="py-12">
-            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
-            <h2 className="font-serif text-xl font-bold">Unable to Load Quiz</h2>
-            <p className="text-sm text-muted-foreground mt-2">{String((quizError as Error).message || "Please try again.")}</p>
-          </CardContent>
-        </Card>
+        <div className="glass-card w-full max-w-md text-center p-10">
+          <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
+          <h2 className="text-xl font-bold text-slate-100">Unable to Load Quiz</h2>
+          <p className="text-sm text-slate-400 mt-2">{String((quizError as Error).message || "Please try again.")}</p>
+        </div>
       </div>
     );
   }
@@ -559,19 +554,17 @@ export default function QuizPage() {
   if (!quiz) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="py-12">
-            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
-            <h2 className="font-serif text-xl font-bold">Quiz Not Found</h2>
-            <p className="text-sm text-muted-foreground mt-2">This examination does not exist.</p>
-            <Link href="/">
-              <Button variant="outline" className="mt-4" data-testid="button-back-home-notfound">
-                <Home className="w-4 h-4 mr-1.5" />
-                Return Home
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <div className="glass-card w-full max-w-md text-center p-10">
+          <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
+          <h2 className="text-xl font-bold text-slate-100">Quiz Not Found</h2>
+          <p className="text-sm text-slate-400 mt-2">This examination does not exist.</p>
+          <Link href="/">
+            <Button className="glow-button-outline mt-4" data-testid="button-back-home-notfound">
+              <Home className="w-4 h-4 mr-1.5" />
+              Return Home
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -587,13 +580,11 @@ export default function QuizPage() {
   if (questionsError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="py-12">
-            <AlertCircle className="w-12 h-12 mx-auto text-destructive/60 mb-3" />
-            <h2 className="font-serif text-xl font-bold">Unable to Start Quiz</h2>
-            <p className="text-sm text-muted-foreground mt-2">{String((questionsError as Error).message || "Please try again.")}</p>
-          </CardContent>
-        </Card>
+        <div className="glass-card w-full max-w-md text-center p-10">
+          <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
+          <h2 className="text-xl font-bold text-slate-100">Unable to Start Quiz</h2>
+          <p className="text-sm text-slate-400 mt-2">{String((questionsError as Error).message || "Please try again.")}</p>
+        </div>
       </div>
     );
   }
@@ -602,8 +593,8 @@ export default function QuizPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <Skeleton className="h-6 w-48 mx-auto" />
-          <Skeleton className="h-40 w-80" />
+          <Skeleton className="h-6 w-48 mx-auto bg-white/10" />
+          <Skeleton className="h-40 w-80 bg-white/10" />
         </div>
       </div>
     );
@@ -612,13 +603,11 @@ export default function QuizPage() {
   if (questions.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md text-center">
-          <CardContent className="py-12">
-            <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-            <h2 className="font-serif text-xl font-bold">No Questions</h2>
-            <p className="text-sm text-muted-foreground mt-2">This examination has no questions yet.</p>
-          </CardContent>
-        </Card>
+        <div className="glass-card w-full max-w-md text-center p-10">
+          <AlertCircle className="w-12 h-12 mx-auto text-slate-600 mb-3" />
+          <h2 className="text-xl font-bold text-slate-100">No Questions</h2>
+          <p className="text-sm text-slate-400 mt-2">This examination has no questions yet.</p>
+        </div>
       </div>
     );
   }

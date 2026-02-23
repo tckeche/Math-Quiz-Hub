@@ -17,7 +17,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ShieldCheck, Plus, Upload, FileJson, Eye, Download, ArrowLeft, Trash2,
   BookOpen, Clock, Calendar, Users, CheckCircle2, AlertCircle, LogOut,
-  FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, BarChart3, MessageSquare
+  FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, BarChart3, MessageSquare,
+  Scan, Search
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -65,39 +66,38 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="w-14 h-14 rounded-md bg-primary/10 flex items-center justify-center mx-auto mb-3">
-            <ShieldCheck className="w-7 h-7 text-primary" />
+      <div className="glass-card w-full max-w-md p-8">
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-[0_0_25px_rgba(139,92,246,0.4)]">
+            <ShieldCheck className="w-7 h-7 text-white" />
           </div>
-          <CardTitle className="font-serif text-xl">Admin Access</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">Enter the administrator password to continue.</p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                placeholder="Enter admin password"
-                data-testid="input-admin-password"
-              />
+          <h2 className="text-xl font-bold gradient-text">Admin Access</h2>
+          <p className="text-sm text-slate-400 mt-1">Enter the administrator password to continue.</p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="password" className="text-slate-300">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              placeholder="Enter admin password"
+              className="glass-input"
+              data-testid="input-admin-password"
+            />
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 text-red-400 text-sm" data-testid="text-admin-error">
+              <AlertCircle className="w-4 h-4" />
+              {error}
             </div>
-            {error && (
-              <div className="flex items-center gap-2 text-destructive text-sm" data-testid="text-admin-error">
-                <AlertCircle className="w-4 h-4" />
-                {error}
-              </div>
-            )}
-            <Button type="submit" className="w-full" data-testid="button-admin-login" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          )}
+          <Button type="submit" className="w-full glow-button" size="lg" data-testid="button-admin-login" disabled={loading}>
+            {loading ? "Signing in..." : "Sign In"}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -128,35 +128,31 @@ function CreateQuizForm({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-serif text-lg">Create New Quiz</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="glass-card p-6">
+      <h3 className="text-lg font-semibold text-slate-100 mb-4">Create New Quiz</h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="title" className="text-slate-300">Title</Label>
+          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Pure Mathematics Paper 1" className="glass-input" data-testid="input-quiz-title" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Pure Mathematics Paper 1" data-testid="input-quiz-title" />
+            <Label htmlFor="timeLimit" className="text-slate-300">Time Limit (minutes)</Label>
+            <Input id="timeLimit" type="number" min="1" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} className="glass-input" data-testid="input-quiz-time" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="timeLimit">Time Limit (minutes)</Label>
-              <Input id="timeLimit" type="number" min="1" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} data-testid="input-quiz-time" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dueDate">Due Date</Label>
-              <Input id="dueDate" type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} data-testid="input-quiz-due" />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="dueDate" className="text-slate-300">Due Date</Label>
+            <Input id="dueDate" type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="glass-input" data-testid="input-quiz-due" />
           </div>
-          <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel-quiz">Cancel</Button>
-            <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-quiz">
-              {createMutation.isPending ? "Creating..." : "Create Quiz"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+        <div className="flex gap-2 justify-end">
+          <Button type="button" className="glow-button-outline" onClick={onClose} data-testid="button-cancel-quiz">Cancel</Button>
+          <Button type="submit" className="glow-button" disabled={createMutation.isPending} data-testid="button-save-quiz">
+            {createMutation.isPending ? "Creating..." : "Create Quiz"}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -208,55 +204,51 @@ function QuestionUploader({ quizId, onDone }: { quizId: number; onDone: () => vo
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <Upload className="w-5 h-5" />
-          Upload Questions (JSON)
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="jsonFile">Upload .json file</Label>
-            <Input id="jsonFile" type="file" accept=".json" onChange={handleFileUpload} data-testid="input-question-file" />
+    <div className="glass-card p-6">
+      <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
+        <Upload className="w-5 h-5 text-violet-400" />
+        Upload Questions (JSON)
+      </h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="jsonFile" className="text-slate-300">Upload .json file</Label>
+          <Input id="jsonFile" type="file" accept=".json" onChange={handleFileUpload} className="glass-input" data-testid="input-question-file" />
+        </div>
+        <Separator className="bg-white/5" />
+        <div className="space-y-2">
+          <Label htmlFor="jsonText" className="text-slate-300">Or paste raw JSON</Label>
+          <Textarea
+            id="jsonText"
+            value={jsonText}
+            onChange={(e) => { setJsonText(e.target.value); setParseError(""); }}
+            placeholder={`[\n  {\n    "prompt_text": "Solve \\\\(x^2 + 3x + 2 = 0\\\\)",\n    "options": ["x = -1, -2", "x = 1, 2", "x = -1, 2", "x = 1, -2"],\n    "correct_answer": "x = -1, -2",\n    "marks_worth": 3,\n    "image_url": null\n  }\n]`}
+            className="glass-input min-h-[200px] font-mono text-sm"
+            data-testid="input-question-json"
+          />
+        </div>
+        {parseError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-300 flex items-start gap-2" data-testid="text-json-error">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            {parseError}
           </div>
-          <Separator />
-          <div className="space-y-2">
-            <Label htmlFor="jsonText">Or paste raw JSON</Label>
-            <Textarea
-              id="jsonText"
-              value={jsonText}
-              onChange={(e) => { setJsonText(e.target.value); setParseError(""); }}
-              placeholder={`[\n  {\n    "prompt_text": "Solve \\\\(x^2 + 3x + 2 = 0\\\\)",\n    "options": ["x = -1, -2", "x = 1, 2", "x = -1, 2", "x = 1, -2"],\n    "correct_answer": "x = -1, -2",\n    "marks_worth": 3,\n    "image_url": null\n  }\n]`}
-              className="min-h-[200px] font-mono text-sm"
-              data-testid="input-question-json"
-            />
-          </div>
-          {parseError && (
-            <div className="bg-destructive/10 border border-destructive/30 rounded-md p-3 text-sm text-destructive flex items-start gap-2" data-testid="text-json-error">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-              {parseError}
-            </div>
-          )}
-          <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" onClick={onDone} data-testid="button-cancel-upload">Cancel</Button>
-            <Button type="submit" disabled={uploadMutation.isPending} data-testid="button-upload-questions">
-              <FileJson className="w-4 h-4 mr-1.5" />
-              {uploadMutation.isPending ? "Uploading..." : "Upload Questions"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        )}
+        <div className="flex gap-2 justify-end">
+          <Button type="button" className="glow-button-outline" onClick={onDone} data-testid="button-cancel-upload">Cancel</Button>
+          <Button type="submit" className="glow-button" disabled={uploadMutation.isPending} data-testid="button-upload-questions">
+            <FileJson className="w-4 h-4 mr-1.5" />
+            {uploadMutation.isPending ? "Uploading..." : "Upload Questions"}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
 const PIPELINE_STAGES = [
-  { stage: 1, icon: "👁️", label: "Gemini is reading the PDF...", aiName: "Google Gemini" },
-  { stage: 2, icon: "🧠", label: "DeepSeek is solving the mathematics...", aiName: "DeepSeek R1" },
-  { stage: 3, icon: "✍️", label: "Claude is formatting the LaTeX...", aiName: "Claude Sonnet" },
-  { stage: 4, icon: "🔍", label: "ChatGPT is validating the database schema...", aiName: "GPT-4o" },
+  { stage: 1, icon: "scan", label: "Gemini is reading the PDF...", aiName: "Google Gemini" },
+  { stage: 2, icon: "brain", label: "DeepSeek is solving the mathematics...", aiName: "DeepSeek R1" },
+  { stage: 3, icon: "pencil", label: "Claude is formatting the LaTeX...", aiName: "Claude Sonnet" },
+  { stage: 4, icon: "search", label: "ChatGPT is validating the database schema...", aiName: "GPT-4o" },
 ];
 
 function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => void }) {
@@ -391,192 +383,187 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
 
   if (pipelineActive) {
     return (
-      <Card>
-        <CardContent className="py-10" data-testid="pipeline-progress">
-          <div className="max-w-md mx-auto space-y-4">
-            <div className="text-center mb-6">
-              <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary mb-3" />
-              <h3 className="font-serif text-lg font-semibold" data-testid="text-pdf-analyzing">AI Pipeline Active</h3>
-              <p className="text-sm text-muted-foreground mt-1">4 specialized AIs are working in sequence. This may take 45-90 seconds.</p>
-            </div>
-            {PIPELINE_STAGES.map((s) => {
-              const isDone = completedStages.has(s.stage);
-              const isActive = currentStage === s.stage && !isDone;
-              return (
-                <div
-                  key={s.stage}
-                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                    isDone ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800" :
-                    isActive ? "bg-primary/5 border-primary/30 shadow-sm" :
-                    "bg-muted/30 border-muted opacity-50"
-                  }`}
-                  data-testid={`pipeline-stage-${s.stage}`}
-                >
-                  <span className="text-xl flex-shrink-0">{s.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium ${isDone ? "text-green-700 dark:text-green-400" : isActive ? "text-primary" : "text-muted-foreground"}`}>
-                      {s.aiName}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {isDone ? "Complete" : isActive ? stageLabel : s.label.replace("...", "")}
-                    </p>
-                  </div>
-                  <div className="flex-shrink-0">
-                    {isDone ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    ) : isActive ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full border-2 border-muted" />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+      <div className="glass-card p-10" data-testid="pipeline-progress">
+        <div className="max-w-md mx-auto space-y-4">
+          <div className="text-center mb-6">
+            <Loader2 className="w-10 h-10 mx-auto animate-spin text-violet-400 mb-3" />
+            <h3 className="text-lg font-semibold gradient-text" data-testid="text-pdf-analyzing">AI Pipeline Active</h3>
+            <p className="text-sm text-slate-400 mt-1">4 specialized AIs are working in sequence. This may take 45-90 seconds.</p>
           </div>
-        </CardContent>
-      </Card>
+          {PIPELINE_STAGES.map((s) => {
+            const isDone = completedStages.has(s.stage);
+            const isActive = currentStage === s.stage && !isDone;
+            return (
+              <div
+                key={s.stage}
+                className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                  isDone ? "bg-emerald-500/10 border-emerald-500/30" :
+                  isActive ? "bg-violet-500/10 border-violet-500/30 shadow-[0_0_15px_rgba(139,92,246,0.1)]" :
+                  "bg-white/[0.02] border-white/5 opacity-50"
+                }`}
+                data-testid={`pipeline-stage-${s.stage}`}
+              >
+                <span className="flex-shrink-0">
+                    {s.icon === "scan" && <Scan className="w-5 h-5" />}
+                    {s.icon === "brain" && <Brain className="w-5 h-5" />}
+                    {s.icon === "pencil" && <Pencil className="w-5 h-5" />}
+                    {s.icon === "search" && <Search className="w-5 h-5" />}
+                  </span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-500"}`}>
+                    {s.aiName}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {isDone ? "Complete" : isActive ? stageLabel : s.label.replace("...", "")}
+                  </p>
+                </div>
+                <div className="flex-shrink-0">
+                  {isDone ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  ) : isActive ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full border-2 border-white/10" />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     );
   }
 
   if (generatedQuestions) {
     return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <CardTitle className="font-serif text-lg flex items-center gap-2">
-              <Pencil className="w-5 h-5" />
-              Review & Edit ({generatedQuestions.length} questions)
-            </CardTitle>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setGeneratedQuestions(null); }} data-testid="button-discard-generated">
-                Discard
-              </Button>
-              <Button size="sm" onClick={handlePublish} disabled={saveMutation.isPending || generatedQuestions.length === 0} data-testid="button-publish-generated">
-                <Save className="w-4 h-4 mr-1" />
-                {saveMutation.isPending ? "Saving..." : "Save & Publish Quiz"}
-              </Button>
-            </div>
+      <div className="glass-card overflow-hidden">
+        <div className="p-5 border-b border-white/5 flex items-center justify-between gap-2 flex-wrap">
+          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+            <Pencil className="w-5 h-5 text-violet-400" />
+            Review & Edit ({generatedQuestions.length} questions)
+          </h3>
+          <div className="flex gap-2">
+            <Button className="glow-button-outline" size="sm" onClick={() => { setGeneratedQuestions(null); }} data-testid="button-discard-generated">
+              Discard
+            </Button>
+            <Button className="glow-button" size="sm" onClick={handlePublish} disabled={saveMutation.isPending || generatedQuestions.length === 0} data-testid="button-publish-generated">
+              <Save className="w-4 h-4 mr-1" />
+              {saveMutation.isPending ? "Saving..." : "Save & Publish Quiz"}
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {generatedQuestions.map((q, idx) => (
-              <div key={idx} className="border rounded-md p-4 space-y-3" data-testid={`card-generated-q-${idx}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-mono text-sm text-muted-foreground font-medium shrink-0">Q{idx + 1}</span>
-                  <Button variant="outline" size="icon" onClick={() => removeQuestion(idx)} data-testid={`button-remove-generated-${idx}`}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Question Text (LaTeX)</Label>
-                  <Textarea
-                    value={q.prompt_text}
-                    onChange={(e) => updateQuestion(idx, "prompt_text", e.target.value)}
-                    className="font-mono text-sm min-h-[60px]"
-                    data-testid={`input-generated-prompt-${idx}`}
+        </div>
+        <div className="p-5 space-y-6">
+          {generatedQuestions.map((q, idx) => (
+            <div key={idx} className="border border-white/10 rounded-xl p-4 space-y-3 bg-white/[0.02]" data-testid={`card-generated-q-${idx}`}>
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-mono text-sm text-violet-400 font-medium shrink-0">Q{idx + 1}</span>
+                <Button variant="ghost" size="icon" className="text-slate-500 hover:text-red-400" onClick={() => removeQuestion(idx)} data-testid={`button-remove-generated-${idx}`}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-500">Question Text (LaTeX)</Label>
+                <Textarea
+                  value={q.prompt_text}
+                  onChange={(e) => updateQuestion(idx, "prompt_text", e.target.value)}
+                  className="glass-input font-mono text-sm min-h-[60px]"
+                  data-testid={`input-generated-prompt-${idx}`}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Image URL (optional)</Label>
+                <Input
+                  value={q.image_url ?? ""}
+                  onChange={(e) => updateQuestion(idx, "image_url", e.target.value || null)}
+                  placeholder="https://example.com/diagram.png"
+                  className="glass-input font-mono text-sm"
+                  data-testid={`input-generated-image-url-${idx}`}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {q.options.map((opt, optIdx) => (
+                  <div key={optIdx} className="space-y-1">
+                    <Label className="text-xs text-slate-500">Option {String.fromCharCode(65 + optIdx)}</Label>
+                    <Input
+                      value={opt}
+                      onChange={(e) => updateOption(idx, optIdx, e.target.value)}
+                      className="glass-input font-mono text-sm"
+                      data-testid={`input-generated-opt-${idx}-${optIdx}`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-500">Correct Answer</Label>
+                  <Input
+                    value={q.correct_answer}
+                    onChange={(e) => updateQuestion(idx, "correct_answer", e.target.value)}
+                    className="glass-input font-mono text-sm"
+                    data-testid={`input-generated-answer-${idx}`}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Image URL (optional)</Label>
+                  <Label className="text-xs text-slate-500">Marks</Label>
                   <Input
-                    value={q.image_url ?? ""}
-                    onChange={(e) => updateQuestion(idx, "image_url", e.target.value || null)}
-                    placeholder="https://example.com/diagram.png"
-                    className="font-mono text-sm"
-                    data-testid={`input-generated-image-url-${idx}`}
+                    type="number"
+                    min="1"
+                    value={q.marks_worth}
+                    onChange={(e) => updateQuestion(idx, "marks_worth", parseInt(e.target.value) || 1)}
+                    className="glass-input font-mono text-sm"
+                    data-testid={`input-generated-marks-${idx}`}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {q.options.map((opt, optIdx) => (
-                    <div key={optIdx} className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Option {String.fromCharCode(65 + optIdx)}</Label>
-                      <Input
-                        value={opt}
-                        onChange={(e) => updateOption(idx, optIdx, e.target.value)}
-                        className="font-mono text-sm"
-                        data-testid={`input-generated-opt-${idx}-${optIdx}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Correct Answer</Label>
-                    <Input
-                      value={q.correct_answer}
-                      onChange={(e) => updateQuestion(idx, "correct_answer", e.target.value)}
-                      className="font-mono text-sm"
-                      data-testid={`input-generated-answer-${idx}`}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Marks</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={q.marks_worth}
-                      onChange={(e) => updateQuestion(idx, "marks_worth", parseInt(e.target.value) || 1)}
-                      className="font-mono text-sm"
-                      data-testid={`input-generated-marks-${idx}`}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Label htmlFor={`img-upload-${idx}`} className="cursor-pointer">
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground border rounded-md px-3 py-1.5">
-                      <ImagePlus className="w-4 h-4" />
-                      {q.image_url ? "Change Image" : "Attach Image"}
-                    </div>
-                    <input
-                      id={`img-upload-${idx}`}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => { if (e.target.files?.[0]) handleImageUpload(idx, e.target.files[0]); }}
-                      data-testid={`input-generated-image-${idx}`}
-                    />
-                  </Label>
-                  {q.image_url && (
-                    <div className="flex items-center gap-2">
-                      <img src={q.image_url} alt="attached" className="h-10 w-10 object-cover rounded border" />
-                      <Button variant="outline" size="sm" onClick={() => updateQuestion(idx, "image_url", null)}>Remove</Button>
-                    </div>
-                  )}
-                </div>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <div className="flex items-center gap-3">
+                <Label htmlFor={`img-upload-${idx}`} className="cursor-pointer">
+                  <div className="flex items-center gap-1.5 text-sm text-slate-400 border border-white/10 rounded-lg px-3 py-1.5 hover:border-violet-500/30 transition-colors">
+                    <ImagePlus className="w-4 h-4" />
+                    {q.image_url ? "Change Image" : "Attach Image"}
+                  </div>
+                  <input
+                    id={`img-upload-${idx}`}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { if (e.target.files?.[0]) handleImageUpload(idx, e.target.files[0]); }}
+                    data-testid={`input-generated-image-${idx}`}
+                  />
+                </Label>
+                {q.image_url && (
+                  <div className="flex items-center gap-2">
+                    <img src={q.image_url} alt="attached" className="h-10 w-10 object-cover rounded-lg border border-white/10" />
+                    <Button variant="ghost" size="sm" className="text-slate-400 hover:text-red-400" onClick={() => updateQuestion(idx, "image_url", null)}>Remove</Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          Generate Questions from PDF
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Upload a math exam PDF and a 4-stage AI pipeline (Gemini, DeepSeek, Claude, ChatGPT) will
-            extract, solve, format, and validate multiple-choice questions. You'll be able to review and edit before publishing.
-          </p>
-          <div className="space-y-2">
-            <Label htmlFor="pdfFile">Select PDF file</Label>
-            <Input id="pdfFile" type="file" accept=".pdf" onChange={handlePdfUpload} data-testid="input-pdf-upload" />
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" onClick={onDone} data-testid="button-cancel-pdf">Cancel</Button>
-          </div>
+    <div className="glass-card p-6">
+      <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
+        <FileText className="w-5 h-5 text-violet-400" />
+        Generate Questions from PDF
+      </h3>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-400">
+          Upload a math exam PDF and a 4-stage AI pipeline (Gemini, DeepSeek, Claude, ChatGPT) will
+          extract, solve, format, and validate multiple-choice questions. You'll be able to review and edit before publishing.
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="pdfFile" className="text-slate-300">Select PDF file</Label>
+          <Input id="pdfFile" type="file" accept=".pdf" onChange={handlePdfUpload} className="glass-input" data-testid="input-pdf-upload" />
         </div>
-      </CardContent>
-    </Card>
+        <div className="flex justify-end">
+          <Button type="button" className="glow-button-outline" onClick={onDone} data-testid="button-cancel-pdf">Cancel</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -618,20 +605,20 @@ function StudentAnalysis({ submission, questions }: { submission: Submission & {
         </Button>
       )}
       {analysis && (
-        <div className="mt-3 border rounded-md p-4 bg-muted/30">
+        <div className="mt-3 border border-white/10 rounded-xl p-4 bg-white/[0.03]">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <h4 className="text-sm font-medium flex items-center gap-1.5">
-              <Brain className="w-4 h-4 text-primary" />
+            <h4 className="text-sm font-medium flex items-center gap-1.5 text-slate-200">
+              <Brain className="w-4 h-4 text-violet-400" />
               AI Analysis
             </h4>
-            <Button variant="outline" size="sm" onClick={() => setAnalysis(null)}>Close</Button>
+            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" onClick={() => setAnalysis(null)}>Close</Button>
           </div>
           <div className="mb-2">
-            <Button variant="outline" size="sm" onClick={handlePrint}>Download Report as PDF</Button>
+            <Button className="glow-button-outline text-sm" size="sm" onClick={handlePrint}>Download Report as PDF</Button>
           </div>
           <div
             ref={printRef}
-            className="prose prose-sm max-w-none text-sm"
+            className="prose prose-sm prose-invert max-w-none text-sm text-slate-300"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis) }}
             data-testid={`text-analysis-${submission.id}`}
           />
@@ -734,13 +721,13 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 flex-wrap">
-        <Button variant="outline" size="sm" onClick={onBack} data-testid="button-back-admin">
+        <Button className="glow-button-outline" size="sm" onClick={onBack} data-testid="button-back-admin">
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
         <Button
-          variant="destructive"
           size="sm"
+          className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl"
           onClick={() => {
             if (confirm("Delete this entire exam? This will remove questions and all submitted tests.")) {
               deleteQuizMutation.mutate();
@@ -753,42 +740,43 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           {deleteQuizMutation.isPending ? "Deleting..." : "Delete Exam"}
         </Button>
         <div className="flex-1 min-w-0">
-          <h2 className="font-serif text-xl font-bold truncate" data-testid="text-quiz-detail-title">{quiz.title}</h2>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
-            <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{quiz.timeLimitMinutes} min</span>
-            <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Due {format(new Date(quiz.dueDate), "PPP")}</span>
+          <h2 className="text-xl font-bold truncate gradient-text" data-testid="text-quiz-detail-title">{quiz.title}</h2>
+          <div className="flex items-center gap-3 text-sm text-slate-400 mt-1 flex-wrap">
+            <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-violet-400" />{quiz.timeLimitMinutes} min</span>
+            <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-violet-400" />Due {format(new Date(quiz.dueDate), "PPP")}</span>
           </div>
         </div>
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => { setShowUploader(!showUploader); setShowPdfGen(false); }} data-testid="button-toggle-uploader">
+        <Button className="glow-button-outline text-sm" size="sm" onClick={() => { setShowUploader(!showUploader); setShowPdfGen(false); }} data-testid="button-toggle-uploader">
           <Upload className="w-4 h-4 mr-1" />
           Add Questions (JSON)
         </Button>
-        <Button variant="outline" size="sm" onClick={() => { setShowPdfGen(!showPdfGen); setShowUploader(false); }} data-testid="button-toggle-pdf">
+        <Button className="glow-button-outline text-sm" size="sm" onClick={() => { setShowPdfGen(!showPdfGen); setShowUploader(false); }} data-testid="button-toggle-pdf">
           <FileText className="w-4 h-4 mr-1" />
           Generate from PDF
         </Button>
         <Link href="/admin/builder">
-          <Button variant="outline" size="sm">AI Builder</Button>
+          <Button className="glow-button-outline text-sm" size="sm">AI Builder</Button>
         </Link>
         <Link href={`/admin/analytics/${quizId}`}>
-          <Button variant="outline" size="sm">Class Analytics</Button>
+          <Button className="glow-button-outline text-sm" size="sm">Class Analytics</Button>
         </Link>
-        <Button variant="outline" size="sm" onClick={() => setShowResults(!showResults)} data-testid="button-toggle-results">
+        <Button className="glow-button-outline text-sm" size="sm" onClick={() => setShowResults(!showResults)} data-testid="button-toggle-results">
           <Users className="w-4 h-4 mr-1" />
           View Results ({submissions?.length ?? 0})
         </Button>
         {submissions && submissions.length > 0 && (
           <>
-            <Button variant="outline" size="sm" onClick={downloadCSV} data-testid="button-download-csv">
+            <Button className="glow-button-outline text-sm" size="sm" onClick={downloadCSV} data-testid="button-download-csv">
               <Download className="w-4 h-4 mr-1" />
               Download CSV
             </Button>
             <Button
               variant="destructive"
               size="sm"
+              className="bg-red-500/10 border border-red-500/30 text-red-400"
               onClick={() => {
                 if (confirm("Delete all submitted tests for this quiz? This cannot be undone.")) {
                   clearSubmissionsMutation.mutate();
@@ -813,30 +801,34 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
       )}
 
       {showResults && submissions && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-serif text-lg">Submissions</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="glass-card overflow-hidden">
+          <div className="p-5 border-b border-white/5">
+            <h3 className="text-lg font-semibold text-slate-100">Submissions</h3>
+          </div>
+          <div className="p-5">
             {submissions.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No submissions yet.</p>
+              <p className="text-sm text-slate-500 py-4 text-center">No submissions yet.</p>
             ) : (
               <div className="space-y-4">
                 {submissions.map((s) => (
-                  <div key={s.id} className="border rounded-md p-4" data-testid={`row-submission-${s.id}`}>
+                  <div key={s.id} className="border border-white/10 rounded-xl p-4 bg-white/[0.02]" data-testid={`row-submission-${s.id}`}>
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div>
-                        <p className="font-medium">{s.student.firstName} {s.student.lastName}</p>
-                        <p className="text-sm text-muted-foreground">{format(new Date(s.submittedAt), "PP p")}</p>
+                        <p className="font-medium text-slate-200">{s.student.firstName} {s.student.lastName}</p>
+                        <p className="text-sm text-slate-400">{format(new Date(s.submittedAt), "PP p")}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-medium">{s.totalScore}/{s.maxPossibleScore}</span>
-                        <Badge variant={s.totalScore / s.maxPossibleScore >= 0.5 ? "default" : "secondary"}>
+                        <span className="font-medium text-slate-200">{s.totalScore}/{s.maxPossibleScore}</span>
+                        <Badge className={s.totalScore / s.maxPossibleScore >= 0.5
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                          : "bg-red-500/10 text-red-400 border-red-500/30"
+                        }>
                           {((s.totalScore / s.maxPossibleScore) * 100).toFixed(0)}%
                         </Badge>
                         <Button
                           variant="outline"
                           size="sm"
+                          className="border-white/10 text-slate-400"
                           onClick={() => {
                             if (confirm("Delete this submitted test?")) {
                               deleteSubmissionMutation.mutate(s.id);
@@ -850,13 +842,13 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
                         </Button>
                       </div>
                     </div>
-                    <div className="mt-3 rounded-md border bg-muted/20 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Marks Breakdown</p>
+                    <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.03] p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Marks Breakdown</p>
                       <div className="grid gap-1">
                         {Object.entries(s.answersBreakdown).map(([questionId, detail]) => (
                           <div key={questionId} className="text-sm flex items-center justify-between gap-2">
-                            <span>Q{questionId}: {detail.answer || "No answer"}</span>
-                            <span className={detail.correct ? "text-primary" : "text-muted-foreground"}>
+                            <span className="text-slate-300">Q{questionId}: {detail.answer || "No answer"}</span>
+                            <span className={detail.correct ? "text-emerald-400" : "text-slate-500"}>
                               {detail.correct ? `+${detail.marksEarned}` : "0"}
                             </span>
                           </div>
@@ -870,44 +862,45 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-serif text-lg">
+      <div className="glass-card overflow-hidden">
+        <div className="p-5 border-b border-white/5">
+          <h3 className="text-lg font-semibold text-slate-100">
             Questions ({questionsLoading ? "..." : questions?.length ?? 0})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </h3>
+        </div>
+        <div className="p-5">
           {questionsLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full bg-white/5" />)}
             </div>
           ) : !questions || questions.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileJson className="w-10 h-10 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">No questions added yet. Upload JSON or generate from a PDF.</p>
+            <div className="text-center py-8">
+              <FileJson className="w-10 h-10 mx-auto mb-2 text-slate-600" />
+              <p className="text-sm text-slate-500">No questions added yet. Upload JSON or generate from a PDF.</p>
             </div>
           ) : (
             <div className="space-y-3">
               {questions.map((q, idx) => (
-                <div key={q.id} className="border rounded-md p-3 flex items-start gap-3" data-testid={`card-question-${q.id}`}>
-                  <span className="text-sm font-mono text-muted-foreground font-medium mt-0.5 shrink-0 w-7">
+                <div key={q.id} className="border border-white/10 rounded-xl p-3 flex items-start gap-3 bg-white/[0.02]" data-testid={`card-question-${q.id}`}>
+                  <span className="text-sm font-mono text-violet-400 font-medium mt-0.5 shrink-0 w-7">
                     Q{idx + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{q.promptText}</p>
+                    <p className="text-sm truncate text-slate-200">{q.promptText}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <Badge variant="secondary">{q.options.length} options</Badge>
-                      <Badge variant="secondary">[{q.marksWorth}] marks</Badge>
-                      {q.imageUrl && <Badge variant="secondary">Has image</Badge>}
+                      <Badge className="bg-white/5 text-slate-400 border-white/10">{q.options.length} options</Badge>
+                      <Badge className="bg-white/5 text-slate-400 border-white/10">[{q.marksWorth}] marks</Badge>
+                      {q.imageUrl && <Badge className="bg-white/5 text-slate-400 border-white/10">Has image</Badge>}
                     </div>
                   </div>
                   <Button
                     variant="outline"
                     size="icon"
+                    className="border-white/10 text-slate-400"
                     onClick={() => deleteQuestionMutation.mutate(q.id)}
                     data-testid={`button-delete-question-${q.id}`}
                   >
@@ -917,8 +910,8 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -962,25 +955,25 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
+      <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-primary" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.3)]">
+              <ShieldCheck className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-serif text-xl font-bold" data-testid="text-admin-title">Admin Dashboard</h1>
-              <p className="text-xs text-muted-foreground">Manage quizzes and view results</p>
+              <h1 className="text-xl font-bold gradient-text" data-testid="text-admin-title">Admin Dashboard</h1>
+              <p className="text-xs text-slate-400">Manage quizzes and view results</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/admin/builder">
-              <Button variant="outline" size="sm" data-testid="button-ai-builder">
+              <Button className="glow-button-outline text-sm" size="sm" data-testid="button-ai-builder">
                 <MessageSquare className="w-4 h-4 mr-1" />
                 AI Builder
               </Button>
             </Link>
-            <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-admin-logout">
+            <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-slate-200" onClick={handleLogout} data-testid="button-admin-logout">
               <LogOut className="w-4 h-4 mr-1" />
               Log Out
             </Button>
@@ -994,8 +987,8 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h2 className="font-serif text-lg font-semibold">Quizzes</h2>
-              <Button size="sm" onClick={() => setShowCreateForm(true)} data-testid="button-create-quiz">
+              <h2 className="text-lg font-semibold text-slate-100">Quizzes</h2>
+              <Button size="sm" className="glow-button" onClick={() => setShowCreateForm(true)} data-testid="button-create-quiz">
                 <Plus className="w-4 h-4 mr-1" />
                 New Quiz
               </Button>
@@ -1006,51 +999,54 @@ export default function AdminPage() {
             )}
 
             {quizzesError ? (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 text-destructive p-4">
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 p-4">
                 Failed to load quizzes. Please refresh and try again.
               </div>
             ) : isLoading ? (
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full bg-white/5" />)}
               </div>
             ) : !quizzes || quizzes.length === 0 ? (
               <div className="text-center py-16">
-                <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-                <h3 className="font-serif text-lg font-medium text-muted-foreground">No quizzes yet</h3>
-                <p className="text-sm text-muted-foreground mt-1">Create your first quiz to get started.</p>
+                <BookOpen className="w-12 h-12 mx-auto text-slate-600 mb-3" />
+                <h3 className="text-lg font-medium text-slate-400">No quizzes yet</h3>
+                <p className="text-sm text-slate-500 mt-1">Create your first quiz to get started.</p>
               </div>
             ) : (
               <div className="grid gap-3">
                 {quizzes.map((quiz) => {
                   const isClosed = new Date(quiz.dueDate) < new Date();
                   return (
-                    <Card
+                    <div
                       key={quiz.id}
-                      className="cursor-pointer transition-colors"
+                      className="glass-card p-4 cursor-pointer transition-all duration-200 hover:border-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.1)]"
                       onClick={() => setSelectedQuizId(quiz.id)}
                       data-testid={`card-admin-quiz-${quiz.id}`}
                     >
-                      <CardContent className="flex items-center justify-between gap-4 py-4">
+                      <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                            <BookOpen className="w-4 h-4 text-primary" />
+                          <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0 border border-violet-500/20">
+                            <BookOpen className="w-4 h-4 text-violet-400" />
                           </div>
                           <div className="min-w-0">
-                            <h3 className="font-serif font-semibold truncate">{quiz.title}</h3>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                            <h3 className="font-semibold truncate text-slate-100">{quiz.title}</h3>
+                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5 flex-wrap">
                               <span>{quiz.timeLimitMinutes} min</span>
                               <span>Due {format(new Date(quiz.dueDate), "PP")}</span>
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <Badge variant={isClosed ? "secondary" : "default"}>
+                          <Badge className={isClosed
+                            ? "bg-slate-700/50 text-slate-400 border-slate-600"
+                            : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                          }>
                             {isClosed ? "Closed" : "Open"}
                           </Badge>
-                          <Eye className="w-4 h-4 text-muted-foreground" />
+                          <Eye className="w-4 h-4 text-slate-500" />
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
