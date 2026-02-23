@@ -284,9 +284,43 @@ export async function generateWithFallback(
         case "openai":
           result = await callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema);
           break;
-        case "anthropic":
-          result = await callAnthropic(config.model, systemPrompt, userPrompt, expectedSchema);
-          break;
+        case "anthropic": {
+          const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+          let anthropicResponse: any;
+          if (expectedSchema) {
+            const msg = await anthropic.messages.create({
+              model: config.model,
+              max_tokens: 4096,
+              temperature: 0.1,
+              system: systemPrompt,
+              messages: [{ role: "user", content: userPrompt }],
+              tools: [{
+                name: "generate_structured_data",
+                description: "Generate output adhering to the required JSON schema.",
+                input_schema: expectedSchema as any,
+              }],
+              tool_choice: { type: "tool" as const, name: "generate_structured_data" },
+            });
+
+            const toolBlock = msg.content.find((block: any) => block.type === "tool_use");
+            if (!toolBlock) throw new Error("Anthropic failed to use the structured data tool.");
+            anthropicResponse = (toolBlock as any).input;
+          } else {
+            const msg = await anthropic.messages.create({
+              model: config.model,
+              max_tokens: 4096,
+              temperature: 0.1,
+              system: systemPrompt,
+              messages: [{ role: "user", content: userPrompt }],
+            });
+            const textBlock = msg.content[0];
+            anthropicResponse = textBlock.type === "text" ? textBlock.text : "";
+          }
+
+          const anthropicData = typeof anthropicResponse === "string" ? anthropicResponse : JSON.stringify(anthropicResponse);
+          return { data: anthropicData, metadata: { provider: config.provider, model: config.model, durationMs: Date.now() - startTime } };
+        }
         case "deepseek":
           result = await callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema);
           break;

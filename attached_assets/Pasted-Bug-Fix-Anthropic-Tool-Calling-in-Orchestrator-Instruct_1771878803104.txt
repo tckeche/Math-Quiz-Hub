@@ -1,0 +1,49 @@
+Bug Fix: Anthropic Tool Calling in Orchestrator
+
+Instructions:
+
+Context Review: Open server/services/aiOrchestrator.ts. Locate the switch (config.provider) block, specifically the case 'anthropic': section inside the generateWithFallback function.
+
+The Issue: The Anthropic SDK is failing when expectedSchema is provided because it requires strict Tool Calling formatting, causing it to fall back to Google Gemini.
+
+The Fix: Completely replace the case 'anthropic': block with this exact, robust implementation:
+
+JavaScript
+case 'anthropic':
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  
+  let anthropicResponse;
+  if (expectedSchema) {
+    // Tool Calling for strict JSON Schema output
+    const msg = await anthropic.messages.create({
+      model: config.model,
+      max_tokens: 4096,
+      temperature: 0.1,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+      tools: [{
+        name: "generate_structured_data",
+        description: "Generate output adhering to the required JSON schema.",
+        input_schema: expectedSchema 
+      }],
+      tool_choice: { type: "tool", name: "generate_structured_data" }
+    });
+    
+    // Extract the tool output
+    const toolBlock = msg.content.find(block => block.type === 'tool_use');
+    if (!toolBlock) throw new Error("Anthropic failed to use the structured data tool.");
+    anthropicResponse = toolBlock.input; // This is already a parsed JSON object
+  } else {
+    // Standard Text Output
+    const msg = await anthropic.messages.create({
+      model: config.model,
+      max_tokens: 4096,
+      temperature: 0.1,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }]
+    });
+    anthropicResponse = msg.content[0].text;
+  }
+  
+  return { data: anthropicResponse, metadata: { provider: config.provider, model: config.model, durationMs: Date.now() - startTime } };
+Validation: Ensure the AI_FALLBACK_CHAIN array still has { provider: 'anthropic', model: 'claude-sonnet-4-6' } at the absolute top (index 0).
