@@ -258,11 +258,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/quizzes/:id", async (req, res) => {
     const quiz = await storage.getQuiz(parseInt(req.params.id));
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    res.json(quiz);
+    const questions = await storage.getQuestionsByQuizId(quiz.id);
+    res.json({ ...quiz, questions });
   });
 
   app.post("/api/admin/quizzes", async (req, res) => {
-    const { title, timeLimitMinutes, dueDate } = req.body;
+    const { title, timeLimitMinutes, dueDate, syllabus, level, subject } = req.body;
     if (!title || !timeLimitMinutes || !dueDate) {
       return res.status(400).json({ message: "title, timeLimitMinutes, and dueDate required" });
     }
@@ -270,8 +271,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       title,
       timeLimitMinutes,
       dueDate: new Date(dueDate),
+      syllabus: syllabus || null,
+      level: level || null,
+      subject: subject || null,
     });
     res.json(quiz);
+  });
+
+  app.put("/api/admin/quizzes/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = await storage.getQuiz(id);
+    if (!existing) return res.status(404).json({ message: "Quiz not found" });
+
+    const { title, timeLimitMinutes, dueDate, syllabus, level, subject } = req.body;
+    const updates: any = {};
+    if (title !== undefined) updates.title = title;
+    if (timeLimitMinutes !== undefined) updates.timeLimitMinutes = timeLimitMinutes;
+    if (dueDate !== undefined) updates.dueDate = new Date(dueDate);
+    if (syllabus !== undefined) updates.syllabus = syllabus || null;
+    if (level !== undefined) updates.level = level || null;
+    if (subject !== undefined) updates.subject = subject || null;
+
+    const updated = await storage.updateQuiz(id, updates);
+    res.json(updated);
   });
 
   app.delete("/api/admin/quizzes/:id", async (req, res) => {

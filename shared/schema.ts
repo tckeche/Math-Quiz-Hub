@@ -8,6 +8,9 @@ export const quizzes = pgTable("quizzes", {
   title: text("title").notNull(),
   timeLimitMinutes: integer("time_limit_minutes").notNull(),
   dueDate: timestamp("due_date").notNull(),
+  syllabus: text("syllabus"),
+  level: text("level"),
+  subject: text("subject"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -19,6 +19,7 @@ export interface IStorage {
   createQuiz(quiz: InsertQuiz): Promise<Quiz>;
   getQuizzes(): Promise<Quiz[]>;
   getQuiz(id: number): Promise<Quiz | undefined>;
+  updateQuiz(id: number, data: Partial<InsertQuiz>): Promise<Quiz | undefined>;
   deleteQuiz(id: number): Promise<void>;
 
   createQuestions(questionList: InsertQuestion[]): Promise<Question[]>;
@@ -57,6 +58,11 @@ class DatabaseStorage implements IStorage {
 
   async getQuiz(id: number): Promise<Quiz | undefined> {
     const [result] = await this.database.select().from(quizzes).where(eq(quizzes.id, id));
+    return result;
+  }
+
+  async updateQuiz(id: number, data: Partial<InsertQuiz>): Promise<Quiz | undefined> {
+    const [result] = await this.database.update(quizzes).set(data).where(eq(quizzes.id, id)).returning();
     return result;
   }
 
@@ -208,13 +214,20 @@ class MemoryStorage implements IStorage {
   private somaQuestionId = 1;
 
   async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const created: Quiz = { id: this.quizId++, createdAt: new Date(), ...quiz };
+    const created: Quiz = { id: this.quizId++, createdAt: new Date(), syllabus: null, level: null, subject: null, ...quiz };
     this.quizzes.push(created);
     return created;
   }
 
   async getQuizzes(): Promise<Quiz[]> { return [...this.quizzes]; }
   async getQuiz(id: number): Promise<Quiz | undefined> { return this.quizzes.find((q) => q.id === id); }
+
+  async updateQuiz(id: number, data: Partial<InsertQuiz>): Promise<Quiz | undefined> {
+    const idx = this.quizzes.findIndex((q) => q.id === id);
+    if (idx === -1) return undefined;
+    this.quizzes[idx] = { ...this.quizzes[idx], ...data };
+    return this.quizzes[idx];
+  }
 
   async deleteQuiz(id: number): Promise<void> {
     this.quizzes = this.quizzes.filter((q) => q.id !== id);
