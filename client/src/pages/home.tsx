@@ -22,11 +22,10 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-12 w-auto object-contain" />
               <div>
-                <h1 className="text-2xl font-bold tracking-tight gradient-text" data-testid="text-site-title">
+                <h1 className="text-2xl font-bold tracking-tight gradient-text drop-shadow-[0_0_15px_rgba(139,92,246,0.5)]" data-testid="text-site-title">
                   SOMA
                 </h1>
-                <p className="text-sm text-slate-400 mt-0.5">An Assessment Portal by MCEC</p>
-                <p className="text-sm mt-0.5"><em className="text-violet-400">#EducationDoneDifferently💯</em></p>
+                <p className="text-xs text-slate-400 mt-0.5">An Assessment Portal by MCEC</p>
               </div>
             </div>
             <Link href="/admin">
