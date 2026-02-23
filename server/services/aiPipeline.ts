@@ -33,8 +33,8 @@ Requirements:
 - Assign marks between 1-5 based on difficulty
 - Ensure correct_answer exactly matches one of the options`;
 
-  const raw = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
-  const parsed = QuizResultSchema.parse(JSON.parse(raw));
+  const { data } = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
+  const parsed = QuizResultSchema.parse(JSON.parse(data));
   console.log(`[SOMA Pipeline] Step 1 complete: ${parsed.questions.length} questions generated`);
   return parsed;
 }
@@ -55,8 +55,8 @@ For each question:
 Quiz data:
 ${JSON.stringify(claudeResult)}`;
 
-  const raw = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
-  const parsed = QuizResultSchema.parse(JSON.parse(raw));
+  const { data } = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
+  const parsed = QuizResultSchema.parse(JSON.parse(data));
   console.log(`[SOMA Pipeline] Step 2 complete: ${parsed.questions.length} questions audited`);
   return parsed;
 }
@@ -78,8 +78,8 @@ For each question:
 Input quiz:
 ${JSON.stringify(deepseekResult)}`;
 
-  const raw = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
-  const parsed = QuizResultSchema.parse(JSON.parse(raw));
+  const { data } = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
+  const parsed = QuizResultSchema.parse(JSON.parse(data));
   console.log(`[SOMA Pipeline] Step 3 complete: ${parsed.questions.length} questions finalized`);
   return parsed;
 }

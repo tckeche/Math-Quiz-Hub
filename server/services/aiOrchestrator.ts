@@ -245,23 +245,47 @@ async function callDeepSeek(
   return content;
 }
 
+export interface AIMetadata {
+  provider: string;
+  model: string;
+  durationMs: number;
+}
+
+export interface AIResult {
+  data: string;
+  metadata: AIMetadata;
+}
+
 export async function generateWithFallback(
   systemPrompt: string,
   userPrompt: string,
   expectedSchema?: any
-): Promise<string> {
+): Promise<AIResult> {
   for (const config of AI_FALLBACK_CHAIN) {
     try {
+      const startTime = Date.now();
+      let result: string;
       switch (config.provider) {
         case "google":
-          return await callGoogle(config.model, systemPrompt, userPrompt, expectedSchema);
+          result = await callGoogle(config.model, systemPrompt, userPrompt, expectedSchema);
+          break;
         case "openai":
-          return await callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema);
+          result = await callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema);
+          break;
         case "anthropic":
-          return await callAnthropic(config.model, systemPrompt, userPrompt, expectedSchema);
+          result = await callAnthropic(config.model, systemPrompt, userPrompt, expectedSchema);
+          break;
         case "deepseek":
-          return await callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema);
+          result = await callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema);
+          break;
+        default:
+          continue;
       }
+      const durationMs = Date.now() - startTime;
+      return {
+        data: result,
+        metadata: { provider: config.provider, model: config.model, durationMs },
+      };
     } catch (error: any) {
       console.warn(`[${config.provider} - ${config.model}] failed: ${error.message}. Attempting next model...`);
     }
