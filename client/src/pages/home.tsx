@@ -23,9 +23,9 @@ export default function Home() {
               <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-12 w-auto object-contain" />
               <div>
                 <h1 className="text-2xl font-bold tracking-tight gradient-text" data-testid="text-site-title">
-                  Mathematics Assessment Portal
+                  SOMA
                 </h1>
-                <p className="text-sm text-slate-400 mt-0.5">Select an examination to begin</p>
+                <p className="text-sm text-slate-400 mt-0.5">By MCEC</p>
               </div>
             </div>
             <Link href="/admin">
