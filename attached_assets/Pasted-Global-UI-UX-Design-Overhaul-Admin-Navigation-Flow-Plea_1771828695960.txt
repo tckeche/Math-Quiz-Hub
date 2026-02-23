@@ -1,0 +1,43 @@
+Global UI/UX Design Overhaul & Admin Navigation Flow
+
+Please completely overhaul the global design and Tailwind CSS configuration of the entire application to match a modern, futuristic, premium dark theme inspired by high-end AI platforms. Additionally, fix a specific UX navigation issue in the Admin Builder.
+
+1. Color Palette (Tailwind Config):
+
+Backgrounds: The main app background must be a very deep, rich dark navy/black (e.g., #0A0F1C or Tailwind slate-950).
+
+Primary Accent: Neon Purple/Violet (Tailwind violet-600 for base, violet-400 for hovers and glows) to match a futuristic aesthetic.
+
+Secondary/Surface: Use translucent dark panels for cards and containers (e.g., bg-white/5 or bg-slate-900/50) with subtle borders (border-white/10).
+
+2. Typography:
+
+Set the global font to a modern, geometric sans-serif like 'Inter', 'Poppins', or 'Plus Jakarta Sans'.
+
+All body text should be a highly readable light grey (Tailwind text-slate-300), not stark pure white.
+
+Gradient Text: For main headings (like the quiz title or dashboard headers), implement a text gradient clipping effect using bg-gradient-to-r from-white to-violet-500 bg-clip-text text-transparent.
+
+3. Component Styling (Buttons, Cards & Inputs):
+
+Buttons: Primary buttons (like "Start Quiz" or "Publish") must have a purple gradient (e.g., bg-gradient-to-r from-violet-600 to-indigo-600), rounded corners (rounded-lg or rounded-xl), and white text.
+
+Glow Effects: Add a subtle purple glow to primary buttons on hover using Tailwind's shadow utilities (e.g., hover:shadow-[0_0_15px_rgba(139,92,246,0.5)]).
+
+Glassmorphism: For the Admin Dashboard cards and Student Quiz question containers, use a glass effect: bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6.
+
+Inputs: Text inputs and file uploads should have a dark, semi-transparent background (bg-black/20), a subtle border (border-white/10), and turn purple on focus (focus:border-violet-500 focus:ring-1 focus:ring-violet-500).
+
+4. Admin UX Fix: Post-Publish Navigation:
+
+In the Admin AI Builder (/admin/builder), the current flow leaves the user stranded after publishing a quiz.
+
+The Fix: When the admin clicks "Save & Publish" and the database write is successful, immediately clear the staging area and display a success state.
+
+The Button: Render a prominent "← Back to All Quizzes" button in this success state. Style it as a sleek, futuristic secondary button (e.g., transparent background, border border-violet-500, with a purple text hover effect) that uses React Router to navigate the admin directly back to the main /admin dashboard.
+
+5. Student Quiz Layout Adjustments:
+
+Ensure the Student Quiz UI feels immersive. The question card should float in the center of the dark screen.
+
+The math rendering (react-katex) must use white/light-grey text to remain perfectly legible against the dark background.

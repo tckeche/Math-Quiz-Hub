@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ShieldCheck, Plus, Upload, FileJson, Eye, Download, ArrowLeft, Trash2,
+  Plus, Upload, FileJson, Eye, Download, ArrowLeft, Trash2,
   BookOpen, Clock, Calendar, Users, CheckCircle2, AlertCircle, LogOut,
   FileText, Loader2, Pencil, ImagePlus, Save, Brain, X, BarChart3, MessageSquare,
   Scan, Search
@@ -68,9 +68,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="glass-card w-full max-w-md p-8">
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-[0_0_25px_rgba(139,92,246,0.4)]">
-            <ShieldCheck className="w-7 h-7 text-white" />
-          </div>
+          <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-14 w-auto object-contain mx-auto mb-3" />
           <h2 className="text-xl font-bold gradient-text">Admin Access</h2>
           <p className="text-sm text-slate-400 mt-1">Enter the administrator password to continue.</p>
         </div>
@@ -958,9 +956,7 @@ export default function AdminPage() {
       <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-              <ShieldCheck className="w-5 h-5 text-white" />
-            </div>
+            <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-10 w-auto object-contain" />
             <div>
               <h1 className="text-xl font-bold gradient-text" data-testid="text-admin-title">Admin Dashboard</h1>
               <p className="text-xs text-slate-400">Manage quizzes and view results</p>

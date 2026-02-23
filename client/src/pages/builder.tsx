@@ -112,8 +112,8 @@ export default function BuilderPage() {
                 Back
               </Button>
             </Link>
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-violet-400" />
+            <div className="flex items-center gap-3">
+              <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-8 w-auto object-contain" />
               <h1 className="text-lg font-bold gradient-text">AI Co-Pilot Builder</h1>
             </div>
           </div>

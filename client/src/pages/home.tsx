@@ -4,7 +4,7 @@ import type { Quiz } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, Clock, Calendar, ArrowRight, GraduationCap, ShieldCheck } from "lucide-react";
+import { BookOpen, Clock, Calendar, ArrowRight, ShieldCheck } from "lucide-react";
 import { format } from "date-fns";
 
 export default function Home() {
@@ -20,9 +20,7 @@ export default function Home() {
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-[0_0_20px_rgba(139,92,246,0.3)]">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
+              <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-12 w-auto object-contain" />
               <div>
                 <h1 className="text-2xl font-bold tracking-tight gradient-text" data-testid="text-site-title">
                   Mathematics Assessment Portal

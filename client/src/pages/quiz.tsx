@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
   Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2,
-  Circle, Send, ArrowLeft, GraduationCap, Home, ShieldAlert, Loader2
+  Circle, Send, ArrowLeft, Home, ShieldAlert, Loader2
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { BlockMath, InlineMath } from 'react-katex';
@@ -75,9 +75,7 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="glass-card w-full max-w-lg p-8">
         <div className="text-center pb-6">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-[0_0_25px_rgba(139,92,246,0.4)]">
-            <GraduationCap className="w-8 h-8 text-white" />
-          </div>
+          <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-16 w-auto object-contain mx-auto mb-4" />
           <h2 className="text-2xl font-bold gradient-text" data-testid="text-quiz-entry-title">{quiz.title}</h2>
           <div className="flex items-center justify-center gap-4 mt-3 text-sm text-slate-400">
             <span className="flex items-center gap-1"><Clock className="w-4 h-4 text-violet-400" />{quiz.timeLimitMinutes} minutes</span>
