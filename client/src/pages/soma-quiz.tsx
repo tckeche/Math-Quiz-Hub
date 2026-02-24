@@ -1,17 +1,21 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useParams } from "wouter";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useParams, useLocation } from "wouter";
 import { Link } from "wouter";
+import { supabase } from "@/lib/supabase";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { SomaQuiz } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import {
   ChevronRight, SkipForward, Send, ArrowLeft, Home,
-  AlertCircle, Loader2, CheckCircle2, Circle, BookOpen, X
+  AlertCircle, Loader2, CheckCircle2, Circle, BookOpen, X, Award
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { BlockMath, InlineMath } from 'react-katex';
+import type { Session } from "@supabase/supabase-js";
 
 export type StudentQuestion = {
   id: number;
@@ -85,10 +89,48 @@ function ErrorView({ message }: { message: string }) {
         </div>
         <h2 className="text-xl font-bold mb-2 text-slate-100">Failed to Load</h2>
         <p className="text-sm text-slate-400 mb-6">{message}</p>
-        <Link href="/portal">
+        <Link href="/dashboard">
           <Button className="glow-button" data-testid="button-error-back">
             <Home className="w-4 h-4 mr-1.5" />
-            Return to Portal
+            Return to Dashboard
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function ResultsView({ quizTitle, totalScore, maxPossibleScore }: { quizTitle: string; totalScore: number; maxPossibleScore: number }) {
+  const percentage = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="glass-card w-full max-w-md text-center p-10">
+        <div className="w-20 h-20 rounded-full bg-violet-500/10 flex items-center justify-center mx-auto mb-5 border border-violet-500/30">
+          <Award className="w-10 h-10 text-violet-400" />
+        </div>
+        <h2 className="text-2xl font-bold mb-1 gradient-text" data-testid="text-results-title">
+          Assessment Complete
+        </h2>
+        <p className="text-sm text-slate-400 mb-6">{quizTitle}</p>
+
+        <div className="bg-white/5 rounded-2xl p-6 border border-white/10 mb-6">
+          <p className="text-5xl font-black text-violet-300 drop-shadow-[0_0_15px_rgba(139,92,246,0.4)]" data-testid="text-grade-percentage">
+            {percentage}%
+          </p>
+          <p className="text-sm text-slate-400 mt-2" data-testid="text-grade-score">
+            {totalScore} / {maxPossibleScore} marks
+          </p>
+        </div>
+
+        <p className="text-sm text-slate-400 italic mb-8" data-testid="text-wait-message">
+          Your results are being analyzed by AI. Check your dashboard for feedback.
+        </p>
+
+        <Link href="/dashboard">
+          <Button className="glow-button w-full" data-testid="button-back-home">
+            <Home className="w-4 h-4 mr-1.5" />
+            Return to Dashboard
           </Button>
         </Link>
       </div>
@@ -101,11 +143,15 @@ function SummaryView({
   questions,
   answers,
   onBack,
+  onSubmit,
+  isSubmitting,
 }: {
   quiz: SomaQuiz;
   questions: StudentQuestion[];
   answers: Record<number, string>;
   onBack: () => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
 }) {
   const answeredCount = Object.keys(answers).length;
   const totalMarks = questions.reduce((s, q) => s + q.marks, 0);
@@ -174,11 +220,21 @@ function SummaryView({
           </Button>
           <Button
             className="flex-1 glow-button"
-            disabled
+            onClick={onSubmit}
+            disabled={isSubmitting}
             data-testid="button-summary-submit"
           >
-            <Send className="w-4 h-4 mr-1.5" />
-            Submit (Coming Soon)
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-1.5" />
+                Submit Assessment
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -203,10 +259,31 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
   const isPreview = props.previewMode === true;
   const params = useParams<{ id: string }>();
   const quizId = isPreview ? 0 : parseInt(params.id || "0");
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
+  const [session, setSession] = useState<Session | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(!isPreview);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showSummary, setShowSummary] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<{ score: number; maxScore: number } | null>(null);
+
+  useEffect(() => {
+    if (isPreview) return;
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setSessionLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      setSessionLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, [isPreview]);
+
+  const userId = session?.user?.id;
+  const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
 
   const { data: quiz, isLoading: quizLoading, error: quizError } = useQuery<SomaQuiz>({
     queryKey: ["/api/soma/quizzes", quizId],
@@ -228,12 +305,42 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
     enabled: !isPreview && quizId > 0,
   });
 
+  const { data: submissionCheck } = useQuery<{ submitted: boolean }>({
+    queryKey: ["/api/soma/quizzes", quizId, "check-submission", userId],
+    queryFn: async () => {
+      const res = await fetch(`/api/soma/quizzes/${quizId}/check-submission?studentId=${userId}`);
+      if (!res.ok) return { submitted: false };
+      return res.json();
+    },
+    enabled: !isPreview && quizId > 0 && !!userId,
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/soma/quizzes/${quizId}/submit`, {
+        studentId: userId,
+        studentName: displayName,
+        answers,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      const totalMarks = questions ? questions.reduce((s, q) => s + q.marks, 0) : 0;
+      setSubmissionResult({ score: data.score, maxScore: totalMarks });
+      queryClient.invalidateQueries({ queryKey: ["/api/student/reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/soma/quizzes", quizId, "check-submission"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Submission failed", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
   const questions = isPreview ? (props as PreviewProps).previewQuestions : fetchedQuestions;
   const effectiveQuiz: SomaQuiz | undefined = isPreview
     ? { id: 0, title: (props as PreviewProps).previewTitle, topic: "", curriculumContext: null, status: "draft", createdAt: new Date() } as SomaQuiz
     : quiz;
 
-  const isLoading = isPreview ? false : (quizLoading || questionsLoading);
+  const isLoading = isPreview ? false : (quizLoading || questionsLoading || sessionLoading);
   const error = isPreview ? null : (quizError || questionsError);
 
   const currentQuestion = useMemo(() => {
@@ -273,6 +380,14 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
     setShowSummary(false);
   };
 
+  const handleSubmit = () => {
+    if (!userId) {
+      toast({ title: "Not logged in", description: "Please log in to submit.", variant: "destructive" });
+      return;
+    }
+    submitMutation.mutate();
+  };
+
   const previewBanner = isPreview ? (
     <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-amber-500/90 via-orange-500/90 to-amber-500/90 backdrop-blur-sm border-b border-amber-400/30 shadow-lg shadow-amber-500/20" data-testid="banner-preview-mode">
       <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-center justify-between">
@@ -308,6 +423,30 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
     return <ErrorView message="No questions found for this assessment." />;
   }
 
+  if (!isPreview && submissionCheck?.submitted && !submissionResult) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="glass-card w-full max-w-md text-center p-10">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-5 border border-amber-500/30">
+            <AlertCircle className="w-8 h-8 text-amber-400" />
+          </div>
+          <h2 className="text-xl font-bold mb-2 text-slate-100">Already Submitted</h2>
+          <p className="text-sm text-slate-400 mb-6">You have already submitted this assessment. Check your dashboard for results.</p>
+          <Link href="/dashboard">
+            <Button className="glow-button" data-testid="button-already-submitted-back">
+              <Home className="w-4 h-4 mr-1.5" />
+              Return to Dashboard
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (submissionResult) {
+    return <ResultsView quizTitle={effectiveQuiz.title} totalScore={submissionResult.score} maxPossibleScore={submissionResult.maxScore} />;
+  }
+
   if (showSummary) {
     return (
       <>
@@ -318,6 +457,8 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
             questions={questions}
             answers={answers}
             onBack={() => setShowSummary(false)}
+            onSubmit={isPreview ? () => {} : handleSubmit}
+            isSubmitting={submitMutation.isPending}
           />
         </div>
       </>
@@ -346,7 +487,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
               Exit Preview
             </Button>
           ) : (
-            <Link href="/portal">
+            <Link href="/dashboard">
               <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" data-testid="button-soma-back">
                 <ArrowLeft className="w-4 h-4 mr-1" />
                 Exit

@@ -705,5 +705,60 @@ Sections to include:
     }
   });
 
+  app.post("/api/soma/quizzes/:id/submit", async (req, res) => {
+    try {
+      const quizId = parseInt(req.params.id);
+      if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
+
+      const { studentId, studentName, answers } = req.body;
+      if (!studentId || !studentName || !answers) {
+        return res.status(400).json({ message: "Missing studentId, studentName, or answers" });
+      }
+
+      const alreadySubmitted = await storage.checkSomaSubmission(quizId, studentId);
+      if (alreadySubmitted) {
+        return res.status(409).json({ message: "You have already submitted this quiz." });
+      }
+
+      const allQuestions = await storage.getSomaQuestionsByQuizId(quizId);
+      if (!allQuestions.length) {
+        return res.status(404).json({ message: "No questions found for this quiz." });
+      }
+
+      let totalScore = 0;
+      for (const q of allQuestions) {
+        if (answers[String(q.id)] === q.correctAnswer) {
+          totalScore += q.marks;
+        }
+      }
+
+      const report = await storage.createSomaReport({
+        quizId,
+        studentId,
+        studentName,
+        score: totalScore,
+        status: "pending",
+      });
+
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/soma/quizzes/:id/check-submission", async (req, res) => {
+    try {
+      const quizId = parseInt(req.params.id);
+      const studentId = req.query.studentId as string;
+      if (isNaN(quizId) || !studentId) {
+        return res.status(400).json({ message: "quizId and studentId required" });
+      }
+      const exists = await storage.checkSomaSubmission(quizId, studentId);
+      res.json({ submitted: exists });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }
