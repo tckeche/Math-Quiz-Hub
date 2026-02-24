@@ -8,7 +8,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import {
   LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
-  Loader2, AlertTriangle, Filter, ChevronDown,
+  Loader2, AlertTriangle, Filter, ChevronDown, Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,39 +36,49 @@ interface SubmissionWithQuiz {
   quiz: Quiz;
 }
 
+const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
+const SECTION_LABEL = "text-xs font-semibold tracking-wider text-slate-400 uppercase";
+
 function DonutCard({ subject, percentage, color }: { subject: string; percentage: number; color: string }) {
   const data = [
     { value: percentage },
     { value: 100 - percentage },
   ];
   return (
-    <div className="glass-card p-5 flex flex-col items-center" data-testid={`card-donut-${subject}`}>
-      <div className="w-28 h-28 relative">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={34}
-              outerRadius={48}
-              startAngle={90}
-              endAngle={-270}
-              dataKey="value"
-              stroke="none"
+    <div className={CARD_CLASS} data-testid={`card-donut-${subject}`}>
+      <div className="flex flex-col items-center">
+        <div className="w-32 h-32 relative">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={38}
+                outerRadius={54}
+                startAngle={90}
+                endAngle={-270}
+                dataKey="value"
+                stroke="none"
+                strokeWidth={15}
+              >
+                <Cell fill={color} />
+                <Cell fill="rgba(255,255,255,0.04)" />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span
+              className="text-4xl font-bold text-white"
+              style={{ textShadow: `0 0 20px ${color}60` }}
+              data-testid={`text-donut-value-${subject}`}
             >
-              <Cell fill={color} />
-              <Cell fill="rgba(255,255,255,0.06)" />
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xl font-bold text-slate-100" data-testid={`text-donut-value-${subject}`}>
-            {Math.round(percentage)}%
-          </span>
+              {Math.round(percentage)}%
+            </span>
+          </div>
         </div>
+        <p className={`${SECTION_LABEL} mt-3`}>{subject}</p>
       </div>
-      <p className="text-xs text-slate-400 mt-3 font-medium tracking-wide uppercase">{subject}</p>
     </div>
   );
 }
@@ -264,8 +274,8 @@ export default function StudentDashboard() {
   const isLoading = quizzesLoading || somaLoading || reportsLoading || subsLoading;
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm sticky top-0 z-20">
+    <div className="min-h-screen bg-[#0b0f1a]">
+      <header className="border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/">
             <div className="flex items-center gap-3 cursor-pointer" data-testid="link-dashboard-home">
@@ -280,8 +290,8 @@ export default function StudentDashboard() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
               <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white ring-2"
-                style={{ backgroundColor: "rgba(139,92,246,0.3)", boxShadow: `0 0 12px ${avatarRingColor}40`, border: `2px solid ${avatarRingColor}` }}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                style={{ backgroundColor: "rgba(139,92,246,0.3)", boxShadow: `0 0 16px ${avatarRingColor}50`, border: `2px solid ${avatarRingColor}` }}
                 data-testid="avatar-user"
               >
                 {initials}
@@ -307,18 +317,20 @@ export default function StudentDashboard() {
           <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="glass-card p-5 flex flex-col items-center">
-                  <Skeleton className="w-28 h-28 rounded-full bg-white/10" />
-                  <Skeleton className="h-3 w-16 mt-3 bg-white/10" />
+                <div key={i} className={CARD_CLASS}>
+                  <div className="flex flex-col items-center">
+                    <Skeleton className="w-32 h-32 rounded-full bg-white/5" />
+                    <Skeleton className="h-3 w-16 mt-3 bg-white/5" />
+                  </div>
                 </div>
               ))}
             </div>
             <div className="grid md:grid-cols-2 gap-6">
               {[1, 2].map((i) => (
-                <div key={i} className="glass-card p-6">
-                  <Skeleton className="h-5 w-40 mb-4 bg-white/10" />
+                <div key={i} className={CARD_CLASS}>
+                  <Skeleton className="h-4 w-40 mb-5 bg-white/5" />
                   {[1, 2, 3].map((j) => (
-                    <Skeleton key={j} className="h-20 w-full mb-3 bg-white/10 rounded-xl" />
+                    <Skeleton key={j} className="h-20 w-full mb-3 bg-white/5 rounded-xl" />
                   ))}
                 </div>
               ))}
@@ -328,7 +340,7 @@ export default function StudentDashboard() {
           <>
             {subjectStats.length > 0 && (
               <section>
-                <h2 className="text-sm font-semibold text-slate-400 tracking-widest uppercase mb-4" data-testid="text-section-performance">
+                <h2 className={`${SECTION_LABEL} mb-5`} data-testid="text-section-performance">
                   Performance by Subject
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -345,9 +357,9 @@ export default function StudentDashboard() {
             )}
 
             <div className="grid md:grid-cols-2 gap-6">
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-slate-400 tracking-widest uppercase" data-testid="text-section-available">
+              <section className={CARD_CLASS}>
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className={SECTION_LABEL} data-testid="text-section-available">
                     Available Quizzes
                   </h2>
                   <button
@@ -366,7 +378,7 @@ export default function StudentDashboard() {
                     <select
                       value={subjectFilter}
                       onChange={(e) => setSubjectFilter(e.target.value)}
-                      className="glass-input text-xs px-3 py-1.5 rounded-lg"
+                      className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
                       data-testid="select-subject-filter"
                     >
                       <option value="all">All Subjects</option>
@@ -376,7 +388,7 @@ export default function StudentDashboard() {
                       <select
                         value={levelFilter}
                         onChange={(e) => setLevelFilter(e.target.value)}
-                        className="glass-input text-xs px-3 py-1.5 rounded-lg"
+                        className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
                         data-testid="select-level-filter"
                       >
                         <option value="all">All Levels</option>
@@ -388,7 +400,7 @@ export default function StudentDashboard() {
 
                 <div className="space-y-3">
                   {filteredQuizzes.length === 0 ? (
-                    <div className="glass-card p-8 text-center">
+                    <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
                       <p className="text-sm text-slate-500">No available quizzes</p>
                     </div>
@@ -402,7 +414,7 @@ export default function StudentDashboard() {
                           href={q.type === "soma" ? `/soma/quiz/${q.id}` : `/quiz/${q.id}`}
                         >
                           <div
-                            className={`glass-card p-4 cursor-pointer transition-all duration-300 hover:border-violet-500/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.1)] group ${sc.border}`}
+                            className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
                             data-testid={`card-available-quiz-${q.type}-${q.id}`}
                           >
                             <div className="flex items-start justify-between gap-2">
@@ -412,7 +424,7 @@ export default function StudentDashboard() {
                                     {q.subject}
                                   </span>
                                   {q.level && (
-                                    <span className="text-[10px] text-slate-500 px-2 py-0.5 rounded-full bg-white/5">
+                                    <span className="text-[10px] text-slate-500 px-2 py-0.5 rounded-full bg-slate-800/60">
                                       {q.level}
                                     </span>
                                   )}
@@ -448,13 +460,13 @@ export default function StudentDashboard() {
                 </div>
               </section>
 
-              <section>
-                <h2 className="text-sm font-semibold text-slate-400 tracking-widest uppercase mb-4" data-testid="text-section-completed">
+              <section className={CARD_CLASS}>
+                <h2 className={`${SECTION_LABEL} mb-5`} data-testid="text-section-completed">
                   Completed Quizzes
                 </h2>
                 <div className="space-y-3">
                   {completedItems.length === 0 ? (
-                    <div className="glass-card p-8 text-center">
+                    <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <CheckCircle2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
                       <p className="text-sm text-slate-500">No completed quizzes yet</p>
                     </div>
@@ -466,8 +478,7 @@ export default function StudentDashboard() {
                       return (
                         <div
                           key={`${item.type}-${item.id}`}
-                          className={`glass-card p-4 transition-all duration-300 ${sc.border}`}
-                          style={{ boxShadow: `0 0 15px ${getSubjectColor(item.subject).hex}08` }}
+                          className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 transition-all duration-300"
                           data-testid={`card-completed-${item.type}-${item.id}`}
                         >
                           <div className="flex items-start justify-between gap-3">
@@ -496,7 +507,11 @@ export default function StudentDashboard() {
                               </div>
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <div className={`text-lg font-bold ${pct >= 70 ? "text-emerald-400" : pct >= 50 ? "text-amber-400" : "text-red-400"}`} data-testid={`text-score-${item.type}-${item.id}`}>
+                              <div
+                                className="text-2xl font-bold"
+                                style={{ color: pct >= 70 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#f43f5e", textShadow: `0 0 12px ${pct >= 70 ? "#10b98130" : pct >= 50 ? "#f59e0b30" : "#f43f5e30"}` }}
+                                data-testid={`text-score-${item.type}-${item.id}`}
+                              >
                                 {pct}%
                               </div>
                               <div className="text-[10px] text-slate-500">
@@ -509,7 +524,7 @@ export default function StudentDashboard() {
                                     if (w) {
                                       w.document.write(`
                                         <html><head><title>${item.title} - Report</title>
-                                        <style>body{font-family:system-ui;padding:40px;max-width:800px;margin:0 auto;background:#0f172a;color:#e2e8f0}h3{color:#a78bfa}ul{padding-left:20px}li{margin-bottom:8px}hr{border-color:#334155}</style>
+                                        <style>body{font-family:system-ui;padding:40px;max-width:800px;margin:0 auto;background:#0b0f1a;color:#e2e8f0}h3{color:#a78bfa}ul{padding-left:20px}li{margin-bottom:8px}hr{border-color:#1e293b}</style>
                                         </head><body>${item.feedbackHtml}</body></html>
                                       `);
                                       w.document.close();
@@ -530,6 +545,18 @@ export default function StudentDashboard() {
                 </div>
               </section>
             </div>
+
+            <section className="flex justify-center pt-2 pb-6">
+              <button
+                className="group relative inline-flex items-center gap-2.5 px-7 py-3.5 rounded-2xl font-semibold text-sm text-emerald-300 bg-emerald-500/5 border border-emerald-500/20 ring-2 ring-emerald-500/20 hover:bg-emerald-500/10 hover:ring-emerald-500/40 hover:border-emerald-500/40 transition-all duration-300 shadow-[0_0_30px_rgba(16,185,129,0.08)] hover:shadow-[0_0_40px_rgba(16,185,129,0.15)]"
+                data-testid="button-consult-ai-tutor"
+                onClick={() => setLocation("/soma/chat")}
+              >
+                <Sparkles className="w-4.5 h-4.5 text-emerald-400 group-hover:animate-pulse" />
+                Consult Global AI Tutor
+                <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+              </button>
+            </section>
           </>
         )}
       </main>
