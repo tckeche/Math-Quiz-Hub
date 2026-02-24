@@ -412,6 +412,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(created);
   });
 
+  app.post("/api/admin/validate-quiz", requireAdmin, async (req, res) => {
+    try {
+      const { questions } = req.body;
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return res.status(400).json({ message: "questions array is required" });
+      }
+
+      const systemPrompt = `You are a strict quiz quality auditor. Review the following quiz questions for:
+1. CORRECTNESS: Is the correct_answer actually correct? Solve each problem step-by-step to verify.
+2. CLARITY: Is the question text clear and unambiguous?
+3. OPTIONS: Are all options plausible? Are there duplicate or obviously wrong distractors?
+4. FORMATTING: Is LaTeX notation properly delimited with \\( \\) or \\[ \\]? Are units correct?
+5. MARKS: Are marks allocated fairly based on difficulty?
+
+Return a JSON object with this structure:
+{
+  "overall": "pass" | "warning" | "fail",
+  "issues": [{ "questionIndex": number, "severity": "error" | "warning", "message": string }],
+  "summary": string
+}
+
+If all questions are correct and well-formatted, return overall: "pass" with an empty issues array.`;
+
+      const userPrompt = `Validate these quiz questions:\n${JSON.stringify(questions, null, 2)}`;
+
+      const { data, metadata } = await generateWithFallback(systemPrompt, userPrompt);
+
+      // Try to parse JSON from the response
+      let validation;
+      try {
+        const jsonMatch = data.match(/\{[\s\S]*\}/);
+        validation = jsonMatch ? JSON.parse(jsonMatch[0]) : { overall: "pass", issues: [], summary: data };
+      } catch {
+        validation = { overall: "pass", issues: [], summary: data };
+      }
+
+      res.json({ validation, metadata });
+    } catch (err: any) {
+      res.status(500).json({ message: `Validation failed: ${err.message}` });
+    }
+  });
+
   app.delete("/api/admin/questions/:id", async (req, res) => {
     await storage.deleteQuestion(parseInt(req.params.id));
     res.json({ success: true });

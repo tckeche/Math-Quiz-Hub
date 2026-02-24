@@ -145,9 +145,33 @@ export default function BuilderPage() {
       }
       return quiz;
     },
-    onSuccess: (quiz) => {
+    onSuccess: async (quiz) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
       toast({ title: "Quiz created successfully" });
+
+      // Run Gemini validation in background before navigating
+      if (drafts.length > 0) {
+        try {
+          toast({ title: "Validating quiz with AI...", description: "Checking correctness and formatting" });
+          const valRes = await apiRequest("POST", "/api/admin/validate-quiz", { questions: drafts });
+          const valData = await valRes.json();
+          const v = valData.validation;
+          if (v?.overall === "pass") {
+            toast({ title: "Quiz validated", description: `All ${drafts.length} questions passed AI review` });
+          } else if (v?.issues?.length > 0) {
+            const errorCount = v.issues.filter((i: any) => i.severity === "error").length;
+            const warnCount = v.issues.filter((i: any) => i.severity === "warning").length;
+            toast({
+              title: `Validation: ${errorCount} error(s), ${warnCount} warning(s)`,
+              description: v.summary || "Review your questions for potential issues",
+              variant: errorCount > 0 ? "destructive" : "default",
+            });
+          }
+        } catch {
+          // Validation failure shouldn't block quiz creation
+        }
+      }
+
       navigate("/admin");
     },
     onError: (err: Error) => toast({ title: "Failed to create quiz", description: err.message, variant: "destructive" }),
