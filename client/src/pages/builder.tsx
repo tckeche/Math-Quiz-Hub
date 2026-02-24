@@ -85,7 +85,6 @@ export default function BuilderPage() {
   const [completedStages, setCompletedStages] = useState<Set<number>>(new Set());
   const [stageLabel, setStageLabel] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"copilot" | "questions">("copilot");
   const [showPreview, setShowPreview] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -298,7 +297,6 @@ export default function BuilderPage() {
       marks_worth: 1,
       image_url: null,
     }]);
-    setActiveTab("questions");
   };
 
   const totalQuestions = savedQuestions.length + drafts.length;
@@ -394,66 +392,40 @@ export default function BuilderPage() {
         </div>
       </header>
 
-      <main className="max-w-[1400px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
-        {/* LEFT COLUMN — Quiz Parameters */}
-        <div className="space-y-4">
-          <div className="glass-card p-5 space-y-4">
-            <div className="flex items-center gap-2 mb-1">
+      <main className="max-w-[1600px] mx-auto px-4 py-4 grid grid-cols-12 gap-4">
+        {/* LEFT COLUMN — Main Workspace (9 cols) */}
+        <div className="col-span-12 lg:col-span-9 space-y-4">
+          {/* Compact Settings Row */}
+          <div className="glass-card p-4">
+            <div className="flex items-center gap-2 mb-3">
               <BookOpen className="w-4 h-4 text-violet-400" />
-              <h2 className="font-semibold text-slate-100">Quiz Parameters</h2>
+              <h2 className="font-semibold text-slate-100 text-sm">Quiz Parameters</h2>
             </div>
-
-            <div className="space-y-2">
-              <Label className="text-slate-300 text-sm">Title</Label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Pure Mathematics Paper 1"
-                className="glass-input"
-                data-testid="input-quiz-title"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Time Limit (min)</Label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="col-span-2 md:col-span-1 space-y-1">
+                <Label className="text-slate-400 text-xs">Title</Label>
                 <Input
-                  type="number"
-                  min="1"
-                  value={timeLimit}
-                  onChange={(e) => setTimeLimit(e.target.value)}
-                  className="glass-input"
-                  data-testid="input-quiz-time"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Pure Mathematics Paper 1"
+                  className="glass-input text-sm"
+                  data-testid="input-quiz-title"
                 />
               </div>
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Due Date</Label>
+              <div className="space-y-1">
+                <Label className="text-slate-400 text-xs">Syllabus</Label>
                 <Input
-                  type="datetime-local"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="glass-input"
-                  data-testid="input-quiz-due"
+                  value={syllabus}
+                  onChange={(e) => setSyllabus(e.target.value)}
+                  placeholder="Cambridge, Edexcel"
+                  className="glass-input text-sm"
+                  data-testid="input-quiz-syllabus"
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-slate-300 text-sm">Syllabus</Label>
-              <Input
-                value={syllabus}
-                onChange={(e) => setSyllabus(e.target.value)}
-                placeholder="e.g. Cambridge, Edexcel, IB"
-                className="glass-input"
-                data-testid="input-quiz-syllabus"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Level</Label>
+              <div className="space-y-1">
+                <Label className="text-slate-400 text-xs">Level</Label>
                 <select
-                  className="w-full glass-input h-10 px-3 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm"
+                  className="w-full glass-input px-2.5 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm"
                   value={level}
                   onChange={(e) => setLevel(e.target.value)}
                   data-testid="select-quiz-level"
@@ -464,46 +436,74 @@ export default function BuilderPage() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Subject</Label>
+              <div className="space-y-1">
+                <Label className="text-slate-400 text-xs">Subject</Label>
                 <Input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g. Mathematics"
-                  className="glass-input"
+                  placeholder="Mathematics"
+                  className="glass-input text-sm"
                   data-testid="input-quiz-subject"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-slate-400 text-xs">Due Date</Label>
+                <Input
+                  type="datetime-local"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="glass-input text-sm"
+                  data-testid="input-quiz-due"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-slate-400 text-xs">Time (min)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(e.target.value)}
+                  className="glass-input text-sm"
+                  data-testid="input-quiz-time"
                 />
               </div>
             </div>
           </div>
 
-          {/* PDF Upload */}
-          <div className="glass-card p-5 space-y-3">
-            <div className="flex items-center gap-2 mb-1">
-              <FileText className="w-4 h-4 text-violet-400" />
-              <h2 className="font-semibold text-slate-100 text-sm">Generate from PDF</h2>
+          {/* PDF Upload + Add Manual — compact inline row */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="glass-card p-3 flex items-center gap-3 flex-1 min-w-[280px]">
+              <FileText className="w-4 h-4 text-violet-400 shrink-0" />
+              <span className="text-xs text-slate-400 shrink-0">Generate from PDF</span>
+              <Input
+                type="file"
+                accept=".pdf"
+                className="glass-input text-xs flex-1"
+                disabled={pipelineActive}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) startPipeline(file);
+                }}
+                data-testid="input-pdf-upload"
+              />
             </div>
-            <p className="text-xs text-slate-500">Upload a math exam PDF. A 4-stage AI pipeline will extract MCQs.</p>
-            <Input
-              type="file"
-              accept=".pdf"
-              className="glass-input text-sm"
-              disabled={pipelineActive}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) startPipeline(file);
-              }}
-              data-testid="input-pdf-upload"
-            />
-            {pipelineActive && (
-              <div className="space-y-2 pt-2">
+            <Button className="glow-button-outline text-xs shrink-0" size="sm" onClick={addManualQuestion} data-testid="button-add-manual">
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Add Manually
+            </Button>
+          </div>
+
+          {/* Pipeline Progress */}
+          {pipelineActive && (
+            <div className="glass-card p-3">
+              <div className="grid grid-cols-4 gap-2">
                 {PIPELINE_STAGES.map((s) => {
                   const isDone = completedStages.has(s.stage);
                   const isActive = currentStage === s.stage && !isDone;
                   return (
                     <div
                       key={s.stage}
-                      className={`flex items-center gap-2 p-2 rounded-lg border text-xs transition-all ${
+                      className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs transition-all ${
                         isDone ? "bg-emerald-500/10 border-emerald-500/30" :
                         isActive ? "bg-violet-500/10 border-violet-500/30" :
                         "bg-white/[0.02] border-white/5 opacity-40"
@@ -511,249 +511,214 @@ export default function BuilderPage() {
                       data-testid={`pipeline-stage-${s.stage}`}
                     >
                       <span className="shrink-0">
-                        {s.icon === "scan" && <Scan className="w-3.5 h-3.5" />}
-                        {s.icon === "brain" && <Brain className="w-3.5 h-3.5" />}
-                        {s.icon === "pencil" && <Pencil className="w-3.5 h-3.5" />}
-                        {s.icon === "search" && <Search className="w-3.5 h-3.5" />}
+                        {s.icon === "scan" && <Scan className="w-3 h-3" />}
+                        {s.icon === "brain" && <Brain className="w-3 h-3" />}
+                        {s.icon === "pencil" && <Pencil className="w-3 h-3" />}
+                        {s.icon === "search" && <Search className="w-3 h-3" />}
                       </span>
-                      <span className={`flex-1 ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-500"}`}>
+                      <span className={`flex-1 truncate ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-500"}`}>
                         {s.aiName}
                       </span>
-                      {isDone ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> :
-                       isActive ? <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400" /> :
-                       <div className="w-3.5 h-3.5 rounded-full border border-white/10" />}
+                      {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> :
+                       isActive ? <Loader2 className="w-3 h-3 animate-spin text-violet-400" /> :
+                       <div className="w-3 h-3 rounded-full border border-white/10" />}
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Manual Add */}
-          <Button className="w-full glow-button-outline text-sm" onClick={addManualQuestion} data-testid="button-add-manual">
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add Question Manually
-          </Button>
-        </div>
-
-        {/* RIGHT COLUMN — Copilot + Questions */}
-        <div className="space-y-0">
-          <div className="flex border-b border-white/5 mb-0">
-            <button
-              className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 ${
-                activeTab === "copilot"
-                  ? "border-violet-500 text-violet-300"
-                  : "border-transparent text-slate-500 hover:text-slate-300"
-              }`}
-              onClick={() => setActiveTab("copilot")}
-              data-testid="tab-copilot"
-            >
-              <Sparkles className="w-3.5 h-3.5 inline mr-1.5" />
-              AI Co-Pilot
-            </button>
-            <button
-              className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 ${
-                activeTab === "questions"
-                  ? "border-violet-500 text-violet-300"
-                  : "border-transparent text-slate-500 hover:text-slate-300"
-              }`}
-              onClick={() => setActiveTab("questions")}
-              data-testid="tab-questions"
-            >
-              <FileStack className="w-3.5 h-3.5 inline mr-1.5" />
-              Questions ({totalQuestions})
-            </button>
-          </div>
-
-          {activeTab === "copilot" && (
-            <div className="glass-card flex flex-col overflow-hidden" style={{ minHeight: "calc(100vh - 200px)" }}>
-              <div className="flex-1 p-4 overflow-auto space-y-3" style={{ maxHeight: "calc(100vh - 320px)" }}>
-                {chat.length === 0 && (
-                  <div className="text-center pt-12 space-y-2">
-                    <Sparkles className="w-8 h-8 mx-auto text-violet-400/50" />
-                    <p className="text-sm text-slate-500">Ask the AI to generate quiz questions on any topic.</p>
-                    <p className="text-xs text-slate-600">Try: "Generate 5 IGCSE differentiation MCQs with worked solutions"</p>
+          {/* Questions List */}
+          <div className="space-y-3">
+            {savedQuestions.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saved Questions ({savedQuestions.length})</p>
+                {savedQuestions.map((q, idx) => (
+                  <div key={q.id} className="glass-card p-4 flex items-start gap-3" data-testid={`card-saved-q-${q.id}`}>
+                    <span className="text-xs font-mono text-emerald-400 font-medium mt-0.5 shrink-0 w-7">Q{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-slate-200 mb-1.5">{renderLatex(unescapeLatex(q.promptText))}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">{q.options.length} options</Badge>
+                        <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">{q.marksWorth} marks</Badge>
+                        {q.imageUrl && <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">Has image</Badge>}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-7 h-7 text-slate-500 hover:text-red-400 shrink-0"
+                      onClick={() => {
+                        if (confirm("Delete this question permanently?")) {
+                          deleteQuestionMutation.mutate(q.id);
+                        }
+                      }}
+                      data-testid={`button-delete-saved-${q.id}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
-                )}
-                {chat.map((m, i) => (
-                  <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
-                    <div className={`inline-block max-w-[85%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                      m.role === "user"
-                        ? "bg-violet-600/20 text-violet-200 border border-violet-500/20"
-                        : "bg-white/5 text-slate-300 border border-white/5"
-                    }`}>
-                      {m.text}
-                      {m.metadata && (
-                        <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-md bg-slate-900/50 border border-white/5 text-[10px] text-slate-400 font-mono tracking-wider" data-testid={`badge-telemetry-${i}`}>
-                          <span>{m.metadata.model}</span>
-                          <span>{(m.metadata.durationMs / 1000).toFixed(2)}s</span>
+                ))}
+              </div>
+            )}
+
+            {drafts.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">
+                  New Drafts ({drafts.length}) — save to persist
+                </p>
+                {drafts.map((d, idx) => (
+                  <div key={idx} className="glass-card p-4 space-y-2 border-violet-500/20" data-testid={`card-draft-q-${idx}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono text-violet-400">Draft {idx + 1}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-7 h-7 text-slate-500 hover:text-red-400"
+                        onClick={() => setDrafts((prev) => prev.filter((_, i) => i !== idx))}
+                        data-testid={`button-remove-draft-${idx}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={d.prompt_text}
+                      onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, prompt_text: e.target.value } : x))}
+                      className="glass-input text-sm min-h-[60px]"
+                      placeholder="Question text (supports LaTeX)"
+                      data-testid={`input-draft-prompt-${idx}`}
+                    />
+                    {d.prompt_text && (
+                      <div className="text-sm text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg p-2">
+                        {renderLatex(unescapeLatex(d.prompt_text))}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {d.options.map((o, oi) => (
+                        <Input
+                          key={oi}
+                          value={o}
+                          onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, options: x.options.map((a, j) => j === oi ? e.target.value : a) } : x))}
+                          className="glass-input text-sm"
+                          placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                          data-testid={`input-draft-opt-${idx}-${oi}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        value={d.correct_answer}
+                        onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, correct_answer: e.target.value } : x))}
+                        className="glass-input text-sm"
+                        placeholder="Correct answer"
+                        data-testid={`input-draft-answer-${idx}`}
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        value={d.marks_worth}
+                        onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, marks_worth: Number(e.target.value) || 1 } : x))}
+                        className="glass-input text-sm"
+                        placeholder="Marks"
+                        data-testid={`input-draft-marks-${idx}`}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`draft-img-${idx}`} className="cursor-pointer">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 border border-white/10 rounded-lg px-2.5 py-1.5 hover:border-violet-500/30 transition-colors">
+                          <ImagePlus className="w-3.5 h-3.5" />
+                          {d.image_url ? "Change Image" : "Attach Image"}
+                        </div>
+                        <input
+                          id={`draft-img-${idx}`}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleAttachImage(idx, f).catch((err) => toast({ title: "Upload failed", description: String(err), variant: "destructive" }));
+                          }}
+                        />
+                      </Label>
+                      {d.image_url && (
+                        <div className="flex items-center gap-2">
+                          <img src={d.image_url} alt="attached" className="h-8 w-8 object-cover rounded border border-white/10" />
+                          <button className="text-xs text-slate-500 hover:text-red-400" onClick={() => setDrafts(prev => prev.map((x, i) => i === idx ? { ...x, image_url: null } : x))}>Remove</button>
                         </div>
                       )}
                     </div>
                   </div>
                 ))}
-                <div ref={chatEndRef} />
               </div>
-              <div className="p-4 border-t border-white/5">
-                <div className="flex gap-2">
-                  <Textarea
-                    value={msg}
-                    onChange={(e) => setMsg(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask for quiz questions on any topic..."
-                    className="glass-input flex-1 min-h-[44px] max-h-[120px] resize-none"
-                    data-testid="input-copilot-message"
-                  />
-                  <Button
-                    className="glow-button shrink-0 self-end"
-                    onClick={handleSend}
-                    disabled={!msg.trim() || chatMutation.isPending}
-                    data-testid="button-copilot-send"
-                  >
-                    {chatMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </Button>
+            )}
+
+            {savedQuestions.length === 0 && drafts.length === 0 && (
+              <div className="glass-card p-8 text-center space-y-2">
+                <FileStack className="w-8 h-8 mx-auto text-slate-600" />
+                <p className="text-sm text-slate-500">No questions yet.</p>
+                <p className="text-xs text-slate-600">Use the AI Co-Pilot, upload a PDF, or add questions manually.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN — Copilot Chat (3 cols) */}
+        <div className="col-span-12 lg:col-span-3">
+          <div className="glass-card flex flex-col overflow-hidden sticky top-16 z-10" style={{ height: "calc(100vh - 90px)" }}>
+            <div className="px-3 py-2.5 border-b border-white/5 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+              <span className="text-xs font-semibold text-slate-300" data-testid="tab-copilot">AI Co-Pilot</span>
+            </div>
+            <div className="flex-1 p-2.5 overflow-auto space-y-2">
+              {chat.length === 0 && (
+                <div className="text-center pt-8 space-y-1.5">
+                  <Sparkles className="w-6 h-6 mx-auto text-violet-400/50" />
+                  <p className="text-xs text-slate-500">Ask the AI to generate quiz questions.</p>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">"Generate 5 IGCSE differentiation MCQs"</p>
                 </div>
+              )}
+              {chat.map((m, i) => (
+                <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+                  <div className={`inline-block max-w-[92%] rounded-lg px-2.5 py-1.5 text-xs whitespace-pre-wrap leading-relaxed ${
+                    m.role === "user"
+                      ? "bg-violet-600/20 text-violet-200 border border-violet-500/20"
+                      : "bg-white/5 text-slate-300 border border-white/5"
+                  }`}>
+                    {m.text}
+                    {m.metadata && (
+                      <div className="mt-1.5 inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-slate-900/50 border border-white/5 text-[9px] text-slate-400 font-mono" data-testid={`badge-telemetry-${i}`}>
+                        <span>{m.metadata.model}</span>
+                        <span>{(m.metadata.durationMs / 1000).toFixed(2)}s</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            <div className="p-2.5 border-t border-white/5">
+              <div className="flex gap-1.5">
+                <Textarea
+                  value={msg}
+                  onChange={(e) => setMsg(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask for questions..."
+                  className="glass-input flex-1 min-h-[36px] max-h-[80px] resize-none text-xs"
+                  data-testid="input-copilot-message"
+                />
+                <Button
+                  className="glow-button shrink-0 self-end"
+                  size="icon"
+                  onClick={handleSend}
+                  disabled={!msg.trim() || chatMutation.isPending}
+                  data-testid="button-copilot-send"
+                >
+                  {chatMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                </Button>
               </div>
             </div>
-          )}
-
-          {activeTab === "questions" && (
-            <div className="glass-card overflow-hidden" style={{ minHeight: "calc(100vh - 200px)" }}>
-              <div className="p-4 overflow-auto space-y-4" style={{ maxHeight: "calc(100vh - 220px)" }}>
-                {/* Saved Questions (from DB) */}
-                {savedQuestions.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saved Questions ({savedQuestions.length})</p>
-                    {savedQuestions.map((q, idx) => (
-                      <div key={q.id} className="border border-white/10 rounded-xl p-3 flex items-start gap-3 bg-white/[0.02]" data-testid={`card-saved-q-${q.id}`}>
-                        <span className="text-xs font-mono text-emerald-400 font-medium mt-0.5 shrink-0 w-7">Q{idx + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-slate-200 mb-1">{renderLatex(unescapeLatex(q.promptText))}</div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">{q.options.length} options</Badge>
-                            <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">{q.marksWorth} marks</Badge>
-                            {q.imageUrl && <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">Has image</Badge>}
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="w-7 h-7 text-slate-500 hover:text-red-400 shrink-0"
-                          onClick={() => {
-                            if (confirm("Delete this question permanently?")) {
-                              deleteQuestionMutation.mutate(q.id);
-                            }
-                          }}
-                          data-testid={`button-delete-saved-${q.id}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Draft Questions (unsaved) */}
-                {drafts.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">
-                      New Drafts ({drafts.length}) — save to persist
-                    </p>
-                    {drafts.map((d, idx) => (
-                      <div key={idx} className="border border-violet-500/20 rounded-xl p-4 space-y-2 bg-violet-500/[0.03]" data-testid={`card-draft-q-${idx}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono text-violet-400">Draft {idx + 1}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-slate-500 hover:text-red-400"
-                            onClick={() => setDrafts((prev) => prev.filter((_, i) => i !== idx))}
-                            data-testid={`button-remove-draft-${idx}`}
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                        <Textarea
-                          value={d.prompt_text}
-                          onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, prompt_text: e.target.value } : x))}
-                          className="glass-input text-sm min-h-[60px]"
-                          placeholder="Question text (supports LaTeX)"
-                          data-testid={`input-draft-prompt-${idx}`}
-                        />
-                        {d.prompt_text && (
-                          <div className="text-sm text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg p-2">
-                            {renderLatex(unescapeLatex(d.prompt_text))}
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-2">
-                          {d.options.map((o, oi) => (
-                            <Input
-                              key={oi}
-                              value={o}
-                              onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, options: x.options.map((a, j) => j === oi ? e.target.value : a) } : x))}
-                              className="glass-input text-sm"
-                              placeholder={`Option ${String.fromCharCode(65 + oi)}`}
-                              data-testid={`input-draft-opt-${idx}-${oi}`}
-                            />
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            value={d.correct_answer}
-                            onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, correct_answer: e.target.value } : x))}
-                            className="glass-input text-sm"
-                            placeholder="Correct answer"
-                            data-testid={`input-draft-answer-${idx}`}
-                          />
-                          <Input
-                            type="number"
-                            min={1}
-                            value={d.marks_worth}
-                            onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, marks_worth: Number(e.target.value) || 1 } : x))}
-                            className="glass-input text-sm"
-                            placeholder="Marks"
-                            data-testid={`input-draft-marks-${idx}`}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`draft-img-${idx}`} className="cursor-pointer">
-                            <div className="flex items-center gap-1.5 text-xs text-slate-400 border border-white/10 rounded-lg px-2.5 py-1.5 hover:border-violet-500/30 transition-colors">
-                              <ImagePlus className="w-3.5 h-3.5" />
-                              {d.image_url ? "Change Image" : "Attach Image"}
-                            </div>
-                            <input
-                              id={`draft-img-${idx}`}
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) handleAttachImage(idx, f).catch((err) => toast({ title: "Upload failed", description: String(err), variant: "destructive" }));
-                              }}
-                            />
-                          </Label>
-                          {d.image_url && (
-                            <div className="flex items-center gap-2">
-                              <img src={d.image_url} alt="attached" className="h-8 w-8 object-cover rounded border border-white/10" />
-                              <button className="text-xs text-slate-500 hover:text-red-400" onClick={() => setDrafts(prev => prev.map((x, i) => i === idx ? { ...x, image_url: null } : x))}>Remove</button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {savedQuestions.length === 0 && drafts.length === 0 && (
-                  <div className="text-center pt-12 space-y-2">
-                    <FileStack className="w-8 h-8 mx-auto text-slate-600" />
-                    <p className="text-sm text-slate-500">No questions yet.</p>
-                    <p className="text-xs text-slate-600">Use the AI Co-Pilot, upload a PDF, or add questions manually.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </main>
 
