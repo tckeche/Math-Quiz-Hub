@@ -7,7 +7,7 @@ import type { Quiz, SomaQuiz } from "@shared/schema";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import {
-  LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
+  LogOut, BookOpen, Clock, ArrowRight, CheckCircle2, XCircle,
   Loader2, AlertTriangle, Filter, ChevronDown, Sparkles, FileText, Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -486,6 +486,7 @@ export default function StudentDashboard() {
                       const sc = getSubjectColor(item.subject);
                       const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
                       const isPending = item.status === "pending";
+                      const isFailed = item.status === "failed";
                       return (
                         <div
                           key={`${item.type}-${item.id}`}
@@ -495,7 +496,7 @@ export default function StudentDashboard() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <FileText
-                                className={`w-5 h-5 flex-shrink-0 ${isPending ? "text-orange-400 animate-pulse" : "text-emerald-400"}`}
+                                className={`w-5 h-5 flex-shrink-0 ${isPending ? "text-orange-400 animate-pulse" : isFailed ? "text-red-400" : "text-emerald-400"}`}
                                 data-testid={`icon-report-${item.type}-${item.id}`}
                               />
                               <div className="flex-1 min-w-0">
@@ -507,6 +508,11 @@ export default function StudentDashboard() {
                                   <span className="flex items-center gap-1 text-[10px] text-amber-400" data-testid={`status-pending-${item.id}`}>
                                     <Loader2 className="w-3 h-3 animate-spin" />
                                     AI Analyzing...
+                                  </span>
+                                ) : isFailed ? (
+                                  <span className="flex items-center gap-1 text-[10px] text-red-400" data-testid={`status-failed-${item.id}`}>
+                                    <XCircle className="w-3 h-3" />
+                                    Analysis Failed
                                   </span>
                                 ) : (
                                   <span className="flex items-center gap-1 text-[10px] text-emerald-400" data-testid={`status-completed-${item.id}`}>

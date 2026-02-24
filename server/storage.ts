@@ -49,6 +49,7 @@ export interface IStorage {
   getSomaReportsByStudentId(studentId: string): Promise<(SomaReport & { quiz: SomaQuiz })[]>;
   getSubmissionsByStudentUserId(studentId: string): Promise<(Submission & { quiz: Quiz })[]>;
   createSomaReport(report: InsertSomaReport): Promise<SomaReport>;
+  updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined>;
   checkSomaSubmission(quizId: number, studentId: string): Promise<boolean>;
   getSomaReportById(reportId: number): Promise<(SomaReport & { quiz: SomaQuiz }) | undefined>;
 }
@@ -256,6 +257,11 @@ class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined> {
+    const [result] = await this.database.update(somaReports).set(data).where(eq(somaReports.id, reportId)).returning();
+    return result;
+  }
+
   async checkSomaSubmission(quizId: number, studentId: string): Promise<boolean> {
     const existing = await this.database.select().from(somaReports)
       .where(and(eq(somaReports.quizId, quizId), eq(somaReports.studentId, studentId)));
@@ -438,6 +444,13 @@ class MemoryStorage implements IStorage {
     const created: SomaReport = { id: this.somaReportId++, createdAt: new Date(), aiFeedbackHtml: null, answersJson: null, status: "pending", studentId: report.studentId ?? null, ...report };
     this.somaReportsList.push(created);
     return created;
+  }
+
+  async updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined> {
+    const report = this.somaReportsList.find((r) => r.id === reportId);
+    if (!report) return undefined;
+    Object.assign(report, data);
+    return report;
   }
 
   async checkSomaSubmission(quizId: number, studentId: string): Promise<boolean> {

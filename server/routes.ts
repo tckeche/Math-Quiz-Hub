@@ -125,6 +125,64 @@ function extractJsonArray(text: string): any[] | null {
   }
 }
 
+async function runBackgroundGrading(
+  reportId: number,
+  questions: { id: number; stem: string; options: string[]; correctAnswer: string; marks: number }[],
+  studentAnswers: Record<string, string>,
+  totalScore: number,
+  maxPossibleScore: number,
+) {
+  const GRADING_TIMEOUT_MS = 90_000;
+  try {
+    console.log(`[SOMA Grading] Starting background AI grading for report ${reportId}`);
+
+    const breakdown = questions.map((q) => {
+      const studentAnswer = studentAnswers[String(q.id)] || "(no answer)";
+      const isCorrect = studentAnswer === q.correctAnswer;
+      return `Q: ${q.stem}\nStudent Answer: ${studentAnswer}\nCorrect Answer: ${q.correctAnswer}\nResult: ${isCorrect ? "CORRECT" : "INCORRECT"} (${q.marks} marks)`;
+    }).join("\n\n");
+
+    const systemPrompt = `You are a mathematics tutor providing personalized feedback to a student. Analyze their quiz performance and provide actionable feedback in clean HTML format. Use <h3> for section headings, <ul>/<li> for lists, <p> for paragraphs, and <strong> for emphasis. Keep feedback encouraging yet specific about areas for improvement.`;
+
+    const userPrompt = `Student scored ${totalScore}/${maxPossibleScore} (${Math.round((totalScore / maxPossibleScore) * 100)}%).
+
+Here is the breakdown:
+
+${breakdown}
+
+Provide:
+1. An overall performance summary
+2. Specific strengths demonstrated
+3. Areas needing improvement with concrete study suggestions
+4. Encouragement and next steps`;
+
+    const gradePromise = generateWithFallback(systemPrompt, userPrompt);
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("AI grading timed out after 90 seconds")), GRADING_TIMEOUT_MS)
+    );
+
+    const { data } = await Promise.race([gradePromise, timeoutPromise]);
+
+    await storage.updateSomaReport(reportId, {
+      status: "completed",
+      aiFeedbackHtml: data,
+    });
+
+    console.log(`[SOMA Grading] Report ${reportId} graded successfully`);
+  } catch (err: any) {
+    console.error(`[SOMA Grading] Failed for report ${reportId}:`, err.message || err);
+    try {
+      await storage.updateSomaReport(reportId, {
+        status: "failed",
+        aiFeedbackHtml: `<p>AI analysis failed: ${err.message || "Unknown error"}. Please contact your teacher or try again later.</p>`,
+      });
+    } catch (dbErr: any) {
+      console.error(`[SOMA Grading] Failed to update report ${reportId} to failed status:`, dbErr.message);
+    }
+  }
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.post("/api/auth/sync", async (req, res) => {
     try {
@@ -742,6 +800,9 @@ Sections to include:
       });
 
       res.json(report);
+
+      const maxPossibleScore = allQuestions.reduce((s, q) => s + q.marks, 0);
+      runBackgroundGrading(report.id, allQuestions, answers, totalScore, maxPossibleScore).catch(() => {});
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
