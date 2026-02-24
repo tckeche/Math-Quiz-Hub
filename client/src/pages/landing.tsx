@@ -4,7 +4,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen w-full relative overflow-hidden flex flex-col items-center justify-center px-4 bg-[#0A0F1C] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(139,92,246,0.25),rgba(10,15,28,1))]">
       <div className="text-center z-10 relative">
-        <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-20 w-auto object-contain mx-auto mb-8" />
+        <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-[106px] w-auto object-contain mx-auto mb-8" />
 
         <h1 className="text-4xl md:text-6xl font-black text-[#DDD6FE] drop-shadow-[0_0_20px_rgba(139,92,246,0.3)] tracking-tight mb-4" data-testid="text-main-title">
           Welcome to SOMA
