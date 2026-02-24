@@ -852,8 +852,34 @@ Sections to include:
     try {
       const { message, studentId } = req.body;
       if (!message) return res.status(400).json({ message: "Message is required" });
-      res.json({ reply: "The Global AI Tutor is coming soon. Stay tuned for personalized learning assistance!" });
+
+      let historicalContext = "";
+
+      if (studentId) {
+        const reports = await storage.getSomaReportsByStudentId(studentId);
+        const completedReports = reports.filter(
+          (r) => r.status === "completed" && r.aiFeedbackHtml
+        );
+
+        if (completedReports.length > 0) {
+          const feedbackEntries = completedReports.map((r, i) => {
+            const scoreInfo = r.score !== null ? `Score: ${r.score}` : "Score: N/A";
+            return `--- Quiz ${i + 1}: "${r.quiz.title}" (${r.quiz.topic || "General"}) | ${scoreInfo} ---\n${r.aiFeedbackHtml}`;
+          });
+          historicalContext = feedbackEntries.join("\n\n");
+        }
+      }
+
+      const analysisCount = historicalContext.split("--- Quiz").length - 1;
+      const systemPrompt = historicalContext
+        ? `You are an elite academic advisor. Below are the individual AI analyses from this student's past quizzes. Synthesize all of this feedback into a single, cohesive analysis. Tell the student their current overall standing, identify the specific fundamental concepts they repeatedly struggle with across these analyses, and prescribe exactly what they need to revisit to achieve mastery.\n\nAlso answer any specific question the student asks, informed by their performance history.\n\n=== STUDENT PERFORMANCE HISTORY (${analysisCount} analyses) ===\n${historicalContext}\n=== END HISTORY ===`
+        : "You are a helpful and encouraging math tutor. Answer the student's question clearly and thoroughly. Use LaTeX notation where appropriate (wrap inline math in $...$ and display math in $$...$$).";
+
+      const userPrompt = message;
+      const result = await generateWithFallback(systemPrompt, userPrompt);
+      res.json({ reply: result.data });
     } catch (err: any) {
+      console.error("[Global Tutor] Error:", err.message);
       res.status(500).json({ message: err.message });
     }
   });

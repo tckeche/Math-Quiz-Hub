@@ -1,12 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Send, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 export default function SomaChat() {
   const [message, setMessage] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [studentId, setStudentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) setStudentId(session.user.id);
+    });
+  }, []);
 
   const handleSend = async () => {
     if (!message.trim()) return;
@@ -16,7 +25,7 @@ export default function SomaChat() {
       const res = await fetch("/api/soma/global-tutor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message.trim() }),
+        body: JSON.stringify({ message: message.trim(), studentId }),
       });
       const data = await res.json();
       setReply(data.reply || data.message);
@@ -44,7 +53,7 @@ export default function SomaChat() {
             <Sparkles className="w-8 h-8 text-emerald-400" />
           </div>
           <h1 className="text-2xl font-bold gradient-text mb-2" data-testid="text-chat-title">Global AI Tutor</h1>
-          <p className="text-sm text-slate-400">Ask any math question and get instant help</p>
+          <p className="text-sm text-slate-400">Ask any math question and get personalized help based on your quiz history</p>
         </div>
 
         <div className="glass-card p-6">
@@ -70,7 +79,7 @@ export default function SomaChat() {
 
           {reply && (
             <div className="bg-white/5 border border-white/10 rounded-xl p-4" data-testid="text-chat-reply">
-              <p className="text-sm text-slate-300 leading-relaxed">{reply}</p>
+              <MarkdownRenderer content={reply} />
             </div>
           )}
         </div>
