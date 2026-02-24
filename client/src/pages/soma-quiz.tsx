@@ -124,7 +124,7 @@ function ErrorView({ message }: { message: string }) {
         </div>
         <h2 className="text-xl font-bold mb-2 text-slate-100">Failed to Load</h2>
         <p className="text-sm text-slate-400 mb-6">{message}</p>
-        <Link href="/portal">
+        <Link href="/dashboard">
           <Button className="glow-button" data-testid="button-error-back">
             <Home className="w-4 h-4 mr-1.5" />
             Return to Portal
@@ -179,25 +179,32 @@ function SummaryView({
           </div>
 
           <div className="space-y-2 mb-6">
-            {questions.map((q, idx) => (
-              <div
-                key={q.id}
-                className="flex items-center gap-3 bg-white/[0.03] rounded-lg p-3 border border-white/5"
-              >
-                <span className="text-xs font-mono text-slate-500 w-6 text-right">{idx + 1}</span>
-                {answers[q.id] ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                ) : (
-                  <Circle className="w-4 h-4 text-slate-600 shrink-0" />
-                )}
-                <span className="text-sm text-slate-300 truncate flex-1">
-                  {q.stem.slice(0, 60)}{q.stem.length > 60 ? "..." : ""}
-                </span>
-                <Badge className={`text-xs ${answers[q.id] ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-white/5 text-slate-500 border-white/10"}`}>
-                  [{q.marks}]
-                </Badge>
-              </div>
-            ))}
+            {questions.map((q, idx) => {
+              const isAnswered = !!answers[q.id];
+              return (
+                <div
+                  key={q.id}
+                  className={`flex items-center gap-3 rounded-lg p-3 border transition-all ${
+                    isAnswered
+                      ? "bg-cyan-500/5 border-cyan-400/30 shadow-[0_0_10px_rgba(34,211,238,0.15)]"
+                      : "bg-slate-800/40 border-slate-700/40 grayscale opacity-60"
+                  }`}
+                >
+                  <span className={`text-xs font-mono w-6 text-right ${isAnswered ? "text-cyan-400" : "text-slate-600"}`}>{idx + 1}</span>
+                  {isAnswered ? (
+                    <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                  ) : (
+                    <Circle className="w-4 h-4 text-slate-600 shrink-0" />
+                  )}
+                  <span className={`text-sm truncate flex-1 ${isAnswered ? "text-slate-200" : "text-slate-500"}`}>
+                    {q.stem.slice(0, 60)}{q.stem.length > 60 ? "..." : ""}
+                  </span>
+                  <Badge className={`text-xs ${isAnswered ? "bg-cyan-500/10 text-cyan-400 border-cyan-400/30" : "bg-slate-800/60 text-slate-600 border-slate-700/40"}`}>
+                    [{q.marks}]
+                  </Badge>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -385,7 +392,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
               Exit Preview
             </Button>
           ) : (
-            <Link href="/portal">
+            <Link href="/dashboard">
               <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" data-testid="button-soma-back">
                 <ArrowLeft className="w-4 h-4 mr-1" />
                 Exit

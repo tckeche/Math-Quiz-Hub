@@ -128,10 +128,9 @@ export default function SomaChatPage() {
         }),
       };
 
-      const res = await fetch("/api/admin/copilot-chat", {
+      const res = await fetch("/api/student/ai-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify(payload),
       });
 

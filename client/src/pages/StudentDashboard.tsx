@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import {
   LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
   Loader2, AlertTriangle, Filter, ChevronDown, Sparkles,
+  Eye, FileText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,24 +46,43 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
     { value: 100 - percentage },
   ];
   return (
-    <div className={CARD_CLASS} data-testid={`card-donut-${subject}`}>
+    <div
+      className={CARD_CLASS}
+      style={{
+        background: `linear-gradient(145deg, rgba(15,23,42,0.9), rgba(30,41,59,0.7))`,
+        boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 40px ${color}10`,
+      }}
+      data-testid={`card-donut-${subject}`}
+    >
       <div className="flex flex-col items-center">
-        <div className="w-32 h-32 relative">
+        <div
+          className="w-32 h-32 relative"
+          style={{
+            filter: `drop-shadow(0 4px 12px ${color}30)`,
+            transform: "perspective(400px) rotateX(5deg)",
+          }}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
+              <defs>
+                <linearGradient id={`grad-${subject}`} x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={1} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+                </linearGradient>
+              </defs>
               <Pie
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius={38}
-                outerRadius={54}
+                innerRadius={36}
+                outerRadius={56}
                 startAngle={90}
                 endAngle={-270}
                 dataKey="value"
                 stroke="none"
-                strokeWidth={15}
+                cornerRadius={4}
               >
-                <Cell fill={color} />
+                <Cell fill={`url(#grad-${subject})`} />
                 <Cell fill="rgba(255,255,255,0.04)" />
               </Pie>
             </PieChart>
@@ -70,14 +90,14 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
           <div className="absolute inset-0 flex items-center justify-center">
             <span
               className="text-xl font-bold text-white"
-              style={{ textShadow: `0 0 20px ${color}60` }}
+              style={{ textShadow: `0 0 20px ${color}60, 0 2px 4px rgba(0,0,0,0.5)` }}
               data-testid={`text-donut-value-${subject}`}
             >
               {Math.round(percentage)}%
             </span>
           </div>
         </div>
-        <p className={`${SECTION_LABEL} mt-3`}>{subject}</p>
+        <p className={`${SECTION_LABEL} mt-3`} style={{ color }}>{subject}</p>
       </div>
     </div>
   );
@@ -89,6 +109,8 @@ export default function StudentDashboard() {
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [showAllAvailable, setShowAllAvailable] = useState(false);
+  const [showAllCompleted, setShowAllCompleted] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -226,6 +248,7 @@ export default function StudentDashboard() {
   const completedItems = useMemo(() => {
     const items: {
       id: number;
+      quizId: number;
       title: string;
       subject: string;
       score: number;
@@ -239,6 +262,7 @@ export default function StudentDashboard() {
     submissions.forEach((s) => {
       items.push({
         id: s.id,
+        quizId: s.quizId,
         title: s.quiz.title,
         subject: s.quiz.subject || "General",
         score: s.totalScore,
@@ -253,6 +277,7 @@ export default function StudentDashboard() {
     reports.forEach((r) => {
       items.push({
         id: r.id,
+        quizId: r.quizId,
         title: r.quiz.title,
         subject: r.quiz.topic || "General",
         score: r.score,
@@ -276,6 +301,9 @@ export default function StudentDashboard() {
   const avatarRingColor = bestSubject ? getSubjectColor(bestSubject.subject).hex : "#8B5CF6";
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
   const isLoading = quizzesLoading || somaLoading || reportsLoading || subsLoading;
+
+  const visibleAvailable = showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 5);
+  const visibleCompleted = showAllCompleted ? completedItems : completedItems.slice(0, 5);
 
   return (
     <div className="min-h-screen bg-[#0b0f1a]">
@@ -409,57 +437,68 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500">No available quizzes</p>
                     </div>
                   ) : (
-                    filteredQuizzes.slice(0, 4).map((q) => {
-                      const isOverdue = q.dueDate && new Date(q.dueDate) < now;
-                      const sc = getSubjectColor(q.subject);
-                      return (
-                        <Link
-                          key={`${q.type}-${q.id}`}
-                          href={q.type === "soma" ? `/soma/quiz/${q.id}` : `/quiz/${q.id}`}
-                        >
-                          <div
-                            className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
-                            data-testid={`card-available-quiz-${q.type}-${q.id}`}
+                    <>
+                      {visibleAvailable.map((q) => {
+                        const isOverdue = q.dueDate && new Date(q.dueDate) < now;
+                        const sc = getSubjectColor(q.subject);
+                        return (
+                          <Link
+                            key={`${q.type}-${q.id}`}
+                            href={q.type === "soma" ? `/soma/quiz/${q.id}` : `/quiz/${q.id}`}
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
-                                    {q.subject}
-                                  </span>
-                                  {q.level && (
-                                    <span className="text-[10px] text-slate-500 px-2 py-0.5 rounded-full bg-slate-800/60">
-                                      {q.level}
+                            <div
+                              className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
+                              data-testid={`card-available-quiz-${q.type}-${q.id}`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
+                                      {q.subject}
                                     </span>
-                                  )}
-                                  {isOverdue && (
-                                    <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]" data-testid={`badge-overdue-${q.id}`}>
-                                      <AlertTriangle className="w-3 h-3 mr-1" />
-                                      Overdue
-                                    </Badge>
-                                  )}
+                                    {q.level && (
+                                      <span className="text-[10px] text-slate-500 px-2 py-0.5 rounded-full bg-slate-800/60">
+                                        {q.level}
+                                      </span>
+                                    )}
+                                    {isOverdue && (
+                                      <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]" data-testid={`badge-overdue-${q.id}`}>
+                                        <AlertTriangle className="w-3 h-3 mr-1" />
+                                        Overdue
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.type}-${q.id}`}>
+                                    {q.title}
+                                  </h3>
+                                  <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
+                                    {q.dueDate && (
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="w-3 h-3" />
+                                        Due {format(new Date(q.dueDate), "MMM d, yyyy")}
+                                      </span>
+                                    )}
+                                    {q.timeLimitMinutes && (
+                                      <span>{q.timeLimitMinutes} min</span>
+                                    )}
+                                  </div>
                                 </div>
-                                <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.type}-${q.id}`}>
-                                  {q.title}
-                                </h3>
-                                <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
-                                  {q.dueDate && (
-                                    <span className="flex items-center gap-1">
-                                      <Clock className="w-3 h-3" />
-                                      Due {format(new Date(q.dueDate), "MMM d, yyyy")}
-                                    </span>
-                                  )}
-                                  {q.timeLimitMinutes && (
-                                    <span>{q.timeLimitMinutes} min</span>
-                                  )}
-                                </div>
+                                <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-violet-400 transition-colors mt-1 flex-shrink-0" />
                               </div>
-                              <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-violet-400 transition-colors mt-1 flex-shrink-0" />
                             </div>
-                          </div>
-                        </Link>
-                      );
-                    })
+                          </Link>
+                        );
+                      })}
+                      {filteredQuizzes.length > 5 && (
+                        <button
+                          onClick={() => setShowAllAvailable(!showAllAvailable)}
+                          className="w-full text-center py-2.5 text-xs font-medium text-violet-400 hover:text-violet-300 border border-slate-700/50 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 transition-all"
+                          data-testid="button-show-more-available"
+                        >
+                          {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 5} more)`}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </section>
@@ -475,76 +514,108 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500">No completed quizzes yet</p>
                     </div>
                   ) : (
-                    completedItems.map((item) => {
-                      const sc = getSubjectColor(item.subject);
-                      const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
-                      const isPending = item.status === "pending";
-                      return (
-                        <div
-                          key={`${item.type}-${item.id}`}
-                          className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 transition-all duration-300"
-                          data-testid={`card-completed-${item.type}-${item.id}`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
-                                  {item.subject}
-                                </span>
-                                {isPending ? (
-                                  <span className="flex items-center gap-1 text-[10px] text-amber-400" data-testid={`status-pending-${item.id}`}>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    AI Analyzing...
+                    <>
+                      {visibleCompleted.map((item) => {
+                        const sc = getSubjectColor(item.subject);
+                        const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
+                        const isPending = item.status === "pending";
+                        const hasAiAnalysis = item.type === "soma" ? (!!item.feedbackHtml && !isPending) : false;
+                        return (
+                          <div
+                            key={`${item.type}-${item.id}`}
+                            className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 transition-all duration-300"
+                            data-testid={`card-completed-${item.type}-${item.id}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
+                                    {item.subject}
                                   </span>
-                                ) : (
-                                  <span className="flex items-center gap-1 text-[10px] text-emerald-400" data-testid={`status-completed-${item.id}`}>
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    Graded
-                                  </span>
-                                )}
+                                  {isPending ? (
+                                    <span className="flex items-center gap-1 text-[10px] text-amber-400" data-testid={`status-pending-${item.id}`}>
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      AI Analyzing...
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-[10px] text-emerald-400" data-testid={`status-completed-${item.id}`}>
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      Graded
+                                    </span>
+                                  )}
+                                  {/* AI analysis document icon */}
+                                  <FileText
+                                    className={`w-3.5 h-3.5 ${hasAiAnalysis ? "text-emerald-400" : "text-amber-500"}`}
+                                    title={hasAiAnalysis ? "AI analysis complete" : "AI analysis pending"}
+                                    data-testid={`icon-ai-status-${item.type}-${item.id}`}
+                                  />
+                                </div>
+                                <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.type}-${item.id}`}>
+                                  {item.title}
+                                </h3>
+                                <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
+                                  <span>{format(new Date(item.date), "MMM d, yyyy")}</span>
+                                </div>
                               </div>
-                              <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.type}-${item.id}`}>
-                                {item.title}
-                              </h3>
-                              <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
-                                <span>{format(new Date(item.date), "MMM d, yyyy")}</span>
-                              </div>
-                            </div>
-                            <div className="text-right flex-shrink-0">
-                              <div
-                                className="text-2xl font-bold"
-                                style={{ color: pct >= 70 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#f43f5e", textShadow: `0 0 12px ${pct >= 70 ? "#10b98130" : pct >= 50 ? "#f59e0b30" : "#f43f5e30"}` }}
-                                data-testid={`text-score-${item.type}-${item.id}`}
-                              >
-                                {pct}%
-                              </div>
-                              <div className="text-[10px] text-slate-500">
-                                {item.score}/{item.maxScore}
-                              </div>
-                              {item.feedbackHtml && !isPending && (
-                                <button
-                                  onClick={() => {
-                                    const w = window.open("", "_blank");
-                                    if (w) {
-                                      w.document.write(`
-                                        <html><head><title>${item.title} - Report</title>
-                                        <style>body{font-family:system-ui;padding:40px;max-width:800px;margin:0 auto;background:#0b0f1a;color:#e2e8f0}h3{color:#a78bfa}ul{padding-left:20px}li{margin-bottom:8px}hr{border-color:#1e293b}</style>
-                                        </head><body>${item.feedbackHtml}</body></html>
-                                      `);
-                                      w.document.close();
-                                    }
-                                  }}
-                                  className="text-[10px] text-violet-400 hover:text-violet-300 mt-1 block transition-colors"
-                                  data-testid={`button-view-report-${item.type}-${item.id}`}
+                              <div className="text-right flex-shrink-0">
+                                <div
+                                  className="text-2xl font-bold"
+                                  style={{ color: pct >= 70 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#f43f5e", textShadow: `0 0 12px ${pct >= 70 ? "#10b98130" : pct >= 50 ? "#f59e0b30" : "#f43f5e30"}` }}
+                                  data-testid={`text-score-${item.type}-${item.id}`}
                                 >
-                                  View Report →
-                                </button>
-                              )}
+                                  {pct}%
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {item.score}/{item.maxScore}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1.5 justify-end">
+                                  {/* Eye icon to review quiz answers */}
+                                  {item.type === "regular" && (
+                                    <Link href={`/quiz/${item.quizId}`}>
+                                      <button
+                                        className="text-cyan-400 hover:text-cyan-300 transition-colors p-0.5"
+                                        title="Review answers"
+                                        data-testid={`button-review-quiz-${item.type}-${item.id}`}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </button>
+                                    </Link>
+                                  )}
+                                  {item.feedbackHtml && !isPending && (
+                                    <button
+                                      onClick={() => {
+                                        const w = window.open("", "_blank");
+                                        if (w) {
+                                          w.document.write(`
+                                            <html><head><title>${item.title} - Report</title>
+                                            <style>body{font-family:system-ui;padding:40px;max-width:800px;margin:0 auto;background:#0b0f1a;color:#e2e8f0}h3{color:#a78bfa}ul{padding-left:20px}li{margin-bottom:8px}hr{border-color:#1e293b}</style>
+                                            </head><body>${item.feedbackHtml}</body></html>
+                                          `);
+                                          w.document.close();
+                                        }
+                                      }}
+                                      className="text-[10px] text-violet-400 hover:text-violet-300 block transition-colors"
+                                      data-testid={`button-view-report-${item.type}-${item.id}`}
+                                    >
+                                      View Report →
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })
+                        );
+                      })}
+                      {completedItems.length > 5 && (
+                        <button
+                          onClick={() => setShowAllCompleted(!showAllCompleted)}
+                          className="w-full text-center py-2.5 text-xs font-medium text-violet-400 hover:text-violet-300 border border-slate-700/50 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 transition-all"
+                          data-testid="button-show-more-completed"
+                        >
+                          {showAllCompleted ? "Show Less" : `Show More (${completedItems.length - 5} more)`}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </section>
