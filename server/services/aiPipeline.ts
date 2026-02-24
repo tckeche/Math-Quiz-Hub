@@ -21,13 +21,18 @@ const jsonSchema = zodToJsonSchema(QuizResultSchema, "QuizResult");
 async function step1Generate(topic: string): Promise<QuizResult> {
   console.log("[SOMA Pipeline] Step 1: Generating initial quiz...");
 
-  const systemPrompt = `You are an expert mathematics assessment designer. Generate quizzes of high-quality multiple-choice questions. Return a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}`;
+  const systemPrompt = `You are an expert mathematics assessment designer. Generate quizzes of high-quality multiple-choice questions. Return a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
+
+CRITICAL FORMATTING RULES:
+- You MUST format all math using standard LaTeX enclosed in $ for inline and $$ for block math.
+- Format all programming code using standard markdown code blocks with the language specified (e.g. \`\`\`python).
+- Use markdown formatting (bold, lists, etc.) where appropriate for clarity.`;
 
   const userPrompt = `Generate a quiz of 5 high-quality multiple-choice questions on the topic: "${topic}".
 
 Requirements:
 - Each question must have exactly 4 options (A, B, C, D format in the text but just the answer values in the array)
-- Include LaTeX notation where appropriate using \\( \\) for inline math
+- Include LaTeX notation where appropriate using $ for inline math and $$ for block math
 - Provide clear, educational explanations
 - Vary difficulty levels across questions
 - Assign marks between 1-5 based on difficulty
@@ -42,14 +47,19 @@ Requirements:
 async function step2Audit(claudeResult: QuizResult, topic: string): Promise<QuizResult> {
   console.log("[SOMA Pipeline] Step 2: Auditing mathematical accuracy...");
 
-  const systemPrompt = `You are a rigorous mathematics auditor. Review quiz questions for mathematical accuracy and return corrected data as a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}`;
+  const systemPrompt = `You are a rigorous mathematics auditor. Review quiz questions for mathematical accuracy and return corrected data as a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
+
+CRITICAL FORMATTING RULES:
+- You MUST format all math using standard LaTeX enclosed in $ for inline and $$ for block math.
+- Format all programming code using standard markdown code blocks with the language specified (e.g. \`\`\`python).
+- Use markdown formatting (bold, lists, etc.) where appropriate for clarity.`;
 
   const userPrompt = `Review the following quiz questions on "${topic}" for mathematical accuracy.
 
 For each question:
 1. Verify the correct_answer is actually correct by solving the problem
 2. Fix any mathematical errors in the stem, options, or explanation
-3. Ensure LaTeX notation is properly formatted
+3. Ensure LaTeX notation uses $ for inline math and $$ for block math (NOT \\( \\) or \\[ \\])
 4. Keep the same structure but improve quality where needed
 
 Quiz data:
@@ -64,7 +74,12 @@ ${JSON.stringify(claudeResult)}`;
 async function step3SyllabusAudit(deepseekResult: QuizResult, topic: string): Promise<QuizResult> {
   console.log("[SOMA Pipeline] Step 3: Final syllabus audit...");
 
-  const systemPrompt = `You are a curriculum alignment specialist. Review mathematics quizzes for syllabus compliance and pedagogical quality. Return the audited quiz as a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}`;
+  const systemPrompt = `You are a curriculum alignment specialist. Review mathematics quizzes for syllabus compliance and pedagogical quality. Return the audited quiz as a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
+
+CRITICAL FORMATTING RULES:
+- You MUST format all math using standard LaTeX enclosed in $ for inline and $$ for block math.
+- Format all programming code using standard markdown code blocks with the language specified (e.g. \`\`\`python).
+- Use markdown formatting (bold, lists, etc.) where appropriate for clarity.`;
 
   const userPrompt = `Review this mathematics quiz on "${topic}" for syllabus compliance and pedagogical quality.
 
@@ -72,7 +87,7 @@ For each question:
 1. Ensure it aligns with standard mathematics curricula
 2. Verify the explanation is clear and educational
 3. Check that difficulty progression makes sense
-4. Ensure LaTeX formatting is clean and consistent
+4. Ensure LaTeX formatting uses $ for inline math and $$ for block math (NOT \\( \\) or \\[ \\])
 5. Confirm marks allocation is fair
 
 Input quiz:

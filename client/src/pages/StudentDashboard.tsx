@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { getSubjectColor } from "@/lib/subjectColors";
@@ -104,6 +104,7 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
 }
 
 export default function StudentDashboard() {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [, setLocation] = useLocation();
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
@@ -217,7 +218,11 @@ export default function StudentDashboard() {
         type: "soma" as const,
       }));
 
+    const currentTime = new Date();
     return [...regularAvailable, ...somaAvailable].sort((a, b) => {
+      const aOverdue = a.dueDate ? new Date(a.dueDate) < currentTime : false;
+      const bOverdue = b.dueDate ? new Date(b.dueDate) < currentTime : false;
+      if (aOverdue !== bOverdue) return aOverdue ? 1 : -1;
       if (!a.dueDate && !b.dueDate) return 0;
       if (!a.dueDate) return 1;
       if (!b.dueDate) return -1;
@@ -291,6 +296,17 @@ export default function StudentDashboard() {
 
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [submissions, reports]);
+
+  const retryMutation = useMutation({
+    mutationFn: async (reportId: number) => {
+      const res = await fetch(`/api/soma/reports/${reportId}/retry`, { method: "POST" });
+      if (!res.ok) throw new Error("Retry failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/student/reports", userId] });
+    },
+  });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -391,7 +407,7 @@ export default function StudentDashboard() {
             <div className="grid md:grid-cols-2 gap-6">
               <section className={CARD_CLASS}>
                 <div className="flex items-center justify-between mb-5">
-                  <h2 className={SECTION_LABEL} data-testid="text-section-available">
+                  <h2 className="text-xl font-bold tracking-wide text-slate-200" data-testid="text-section-available">
                     Available Quizzes
                   </h2>
                   <button
@@ -430,7 +446,7 @@ export default function StudentDashboard() {
                   </div>
                 )}
 
-                <div className="space-y-3">
+                <div className="flex flex-col gap-6 mt-6 mb-10">
                   {filteredQuizzes.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
@@ -500,14 +516,23 @@ export default function StudentDashboard() {
                       )}
                     </>
                   )}
+                  {filteredQuizzes.length > 4 && (
+                    <button
+                      onClick={() => setShowAllAvailable(!showAllAvailable)}
+                      className="w-full text-center text-xs text-violet-400 hover:text-violet-300 transition-colors py-2 mt-1"
+                      data-testid="button-toggle-available"
+                    >
+                      {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 4} more)`}
+                    </button>
+                  )}
                 </div>
               </section>
 
               <section className={CARD_CLASS}>
-                <h2 className={`${SECTION_LABEL} mb-5`} data-testid="text-section-completed">
+                <h2 className="text-xl font-bold tracking-wide text-slate-200 mb-5" data-testid="text-section-completed">
                   Completed Quizzes
                 </h2>
-                <div className="space-y-3">
+                <div className="flex flex-col gap-6 mt-6 mb-10">
                   {completedItems.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <CheckCircle2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
@@ -616,6 +641,15 @@ export default function StudentDashboard() {
                         </button>
                       )}
                     </>
+                  )}
+                  {completedItems.length > 5 && (
+                    <button
+                      onClick={() => setShowAllCompleted(!showAllCompleted)}
+                      className="w-full text-center text-xs text-violet-400 hover:text-violet-300 transition-colors py-2 mt-1"
+                      data-testid="button-toggle-completed"
+                    >
+                      {showAllCompleted ? "Show Less" : `Show More (${completedItems.length - 5} more)`}
+                    </button>
                   )}
                 </div>
               </section>

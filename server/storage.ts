@@ -6,7 +6,7 @@ import {
   type SomaQuiz, type InsertSomaQuiz,
   type SomaQuestion, type InsertSomaQuestion,
   type SomaUser, type InsertSomaUser,
-  type SomaReport,
+  type SomaReport, type InsertSomaReport,
   quizzes, questions, students, submissions,
   somaQuizzes, somaQuestions, somaUsers, somaReports,
 } from "@shared/schema";
@@ -48,6 +48,10 @@ export interface IStorage {
   getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]>;
   getSomaReportsByStudentId(studentId: string): Promise<(SomaReport & { quiz: SomaQuiz })[]>;
   getSubmissionsByStudentUserId(studentId: string): Promise<(Submission & { quiz: Quiz })[]>;
+  createSomaReport(report: InsertSomaReport): Promise<SomaReport>;
+  updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined>;
+  checkSomaSubmission(quizId: number, studentId: string): Promise<boolean>;
+  getSomaReportById(reportId: number): Promise<(SomaReport & { quiz: SomaQuiz }) | undefined>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -248,6 +252,32 @@ class DatabaseStorage implements IStorage {
     return allSubmissions;
   }
 
+  async createSomaReport(report: InsertSomaReport): Promise<SomaReport> {
+    const [result] = await this.database.insert(somaReports).values(report).returning();
+    return result;
+  }
+
+  async updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined> {
+    const [result] = await this.database.update(somaReports).set(data).where(eq(somaReports.id, reportId)).returning();
+    return result;
+  }
+
+  async checkSomaSubmission(quizId: number, studentId: string): Promise<boolean> {
+    const existing = await this.database.select().from(somaReports)
+      .where(and(eq(somaReports.quizId, quizId), eq(somaReports.studentId, studentId)));
+    return existing.length > 0;
+  }
+
+  async getSomaReportById(reportId: number): Promise<(SomaReport & { quiz: SomaQuiz }) | undefined> {
+    const rows = await this.database
+      .select({ report: somaReports, quiz: somaQuizzes })
+      .from(somaReports)
+      .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+      .where(eq(somaReports.id, reportId));
+    if (rows.length === 0) return undefined;
+    return { ...rows[0].report, quiz: rows[0].quiz };
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -405,6 +435,34 @@ class MemoryStorage implements IStorage {
 
   async getSubmissionsByStudentUserId(_studentId: string): Promise<(Submission & { quiz: Quiz })[]> {
     return [];
+  }
+
+  private somaReportsList: SomaReport[] = [];
+  private somaReportId = 1;
+
+  async createSomaReport(report: InsertSomaReport): Promise<SomaReport> {
+    const created: SomaReport = { id: this.somaReportId++, createdAt: new Date(), aiFeedbackHtml: null, answersJson: null, status: "pending", studentId: report.studentId ?? null, ...report };
+    this.somaReportsList.push(created);
+    return created;
+  }
+
+  async updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined> {
+    const report = this.somaReportsList.find((r) => r.id === reportId);
+    if (!report) return undefined;
+    Object.assign(report, data);
+    return report;
+  }
+
+  async checkSomaSubmission(quizId: number, studentId: string): Promise<boolean> {
+    return this.somaReportsList.some((r) => r.quizId === quizId && r.studentId === studentId);
+  }
+
+  async getSomaReportById(reportId: number): Promise<(SomaReport & { quiz: SomaQuiz }) | undefined> {
+    const report = this.somaReportsList.find((r) => r.id === reportId);
+    if (!report) return undefined;
+    const quiz = this.somaQuizzesList.find((q) => q.id === report.quizId);
+    if (!quiz) return undefined;
+    return { ...report, quiz };
   }
 
 }

@@ -49,6 +49,11 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/auth/sync` - Upsert Supabase user into soma_users table (accepts {id, email, user_metadata})
 - `GET /api/student/reports?studentId=` - Get student's soma reports with quiz data
 - `GET /api/student/submissions?studentId=` - Get student's quiz submissions with quiz data
+- `POST /api/soma/quizzes/:id/submit` - Submit soma quiz answers (auto-scored, creates soma_report with status=pending, stores answers in answersJson)
+- `GET /api/soma/quizzes/:id/check-submission?studentId=` - Check if student already submitted soma quiz
+- `GET /api/soma/reports/:reportId/review` - Get report + quiz questions with correct answers for review mode
+- `POST /api/soma/reports/:reportId/retry` - Retry failed AI grading (resets to pending, re-runs background grading)
+- `POST /api/soma/global-tutor` - Global AI Tutor endpoint (accepts { message }, returns { reply })
 
 ### Key Features
 - Admin password: Stored in ADMIN_PASSWORD env var; JWT sessions via JWT_SECRET env var
@@ -76,4 +81,4 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `soma_users` - id (uuid, maps to Supabase auth UID), email, display_name, created_at
 - `soma_quizzes` - id, title, topic, curriculum_context, status (draft/published), created_at
 - `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation, marks
-- `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status (default: 'pending'), ai_feedback_html, created_at
+- `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status (default: 'pending'), ai_feedback_html, answers_json (jsonb, student's submitted answers), created_at

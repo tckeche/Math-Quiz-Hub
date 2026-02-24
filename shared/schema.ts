@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, serial, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, serial, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -98,6 +98,7 @@ export const somaReports = pgTable("soma_reports", {
   score: integer("score").notNull(),
   status: text("status").notNull().default("pending"),
   aiFeedbackHtml: text("ai_feedback_html"),
+  answersJson: jsonb("answers_json"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

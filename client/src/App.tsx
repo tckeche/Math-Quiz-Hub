@@ -11,6 +11,8 @@ import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
 import AnalyticsPage from "@/pages/analytics";
 import SomaQuizEngine from "@/pages/soma-quiz";
+import SomaQuizReview from "@/pages/SomaQuizReview";
+import SomaChat from "@/pages/SomaChat";
 import StudentAuth from "@/pages/StudentAuth";
 import StudentDashboard from "@/pages/StudentDashboard";
 import SomaChatPage from "@/pages/soma-chat";

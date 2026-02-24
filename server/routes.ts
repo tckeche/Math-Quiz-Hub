@@ -125,6 +125,64 @@ function extractJsonArray(text: string): any[] | null {
   }
 }
 
+async function runBackgroundGrading(
+  reportId: number,
+  questions: { id: number; stem: string; options: string[]; correctAnswer: string; marks: number }[],
+  studentAnswers: Record<string, string>,
+  totalScore: number,
+  maxPossibleScore: number,
+) {
+  const GRADING_TIMEOUT_MS = 90_000;
+  try {
+    console.log(`[SOMA Grading] Starting background AI grading for report ${reportId}`);
+
+    const breakdown = questions.map((q) => {
+      const studentAnswer = studentAnswers[String(q.id)] || "(no answer)";
+      const isCorrect = studentAnswer === q.correctAnswer;
+      return `Q: ${q.stem}\nStudent Answer: ${studentAnswer}\nCorrect Answer: ${q.correctAnswer}\nResult: ${isCorrect ? "CORRECT" : "INCORRECT"} (${q.marks} marks)`;
+    }).join("\n\n");
+
+    const systemPrompt = `You are a mathematics tutor providing personalized feedback to a student. Analyze their quiz performance and provide actionable feedback in clean HTML format. Use <h3> for section headings, <ul>/<li> for lists, <p> for paragraphs, and <strong> for emphasis. Keep feedback encouraging yet specific about areas for improvement.`;
+
+    const userPrompt = `Student scored ${totalScore}/${maxPossibleScore} (${Math.round((totalScore / maxPossibleScore) * 100)}%).
+
+Here is the breakdown:
+
+${breakdown}
+
+Provide:
+1. An overall performance summary
+2. Specific strengths demonstrated
+3. Areas needing improvement with concrete study suggestions
+4. Encouragement and next steps`;
+
+    const gradePromise = generateWithFallback(systemPrompt, userPrompt);
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("AI grading timed out after 90 seconds")), GRADING_TIMEOUT_MS)
+    );
+
+    const { data } = await Promise.race([gradePromise, timeoutPromise]);
+
+    await storage.updateSomaReport(reportId, {
+      status: "completed",
+      aiFeedbackHtml: data,
+    });
+
+    console.log(`[SOMA Grading] Report ${reportId} graded successfully`);
+  } catch (err: any) {
+    console.error(`[SOMA Grading] Failed for report ${reportId}:`, err.message || err);
+    try {
+      await storage.updateSomaReport(reportId, {
+        status: "failed",
+        aiFeedbackHtml: `<p>AI analysis failed: ${err.message || "Unknown error"}. Please contact your teacher or try again later.</p>`,
+      });
+    } catch (dbErr: any) {
+      console.error(`[SOMA Grading] Failed to update report ${reportId} to failed status:`, dbErr.message);
+    }
+  }
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.post("/api/auth/sync", async (req, res) => {
     try {
@@ -798,6 +856,190 @@ Sections to include:
       const sanitized = allQuestions.map(({ correctAnswer, explanation, ...rest }) => rest);
       res.json(sanitized);
     } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/soma/quizzes/:id/submit", async (req, res) => {
+    try {
+      const quizId = parseInt(req.params.id);
+      if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
+
+      const { studentId, studentName, answers } = req.body;
+      if (!studentId || !studentName || !answers) {
+        return res.status(400).json({ message: "Missing studentId, studentName, or answers" });
+      }
+
+      const alreadySubmitted = await storage.checkSomaSubmission(quizId, studentId);
+      if (alreadySubmitted) {
+        return res.status(409).json({ message: "You have already submitted this quiz." });
+      }
+
+      const allQuestions = await storage.getSomaQuestionsByQuizId(quizId);
+      if (!allQuestions.length) {
+        return res.status(404).json({ message: "No questions found for this quiz." });
+      }
+
+      let totalScore = 0;
+      for (const q of allQuestions) {
+        if (answers[String(q.id)] === q.correctAnswer) {
+          totalScore += q.marks;
+        }
+      }
+
+      const report = await storage.createSomaReport({
+        quizId,
+        studentId,
+        studentName,
+        score: totalScore,
+        status: "pending",
+        answersJson: answers,
+      });
+
+      res.json(report);
+
+      const maxPossibleScore = allQuestions.reduce((s, q) => s + q.marks, 0);
+      runBackgroundGrading(report.id, allQuestions, answers, totalScore, maxPossibleScore).catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/soma/quizzes/:id/check-submission", async (req, res) => {
+    try {
+      const quizId = parseInt(req.params.id);
+      const studentId = req.query.studentId as string;
+      if (isNaN(quizId) || !studentId) {
+        return res.status(400).json({ message: "quizId and studentId required" });
+      }
+      const exists = await storage.checkSomaSubmission(quizId, studentId);
+      res.json({ submitted: exists });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/soma/reports/:reportId/review", async (req, res) => {
+    try {
+      const reportId = parseInt(req.params.reportId);
+      if (isNaN(reportId)) return res.status(400).json({ message: "Invalid report ID" });
+
+      const report = await storage.getSomaReportById(reportId);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+
+      const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
+
+      res.json({
+        report,
+        questions: questions.map((q) => ({
+          id: q.id,
+          stem: q.stem,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          marks: q.marks,
+          explanation: q.explanation,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/soma/reports/:reportId/retry", async (req, res) => {
+    try {
+      const reportId = parseInt(req.params.reportId);
+      if (isNaN(reportId)) return res.status(400).json({ message: "Invalid report ID" });
+
+      const report = await storage.getSomaReportById(reportId);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+
+      if (report.status !== "failed") {
+        return res.status(400).json({ message: "Only failed reports can be retried" });
+      }
+
+      await storage.updateSomaReport(reportId, { status: "pending", aiFeedbackHtml: null });
+
+      const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
+      const answers = (report.answersJson as Record<string, string>) || {};
+      const maxPossibleScore = questions.reduce((s, q) => s + q.marks, 0);
+
+      res.json({ message: "Retry started", reportId });
+
+      runBackgroundGrading(reportId, questions, answers, report.score, maxPossibleScore).catch(() => {});
+    } catch (err: any) {
+      console.error("[Retry Grading] Error:", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/soma/global-tutor", async (req, res) => {
+    try {
+      const { message, studentId } = req.body;
+      if (!message) return res.status(400).json({ message: "Message is required" });
+
+      let completedContext = "";
+      let untestedContext = "";
+      let hasStudentData = false;
+
+      if (studentId) {
+        const [reports, allSomaQuizzes] = await Promise.all([
+          storage.getSomaReportsByStudentId(studentId),
+          storage.getSomaQuizzes(),
+        ]);
+
+        const completedReports = reports.filter(
+          (r) => r.status === "completed" && r.aiFeedbackHtml
+        );
+
+        if (completedReports.length > 0) {
+          hasStudentData = true;
+          const feedbackEntries = completedReports.map((r, i) => {
+            const scoreInfo = r.score !== null ? `Score: ${r.score}/100 (${r.score}%)` : "Score: N/A";
+            return `--- Quiz ${i + 1}: "${r.quiz.title}" | Topic: ${r.quiz.topic || "General"} | ${scoreInfo} ---\n${r.aiFeedbackHtml}`;
+          });
+          completedContext = feedbackEntries.join("\n\n");
+        }
+
+        const completedQuizIds = new Set(reports.map((r) => r.quizId));
+        const untestedQuizzes = allSomaQuizzes
+          .filter((q) => q.status === "published" && !completedQuizIds.has(q.id));
+
+        if (untestedQuizzes.length > 0) {
+          hasStudentData = true;
+          untestedContext = untestedQuizzes.map((q) => {
+            return `- "${q.title}" | Topic: ${q.topic || "General"} | Curriculum: ${q.curriculumContext || "N/A"}`;
+          }).join("\n");
+        }
+      }
+
+      const systemPrompt = hasStudentData
+        ? `You are an elite academic advisor. You are provided with a student's past quiz feedback, AND a list of upcoming syllabus topics they have not yet been tested on. You must output a 3-part HTML report:
+
+1. **Overall Standing**: A brutal but fair assessment of their current grades.
+
+2. **Weak Fundamentals**: What they keep getting wrong based on past feedback.
+
+3. **Untested Territory (CRITICAL)**: Look at the 'Untested Quizzes' array provided. Explicitly list the topics they have not taken yet, and advise them on how to prepare for those specific upcoming subjects.
+
+Also answer any specific question the student asks, informed by their performance history and untested topics. Use <h3> for section headings, <ul>/<li> for lists, <p> for paragraphs, and <strong> for emphasis. Format output as clean HTML.`
+        : "You are a helpful and encouraging math tutor. Answer the student's question clearly and thoroughly. Use LaTeX notation where appropriate (wrap inline math in $...$ and display math in $$...$$).";
+
+      let userPrompt = message;
+      if (hasStudentData) {
+        const dataSections: string[] = [];
+        if (completedContext) {
+          dataSections.push(`=== COMPLETED QUIZ FEEDBACK (${completedContext.split("--- Quiz").length - 1} quizzes) ===\n${completedContext}\n=== END COMPLETED ===`);
+        }
+        if (untestedContext) {
+          dataSections.push(`=== UNTESTED QUIZZES (topics not yet attempted) ===\n${untestedContext}\n=== END UNTESTED ===`);
+        }
+        userPrompt = `${dataSections.join("\n\n")}\n\nStudent's Question: ${message}`;
+      }
+
+      const result = await generateWithFallback(systemPrompt, userPrompt);
+      res.json({ reply: result.data });
+    } catch (err: any) {
+      console.error("[Global Tutor] Error:", err.message);
       res.status(500).json({ message: err.message });
     }
   });
