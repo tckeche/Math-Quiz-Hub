@@ -404,7 +404,7 @@ export default function StudentDashboard() {
                   </div>
                 )}
 
-                <div className="space-y-3">
+                <div className="flex flex-col gap-6 mt-6 mb-10">
                   {filteredQuizzes.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
@@ -420,7 +420,7 @@ export default function StudentDashboard() {
                           href={q.type === "soma" ? `/soma/quiz/${q.id}` : `/quiz/${q.id}`}
                         >
                           <div
-                            className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
+                            className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 min-h-[140px] cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
                             data-testid={`card-available-quiz-${q.type}-${q.id}`}
                           >
                             <div className="flex items-start justify-between gap-2">
@@ -479,7 +479,7 @@ export default function StudentDashboard() {
                 <h2 className="text-xl font-bold tracking-wide text-slate-200 mb-5" data-testid="text-section-completed">
                   Completed Quizzes
                 </h2>
-                <div className="space-y-3">
+                <div className="flex flex-col gap-6 mt-6 mb-10">
                   {completedItems.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <CheckCircle2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
@@ -494,7 +494,7 @@ export default function StudentDashboard() {
                       return (
                         <div
                           key={`${item.type}-${item.id}`}
-                          className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 transition-all duration-300"
+                          className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 min-h-[140px] transition-all duration-300"
                           data-testid={`card-completed-${item.type}-${item.id}`}
                         >
                           <div className="flex items-start justify-between gap-3">
