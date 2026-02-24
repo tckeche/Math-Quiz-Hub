@@ -69,7 +69,7 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
           </ResponsiveContainer>
           <div className="absolute inset-0 flex items-center justify-center">
             <span
-              className="text-4xl font-bold text-white"
+              className="text-xl font-bold text-white"
               style={{ textShadow: `0 0 20px ${color}60` }}
               data-testid={`text-donut-value-${subject}`}
             >
@@ -193,7 +193,11 @@ export default function StudentDashboard() {
         type: "soma" as const,
       }));
 
+    const currentTime = new Date();
     return [...regularAvailable, ...somaAvailable].sort((a, b) => {
+      const aOverdue = a.dueDate ? new Date(a.dueDate) < currentTime : false;
+      const bOverdue = b.dueDate ? new Date(b.dueDate) < currentTime : false;
+      if (aOverdue !== bOverdue) return aOverdue ? 1 : -1;
       if (!a.dueDate && !b.dueDate) return 0;
       if (!a.dueDate) return 1;
       if (!b.dueDate) return -1;
@@ -361,7 +365,7 @@ export default function StudentDashboard() {
             <div className="grid md:grid-cols-2 gap-6">
               <section className={CARD_CLASS}>
                 <div className="flex items-center justify-between mb-5">
-                  <h2 className={SECTION_LABEL} data-testid="text-section-available">
+                  <h2 className="text-xl font-bold tracking-wide text-slate-200" data-testid="text-section-available">
                     Available Quizzes
                   </h2>
                   <button
@@ -407,7 +411,7 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500">No available quizzes</p>
                     </div>
                   ) : (
-                    (showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 5)).map((q) => {
+                    (showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 4)).map((q) => {
                       const isOverdue = q.dueDate && new Date(q.dueDate) < now;
                       const sc = getSubjectColor(q.subject);
                       return (
@@ -459,20 +463,20 @@ export default function StudentDashboard() {
                       );
                     })
                   )}
-                  {filteredQuizzes.length > 5 && (
+                  {filteredQuizzes.length > 4 && (
                     <button
                       onClick={() => setShowAllAvailable(!showAllAvailable)}
                       className="w-full text-center text-xs text-violet-400 hover:text-violet-300 transition-colors py-2 mt-1"
                       data-testid="button-toggle-available"
                     >
-                      {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 5} more)`}
+                      {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 4} more)`}
                     </button>
                   )}
                 </div>
               </section>
 
               <section className={CARD_CLASS}>
-                <h2 className={`${SECTION_LABEL} mb-5`} data-testid="text-section-completed">
+                <h2 className="text-xl font-bold tracking-wide text-slate-200 mb-5" data-testid="text-section-completed">
                   Completed Quizzes
                 </h2>
                 <div className="space-y-3">
