@@ -4,9 +4,10 @@
 A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students can take timed, interactive multiple-choice math quizzes with LaTeX-rendered mathematical notation. Admins create and edit quizzes via a unified builder UI with AI copilot chat, PDF-based question generation, and manual entry. Results viewable with AI-powered student analysis.
 
 ## Tech Stack
-- **Frontend:** React (Vite), Tailwind CSS, Shadcn UI, react-katex for LaTeX rendering, DOMPurify for XSS protection
+- **Frontend:** React (Vite), Tailwind CSS, Shadcn UI, react-katex for LaTeX rendering, DOMPurify for XSS protection, @supabase/supabase-js for auth
 - **Backend:** Node.js, Express, @google/generative-ai (Gemini), @anthropic-ai/sdk (Claude), openai (GPT-4o & DeepSeek), multer for file uploads
-- **Database:** PostgreSQL with Drizzle ORM
+- **Database:** PostgreSQL (Supabase) with Drizzle ORM
+- **Auth:** Supabase Auth (client initialized in `client/src/lib/supabase.ts` using VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY)
 - **Routing:** wouter
 
 ## Project Architecture
@@ -43,6 +44,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/generate-questions` - Upload PDF, 4-stage AI pipeline extracts MCQs (SSE streaming, multipart/form-data)
 - `POST /api/analyze-student` - AI analysis of student performance (sends submission + questions to Gemini)
 - `POST /api/upload-image` - Upload image for question attachment
+- `POST /api/auth/sync` - Upsert Supabase user into soma_users table (accepts {id, email, user_metadata})
 
 ### Key Features
 - Admin password: Stored in ADMIN_PASSWORD env var; JWT sessions via JWT_SECRET env var
@@ -67,6 +69,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - **Admin Quiz Preview**: Builder page has "Preview Quiz" button that opens full-screen overlay rendering SomaQuizEngine with current saved+draft questions. Amber banner "Admin Preview Mode — Scores will not be saved." persists across question view and summary. Exit Preview button closes overlay.
 
 ### Soma Pipeline Tables
+- `soma_users` - id (uuid, maps to Supabase auth UID), email, display_name, created_at
 - `soma_quizzes` - id, title, topic, curriculum_context, status (draft/published), created_at
 - `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation, marks
-- `soma_reports` - id, quiz_id (FK → soma_quizzes), student_name, score, ai_feedback_html, created_at
+- `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status (default: 'pending'), ai_feedback_html, created_at

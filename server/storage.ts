@@ -5,8 +5,9 @@ import {
   type Submission, type InsertSubmission,
   type SomaQuiz, type InsertSomaQuiz,
   type SomaQuestion, type InsertSomaQuestion,
+  type SomaUser, type InsertSomaUser,
   quizzes, questions, students, submissions,
-  somaQuizzes, somaQuestions,
+  somaQuizzes, somaQuestions, somaUsers,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -36,6 +37,8 @@ export interface IStorage {
   deleteSubmissionsByQuizId(quizId: number): Promise<void>;
   checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean>;
   getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined>;
+
+  upsertSomaUser(user: InsertSomaUser): Promise<SomaUser>;
 
   createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz>;
   getSomaQuizzes(): Promise<SomaQuiz[]>;
@@ -197,6 +200,18 @@ class DatabaseStorage implements IStorage {
     return this.database.select().from(somaQuestions).where(eq(somaQuestions.quizId, quizId));
   }
 
+  async upsertSomaUser(user: InsertSomaUser): Promise<SomaUser> {
+    const [result] = await this.database
+      .insert(somaUsers)
+      .values(user)
+      .onConflictDoUpdate({
+        target: somaUsers.id,
+        set: { email: user.email, displayName: user.displayName },
+      })
+      .returning();
+    return result;
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -206,6 +221,7 @@ class MemoryStorage implements IStorage {
   private submissions: Submission[] = [];
   private somaQuizzesList: SomaQuiz[] = [];
   private somaQuestionsList: SomaQuestion[] = [];
+  private somaUsersList: SomaUser[] = [];
   private quizId = 1;
   private questionId = 1;
   private studentId = 1;
@@ -334,6 +350,17 @@ class MemoryStorage implements IStorage {
 
   async getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]> {
     return this.somaQuestionsList.filter((q) => q.quizId === quizId);
+  }
+
+  async upsertSomaUser(user: InsertSomaUser): Promise<SomaUser> {
+    const idx = this.somaUsersList.findIndex((u) => u.id === user.id);
+    const record: SomaUser = { createdAt: new Date(), displayName: null, ...user };
+    if (idx >= 0) {
+      this.somaUsersList[idx] = { ...this.somaUsersList[idx], email: user.email, displayName: user.displayName ?? this.somaUsersList[idx].displayName };
+      return this.somaUsersList[idx];
+    }
+    this.somaUsersList.push(record);
+    return record;
   }
 
 }

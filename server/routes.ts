@@ -1,7 +1,7 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema } from "@shared/schema";
+import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema, insertSomaUserSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -126,6 +126,25 @@ function extractJsonArray(text: string): any[] | null {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.post("/api/auth/sync", async (req, res) => {
+    try {
+      const { id, email, user_metadata } = req.body;
+      if (!id || !email) {
+        return res.status(400).json({ message: "Missing id or email" });
+      }
+      const parsed = insertSomaUserSchema.parse({
+        id,
+        email,
+        displayName: user_metadata?.display_name || user_metadata?.full_name || email.split("@")[0],
+      });
+      const user = await storage.upsertSomaUser(parsed);
+      res.json(user);
+    } catch (err: any) {
+      console.error("Auth sync error:", err);
+      res.status(500).json({ message: err.message || "Failed to sync user" });
+    }
+  });
+
   app.post("/api/admin/login", loginLimiter, async (req, res) => {
     const { password } = req.body;
     if (String(password || "") !== getAdminPassword()) {

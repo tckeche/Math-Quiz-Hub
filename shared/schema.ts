@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, serial, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -64,6 +64,13 @@ export const questionUploadSchema = z.array(z.object({
 
 export type QuestionUpload = z.infer<typeof questionUploadSchema>;
 
+export const somaUsers = pgTable("soma_users", {
+  id: uuid("id").primaryKey(),
+  email: text("email").notNull(),
+  displayName: text("display_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const somaQuizzes = pgTable("soma_quizzes", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -86,8 +93,10 @@ export const somaQuestions = pgTable("soma_questions", {
 export const somaReports = pgTable("soma_reports", {
   id: serial("id").primaryKey(),
   quizId: integer("quiz_id").notNull().references(() => somaQuizzes.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").references(() => somaUsers.id, { onDelete: "set null" }),
   studentName: text("student_name").notNull(),
   score: integer("score").notNull(),
+  status: text("status").notNull().default("pending"),
   aiFeedbackHtml: text("ai_feedback_html"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -104,17 +113,28 @@ export const somaQuestionsRelations = relations(somaQuestions, ({ one }) => ({
   }),
 }));
 
+export const somaUsersRelations = relations(somaUsers, ({ many }) => ({
+  reports: many(somaReports),
+}));
+
 export const somaReportsRelations = relations(somaReports, ({ one }) => ({
   quiz: one(somaQuizzes, {
     fields: [somaReports.quizId],
     references: [somaQuizzes.id],
   }),
+  student: one(somaUsers, {
+    fields: [somaReports.studentId],
+    references: [somaUsers.id],
+  }),
 }));
 
+export const insertSomaUserSchema = createInsertSchema(somaUsers).omit({ createdAt: true });
 export const insertSomaQuizSchema = createInsertSchema(somaQuizzes).omit({ id: true, createdAt: true });
 export const insertSomaQuestionSchema = createInsertSchema(somaQuestions).omit({ id: true });
 export const insertSomaReportSchema = createInsertSchema(somaReports).omit({ id: true, createdAt: true });
 
+export type SomaUser = typeof somaUsers.$inferSelect;
+export type InsertSomaUser = z.infer<typeof insertSomaUserSchema>;
 export type SomaQuiz = typeof somaQuizzes.$inferSelect;
 export type InsertSomaQuiz = z.infer<typeof insertSomaQuizSchema>;
 export type SomaQuestion = typeof somaQuestions.$inferSelect;
