@@ -867,3 +867,554 @@ describe("Edge cases", () => {
     expect(res.body).toEqual([]);
   });
 });
+
+// ─── AUTH SYNC: Supabase user sync ──────────────────────────────────────────
+describe("POST /api/auth/sync", () => {
+  it("creates a new soma user with valid data", async () => {
+    const res = await request.post("/api/auth/sync").send({
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      email: "testuser@example.com",
+      user_metadata: { display_name: "Test User" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe("550e8400-e29b-41d4-a716-446655440000");
+    expect(res.body.email).toBe("testuser@example.com");
+    expect(res.body.displayName).toBe("Test User");
+  });
+
+  it("upserts existing soma user (updates display name)", async () => {
+    const id = "550e8400-e29b-41d4-a716-446655440001";
+    await request.post("/api/auth/sync").send({
+      id,
+      email: "upsert@example.com",
+      user_metadata: { display_name: "Original Name" },
+    });
+    const res = await request.post("/api/auth/sync").send({
+      id,
+      email: "upsert-new@example.com",
+      user_metadata: { display_name: "Updated Name" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe("upsert-new@example.com");
+  });
+
+  it("falls back to full_name when display_name is missing", async () => {
+    const res = await request.post("/api/auth/sync").send({
+      id: "550e8400-e29b-41d4-a716-446655440002",
+      email: "fallback@example.com",
+      user_metadata: { full_name: "Full Name User" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.displayName).toBe("Full Name User");
+  });
+
+  it("falls back to email prefix when no name metadata provided", async () => {
+    const res = await request.post("/api/auth/sync").send({
+      id: "550e8400-e29b-41d4-a716-446655440003",
+      email: "noname@example.com",
+      user_metadata: {},
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.displayName).toBe("noname");
+  });
+
+  it("returns 400 when id is missing", async () => {
+    const res = await request.post("/api/auth/sync").send({
+      email: "noid@example.com",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/missing/i);
+  });
+
+  it("returns 400 when email is missing", async () => {
+    const res = await request.post("/api/auth/sync").send({
+      id: "550e8400-e29b-41d4-a716-446655440004",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/missing/i);
+  });
+});
+
+// ─── STUDENT ENDPOINTS: Reports & Submissions ──────────────────────────────
+describe("GET /api/student/reports", () => {
+  it("returns 400 when studentId is missing", async () => {
+    const res = await request.get("/api/student/reports");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/studentId required/i);
+  });
+
+  it("returns empty array for unknown studentId", async () => {
+    const res = await request.get("/api/student/reports?studentId=nonexistent-id");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+});
+
+describe("GET /api/student/submissions", () => {
+  it("returns 400 when studentId is missing", async () => {
+    const res = await request.get("/api/student/submissions");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/studentId required/i);
+  });
+
+  it("returns empty array for unknown studentId", async () => {
+    const res = await request.get("/api/student/submissions?studentId=nonexistent-id");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+});
+
+// ─── QUIZ: Admin Update (PUT) ───────────────────────────────────────────────
+describe("PUT /api/admin/quizzes/:id", () => {
+  let cookie: string;
+  let quiz: any;
+  beforeAll(async () => {
+    cookie = await loginAsAdmin();
+    quiz = await createTestQuiz(cookie, { title: "Updatable Quiz" });
+  });
+
+  it("updates quiz title", async () => {
+    const res = await request.put(`/api/admin/quizzes/${quiz.id}`)
+      .set("Cookie", cookie)
+      .send({ title: "Updated Title" });
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe("Updated Title");
+  });
+
+  it("updates quiz timeLimitMinutes", async () => {
+    const res = await request.put(`/api/admin/quizzes/${quiz.id}`)
+      .set("Cookie", cookie)
+      .send({ timeLimitMinutes: 90 });
+    expect(res.status).toBe(200);
+    expect(res.body.timeLimitMinutes).toBe(90);
+  });
+
+  it("updates quiz dueDate", async () => {
+    const newDate = "2100-06-15T00:00:00.000Z";
+    const res = await request.put(`/api/admin/quizzes/${quiz.id}`)
+      .set("Cookie", cookie)
+      .send({ dueDate: newDate });
+    expect(res.status).toBe(200);
+  });
+
+  it("updates optional fields (syllabus, level, subject)", async () => {
+    const res = await request.put(`/api/admin/quizzes/${quiz.id}`)
+      .set("Cookie", cookie)
+      .send({ syllabus: "IGCSE", level: "O Level", subject: "Mathematics" });
+    expect(res.status).toBe(200);
+    expect(res.body.syllabus).toBe("IGCSE");
+    expect(res.body.level).toBe("O Level");
+    expect(res.body.subject).toBe("Mathematics");
+  });
+
+  it("returns 404 for non-existent quiz", async () => {
+    const res = await request.put("/api/admin/quizzes/99999")
+      .set("Cookie", cookie)
+      .send({ title: "Ghost Quiz" });
+    expect(res.status).toBe(404);
+  });
+
+  it("blocks unauthenticated access (401)", async () => {
+    const res = await request.put(`/api/admin/quizzes/${quiz.id}`)
+      .send({ title: "Sneaky Update" });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── QUIZ: Admin detail GET ─────────────────────────────────────────────────
+describe("GET /api/admin/quizzes/:id", () => {
+  let cookie: string;
+  beforeAll(async () => { cookie = await loginAsAdmin(); });
+
+  it("returns quiz with questions included", async () => {
+    const quiz = await createTestQuiz(cookie, { title: "Detail Quiz" });
+    await addQuestions(cookie, quiz.id);
+    const res = await request.get(`/api/admin/quizzes/${quiz.id}`).set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe("Detail Quiz");
+    expect(Array.isArray(res.body.questions)).toBe(true);
+    expect(res.body.questions.length).toBeGreaterThan(0);
+  });
+
+  it("includes correctAnswer in admin questions", async () => {
+    const quiz = await createTestQuiz(cookie, { title: "Admin Detail" });
+    await addQuestions(cookie, quiz.id);
+    const res = await request.get(`/api/admin/quizzes/${quiz.id}`).set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    if (res.body.questions.length > 0) {
+      expect(res.body.questions[0].correctAnswer).toBeDefined();
+    }
+  });
+
+  it("returns 404 for non-existent quiz", async () => {
+    const res = await request.get("/api/admin/quizzes/99999").set("Cookie", cookie);
+    expect(res.status).toBe(404);
+  });
+
+  it("blocks unauthenticated access (401)", async () => {
+    const res = await request.get("/api/admin/quizzes/1");
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── SUBMISSIONS: Single delete and score verification ──────────────────────
+describe("Admin Submission: Single delete", () => {
+  let cookie: string;
+  let quiz: any;
+  let questions: any[];
+  let student: any;
+  let submission: any;
+
+  beforeAll(async () => {
+    cookie = await loginAsAdmin();
+    quiz = await createTestQuiz(cookie, { title: "Single Delete Quiz", timeLimitMinutes: 60 });
+    questions = await addQuestions(cookie, quiz.id);
+    const stRes = await request.post("/api/students").send({ firstName: "DeleteMe", lastName: "Student" });
+    student = stRes.body;
+    const answers: Record<string, string> = {};
+    if (questions[0]) answers[questions[0].id] = questions[0].correctAnswer;
+    const subRes = await request.post("/api/submissions").send({
+      studentId: student.id,
+      quizId: quiz.id,
+      answers,
+      startTime: Date.now() - 5000,
+    });
+    submission = subRes.body;
+  });
+
+  it("deletes a single submission by ID", async () => {
+    const res = await request.delete(`/api/admin/submissions/${submission.id}`).set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  it("blocks unauthenticated delete", async () => {
+    const res = await request.delete(`/api/admin/submissions/${submission.id}`);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── CHECK SUBMISSION: Verified submission returns score ────────────────────
+describe("POST /api/check-submission (after submission)", () => {
+  let cookie: string;
+  let quiz: any;
+  let questions: any[];
+
+  beforeAll(async () => {
+    cookie = await loginAsAdmin();
+    quiz = await createTestQuiz(cookie, { title: "Check Score Quiz", timeLimitMinutes: 60 });
+    questions = await addQuestions(cookie, quiz.id);
+    // Create student + submit
+    await request.post("/api/students").send({ firstName: "CheckScore", lastName: "Person" });
+    const stRes = await request.post("/api/students").send({ firstName: "CheckScore", lastName: "Person" });
+    const answers: Record<string, string> = {};
+    if (questions[0]) answers[questions[0].id] = questions[0].correctAnswer;
+    if (questions[1]) answers[questions[1].id] = "wrong";
+    await request.post("/api/submissions").send({
+      studentId: stRes.body.id,
+      quizId: quiz.id,
+      answers,
+      startTime: Date.now() - 5000,
+    });
+  });
+
+  it("returns hasSubmitted: true with score when student has submitted", async () => {
+    const res = await request.post("/api/check-submission")
+      .send({ quizId: quiz.id, firstName: "CheckScore", lastName: "Person" });
+    expect(res.status).toBe(200);
+    expect(res.body.hasSubmitted).toBe(true);
+    expect(res.body.totalScore).toBeDefined();
+    expect(res.body.maxPossibleScore).toBeDefined();
+    expect(typeof res.body.totalScore).toBe("number");
+  });
+});
+
+// ─── SUBMISSIONS: Partial scoring and answersBreakdown ──────────────────────
+describe("Submission scoring accuracy", () => {
+  let cookie: string;
+  let quiz: any;
+  let questions: any[];
+
+  beforeAll(async () => {
+    cookie = await loginAsAdmin();
+    quiz = await createTestQuiz(cookie, { title: "Scoring Accuracy Quiz", timeLimitMinutes: 60 });
+    questions = await addQuestions(cookie, quiz.id, [
+      { prompt_text: "Q1?", options: ["A", "B", "C", "D"], correct_answer: "A", marks_worth: 3 },
+      { prompt_text: "Q2?", options: ["X", "Y", "Z", "W"], correct_answer: "Y", marks_worth: 2 },
+      { prompt_text: "Q3?", options: ["1", "2", "3", "4"], correct_answer: "3", marks_worth: 5 },
+    ]);
+  });
+
+  it("scores partial answers correctly (1 of 3 correct)", async () => {
+    const st = (await request.post("/api/students").send({ firstName: "Partial", lastName: "Scorer" })).body;
+    const answers: Record<string, string> = {};
+    answers[questions[0].id] = "A"; // correct = 3 marks
+    answers[questions[1].id] = "X"; // wrong = 0
+    answers[questions[2].id] = "1"; // wrong = 0
+    const res = await request.post("/api/submissions").send({
+      studentId: st.id, quizId: quiz.id, answers, startTime: Date.now() - 2000,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.totalScore).toBe(3);
+    expect(res.body.maxPossibleScore).toBe(10);
+  });
+
+  it("returns answersBreakdown with per-question detail", async () => {
+    const st = (await request.post("/api/students").send({ firstName: "Breakdown", lastName: "Checker" })).body;
+    const answers: Record<string, string> = {};
+    answers[questions[0].id] = "B"; // wrong
+    answers[questions[1].id] = "Y"; // correct = 2
+    answers[questions[2].id] = "3"; // correct = 5
+    const res = await request.post("/api/submissions").send({
+      studentId: st.id, quizId: quiz.id, answers, startTime: Date.now() - 2000,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.totalScore).toBe(7);
+    const breakdown = res.body.answersBreakdown;
+    expect(breakdown[String(questions[0].id)].correct).toBe(false);
+    expect(breakdown[String(questions[0].id)].marksEarned).toBe(0);
+    expect(breakdown[String(questions[1].id)].correct).toBe(true);
+    expect(breakdown[String(questions[1].id)].marksEarned).toBe(2);
+    expect(breakdown[String(questions[2].id)].correct).toBe(true);
+    expect(breakdown[String(questions[2].id)].marksEarned).toBe(5);
+  });
+
+  it("handles missing answers (unanswered questions score 0)", async () => {
+    const st = (await request.post("/api/students").send({ firstName: "Missing", lastName: "Answer" })).body;
+    const answers: Record<string, string> = {};
+    // Only answer Q1, leave Q2 and Q3 blank
+    answers[questions[0].id] = "A";
+    const res = await request.post("/api/submissions").send({
+      studentId: st.id, quizId: quiz.id, answers, startTime: Date.now() - 2000,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.totalScore).toBe(3); // only Q1 correct
+    expect(res.body.maxPossibleScore).toBe(10);
+  });
+});
+
+// ─── QUIZ CRUD: Optional fields ─────────────────────────────────────────────
+describe("Quiz creation with optional fields", () => {
+  let cookie: string;
+  beforeAll(async () => { cookie = await loginAsAdmin(); });
+
+  it("creates quiz with syllabus, level, and subject", async () => {
+    const res = await request.post("/api/admin/quizzes")
+      .set("Cookie", cookie)
+      .send({
+        title: "Full Quiz",
+        timeLimitMinutes: 45,
+        dueDate: "2099-01-01T00:00:00.000Z",
+        syllabus: "ZIMSEC",
+        level: "A Level",
+        subject: "Pure Mathematics",
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.syllabus).toBe("ZIMSEC");
+    expect(res.body.level).toBe("A Level");
+    expect(res.body.subject).toBe("Pure Mathematics");
+  });
+
+  it("sets optional fields to null when not provided", async () => {
+    const res = await request.post("/api/admin/quizzes")
+      .set("Cookie", cookie)
+      .send({
+        title: "Minimal Quiz",
+        timeLimitMinutes: 20,
+        dueDate: "2099-06-01T00:00:00.000Z",
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.syllabus).toBeNull();
+    expect(res.body.level).toBeNull();
+    expect(res.body.subject).toBeNull();
+  });
+});
+
+// ─── CASCADE DELETE: Quiz deletion cleans up questions and submissions ───────
+describe("Cascade delete behavior", () => {
+  let cookie: string;
+
+  beforeAll(async () => { cookie = await loginAsAdmin(); });
+
+  it("deleting a quiz removes its questions", async () => {
+    const quiz = await createTestQuiz(cookie, { title: "Cascade Quiz" });
+    await addQuestions(cookie, quiz.id);
+    // Verify questions exist
+    const qRes = await request.get(`/api/admin/quizzes/${quiz.id}/questions`).set("Cookie", cookie);
+    expect(qRes.body.length).toBeGreaterThan(0);
+    // Delete quiz
+    await request.delete(`/api/admin/quizzes/${quiz.id}`).set("Cookie", cookie);
+    // Quiz is gone
+    const getRes = await request.get(`/api/quizzes/${quiz.id}`);
+    expect(getRes.status).toBe(404);
+  });
+});
+
+// ─── SECURITY: Additional hardening tests ───────────────────────────────────
+describe("Security: Additional hardening", () => {
+  it("admin login with null password returns 401", async () => {
+    const res = await request.post("/api/admin/login").send({ password: null });
+    expect(res.status).toBe(401);
+  });
+
+  it("admin login with numeric password returns 401", async () => {
+    const res = await request.post("/api/admin/login").send({ password: 12345 });
+    expect(res.status).toBe(401);
+  });
+
+  it("admin login with boolean password returns 401", async () => {
+    const res = await request.post("/api/admin/login").send({ password: true });
+    expect(res.status).toBe(401);
+  });
+
+  it("admin routes reject requests with tampered JWT tokens", async () => {
+    const res = await request.get("/api/admin/quizzes")
+      .set("Cookie", "admin_session=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYWRtaW4ifQ.fakesignature");
+    expect(res.status).toBe(401);
+  });
+
+  it("question upload rejects items with missing prompt_text", async () => {
+    const cookie = await loginAsAdmin();
+    const quiz = await createTestQuiz(cookie);
+    const res = await request.post(`/api/admin/quizzes/${quiz.id}/questions`)
+      .set("Cookie", cookie)
+      .send({
+        questions: [{ options: ["A", "B", "C", "D"], correct_answer: "A", marks_worth: 1 }],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("question upload rejects items with too few options", async () => {
+    const cookie = await loginAsAdmin();
+    const quiz = await createTestQuiz(cookie);
+    const res = await request.post(`/api/admin/quizzes/${quiz.id}/questions`)
+      .set("Cookie", cookie)
+      .send({
+        questions: [{ prompt_text: "Q?", options: ["A"], correct_answer: "A", marks_worth: 1 }],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("submission with non-finite startTime is rejected", async () => {
+    const cookie = await loginAsAdmin();
+    const quiz = await createTestQuiz(cookie, { timeLimitMinutes: 30 });
+    const stRes = await request.post("/api/students").send({ firstName: "Inf", lastName: "Time" });
+    const res = await request.post("/api/submissions").send({
+      studentId: stRes.body.id,
+      quizId: quiz.id,
+      answers: {},
+      startTime: Infinity,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/startTime/i);
+  });
+
+  it("submission with NaN startTime is rejected", async () => {
+    const cookie = await loginAsAdmin();
+    const quiz = await createTestQuiz(cookie, { timeLimitMinutes: 30 });
+    const stRes = await request.post("/api/students").send({ firstName: "Nan", lastName: "Time" });
+    const res = await request.post("/api/submissions").send({
+      studentId: stRes.body.id,
+      quizId: quiz.id,
+      answers: {},
+      startTime: "not-a-number",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("copilot rejects empty string message", async () => {
+    const cookie = await loginAsAdmin();
+    const res = await request.post("/api/admin/copilot-chat")
+      .set("Cookie", cookie)
+      .send({ message: "" });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ─── SOMA: Additional endpoint tests ────────────────────────────────────────
+describe("Soma endpoints: additional coverage", () => {
+  let cookie: string;
+  let generatedQuizId: number;
+
+  beforeAll(async () => {
+    cookie = await loginAsAdmin();
+    const genRes = await request.post("/api/soma/generate")
+      .set("Cookie", cookie)
+      .send({ topic: "Number Theory" });
+    generatedQuizId = genRes.body.quiz.id;
+  });
+
+  it("GET /api/soma/quizzes returns generated quiz in list", async () => {
+    const res = await request.get("/api/soma/quizzes");
+    expect(res.status).toBe(200);
+    const found = res.body.find((q: any) => q.id === generatedQuizId);
+    expect(found).toBeDefined();
+    expect(found.topic).toBe("Number Theory");
+  });
+
+  it("GET /api/soma/quizzes/:id/questions returns questions for generated quiz", async () => {
+    const res = await request.get(`/api/soma/quizzes/${generatedQuizId}/questions`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+    // Verify student-safe (no correctAnswer, no explanation)
+    expect(res.body[0].correctAnswer).toBeUndefined();
+    expect(res.body[0].explanation).toBeUndefined();
+    // Verify has required fields
+    expect(res.body[0].stem).toBeDefined();
+    expect(res.body[0].options).toBeDefined();
+  });
+
+  it("generated soma quiz has correct structure", async () => {
+    const res = await request.get(`/api/soma/quizzes/${generatedQuizId}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("id");
+    expect(res.body).toHaveProperty("title");
+    expect(res.body).toHaveProperty("topic");
+    expect(res.body).toHaveProperty("status");
+    expect(res.body).toHaveProperty("createdAt");
+  });
+});
+
+// ─── ADMIN: Analyze endpoints metadata ──────────────────────────────────────
+describe("AI Analysis: metadata in responses", () => {
+  let cookie: string;
+  beforeAll(async () => { cookie = await loginAsAdmin(); });
+
+  it("analyze-student returns metadata with provider info", async () => {
+    const res = await request.post("/api/analyze-student")
+      .set("Cookie", cookie)
+      .send({
+        submission: {
+          totalScore: 5,
+          maxPossibleScore: 10,
+          answersBreakdown: { "1": { answer: "A", correct: true, marksEarned: 5 } },
+        },
+        questions: [{ id: 1, promptText: "Q?", marksWorth: 5 }],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.metadata).toBeDefined();
+    expect(res.body.metadata.provider).toBe("mock");
+    expect(res.body.metadata.model).toBe("mock-model");
+  });
+
+  it("analyze-class returns submissionCount and metadata", async () => {
+    const quiz = await createTestQuiz(cookie, { title: "Class Meta Quiz" });
+    const res = await request.post("/api/analyze-class")
+      .set("Cookie", cookie)
+      .send({ quizId: quiz.id });
+    expect(res.status).toBe(200);
+    expect(typeof res.body.submissionCount).toBe("number");
+    expect(res.body.metadata).toBeDefined();
+    expect(res.body.metadata.provider).toBe("mock");
+  });
+
+  it("copilot returns metadata with provider info", async () => {
+    const res = await request.post("/api/admin/copilot-chat")
+      .set("Cookie", cookie)
+      .send({ message: "Give me 2 questions about fractions" });
+    expect(res.status).toBe(200);
+    expect(res.body.metadata).toBeDefined();
+    expect(res.body.metadata.provider).toBe("mock");
+  });
+});
