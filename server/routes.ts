@@ -145,6 +145,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/student/reports", async (req, res) => {
+    try {
+      const studentId = req.query.studentId as string;
+      if (!studentId) return res.status(400).json({ message: "studentId required" });
+      const reports = await storage.getSomaReportsByStudentId(studentId);
+      res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch reports" });
+    }
+  });
+
+  app.get("/api/student/submissions", async (req, res) => {
+    try {
+      const studentId = req.query.studentId as string;
+      if (!studentId) return res.status(400).json({ message: "studentId required" });
+      const subs = await storage.getSubmissionsByStudentUserId(studentId);
+      res.json(subs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch submissions" });
+    }
+  });
+
   app.post("/api/admin/login", loginLimiter, async (req, res) => {
     const { password } = req.body;
     if (String(password || "") !== getAdminPassword()) {

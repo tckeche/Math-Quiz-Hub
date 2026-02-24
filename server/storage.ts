@@ -6,8 +6,9 @@ import {
   type SomaQuiz, type InsertSomaQuiz,
   type SomaQuestion, type InsertSomaQuestion,
   type SomaUser, type InsertSomaUser,
+  type SomaReport,
   quizzes, questions, students, submissions,
-  somaQuizzes, somaQuestions, somaUsers,
+  somaQuizzes, somaQuestions, somaUsers, somaReports,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -45,6 +46,8 @@ export interface IStorage {
   getSomaQuiz(id: number): Promise<SomaQuiz | undefined>;
   createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]>;
   getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]>;
+  getSomaReportsByStudentId(studentId: string): Promise<(SomaReport & { quiz: SomaQuiz })[]>;
+  getSubmissionsByStudentUserId(studentId: string): Promise<(Submission & { quiz: Quiz })[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -212,6 +215,39 @@ class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getSomaReportsByStudentId(studentId: string): Promise<(SomaReport & { quiz: SomaQuiz })[]> {
+    const rows = await this.database
+      .select({ report: somaReports, quiz: somaQuizzes })
+      .from(somaReports)
+      .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+      .where(eq(somaReports.studentId, studentId));
+    return rows.map((r) => ({ ...r.report, quiz: r.quiz }));
+  }
+
+  async getSubmissionsByStudentUserId(studentId: string): Promise<(Submission & { quiz: Quiz })[]> {
+    const user = await this.database.select().from(somaUsers).where(eq(somaUsers.id, studentId));
+    if (!user.length) return [];
+    const email = user[0].email;
+    const displayName = user[0].displayName || email.split("@")[0];
+    const nameParts = displayName.split(" ");
+    const firstName = sanitizeName(nameParts[0] || "");
+    const lastName = sanitizeName(nameParts.slice(1).join(" ") || "");
+    if (!firstName) return [];
+    const matchingStudents = await this.database.select().from(students)
+      .where(lastName ? and(eq(students.firstName, firstName), eq(students.lastName, lastName)) : eq(students.firstName, firstName));
+    if (!matchingStudents.length) return [];
+    const allSubmissions: (Submission & { quiz: Quiz })[] = [];
+    for (const student of matchingStudents) {
+      const rows = await this.database
+        .select({ submission: submissions, quiz: quizzes })
+        .from(submissions)
+        .innerJoin(quizzes, eq(submissions.quizId, quizzes.id))
+        .where(eq(submissions.studentId, student.id));
+      allSubmissions.push(...rows.map((r) => ({ ...r.submission, quiz: r.quiz })));
+    }
+    return allSubmissions;
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -361,6 +397,14 @@ class MemoryStorage implements IStorage {
     }
     this.somaUsersList.push(record);
     return record;
+  }
+
+  async getSomaReportsByStudentId(_studentId: string): Promise<(SomaReport & { quiz: SomaQuiz })[]> {
+    return [];
+  }
+
+  async getSubmissionsByStudentUserId(_studentId: string): Promise<(Submission & { quiz: Quiz })[]> {
+    return [];
   }
 
 }

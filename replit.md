@@ -47,6 +47,8 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/analyze-student` - AI analysis of student performance (sends submission + questions to Gemini)
 - `POST /api/upload-image` - Upload image for question attachment
 - `POST /api/auth/sync` - Upsert Supabase user into soma_users table (accepts {id, email, user_metadata})
+- `GET /api/student/reports?studentId=` - Get student's soma reports with quiz data
+- `GET /api/student/submissions?studentId=` - Get student's quiz submissions with quiz data
 
 ### Key Features
 - Admin password: Stored in ADMIN_PASSWORD env var; JWT sessions via JWT_SECRET env var
