@@ -414,10 +414,10 @@ export default function StudentDashboard() {
                           href={q.type === "soma" ? `/soma/quiz/${q.id}` : `/quiz/${q.id}`}
                         >
                           <div
-                            className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
+                            className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
                             data-testid={`card-available-quiz-${q.type}-${q.id}`}
                           >
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
@@ -478,7 +478,7 @@ export default function StudentDashboard() {
                       return (
                         <div
                           key={`${item.type}-${item.id}`}
-                          className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 transition-all duration-300"
+                          className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 transition-all duration-300"
                           data-testid={`card-completed-${item.type}-${item.id}`}
                         >
                           <div className="flex items-start justify-between gap-3">
