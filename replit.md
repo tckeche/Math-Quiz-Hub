@@ -63,7 +63,8 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - **Closed Quiz UX**: Past-due quizzes show disabled "Assessment Closed" button with "Closed" badge on student portal.
 - **Class Analytics Error Handling**: AI analysis mutation shows toast on error or empty result instead of hanging silently.
 - **Soma Intelligence Pipeline**: Multi-agent AI quiz generation (Claude Sonnet → DeepSeek → Gemini) using structured outputs (Tool Use, JSON Schema, responseSchema). Service: `server/services/aiPipeline.ts`. Routes: `/api/soma/generate` (admin), `/api/soma/quizzes`, `/api/soma/quizzes/:id`, `/api/soma/quizzes/:id/questions`.
-- **Soma Quiz Engine**: Student-facing quiz UI at `/soma/quiz/:id` with glassmorphism cards, LaTeX rendering, option selection, navigation dots, skip/next, and summary view. Answers stored in React state only (no submission endpoint yet).
+- **Soma Quiz Engine**: Student-facing quiz UI at `/soma/quiz/:id` with glassmorphism cards, LaTeX rendering, option selection, navigation dots, skip/next, and summary view. Answers stored in React state only (no submission endpoint yet). Supports preview mode via props (previewMode, previewTitle, previewQuestions, onExitPreview).
+- **Admin Quiz Preview**: Builder page has "Preview Quiz" button that opens full-screen overlay rendering SomaQuizEngine with current saved+draft questions. Amber banner "Admin Preview Mode — Scores will not be saved." persists across question view and summary. Exit Preview button closes overlay.
 
 ### Soma Pipeline Tables
 - `soma_quizzes` - id, title, topic, curriculum_context, status (draft/published), created_at

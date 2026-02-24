@@ -13,7 +13,7 @@ import {
 import 'katex/dist/katex.min.css';
 import { BlockMath, InlineMath } from 'react-katex';
 
-type StudentQuestion = {
+export type StudentQuestion = {
   id: number;
   quizId: number;
   stem: string;
@@ -230,7 +230,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
 
   const questions = isPreview ? (props as PreviewProps).previewQuestions : fetchedQuestions;
   const effectiveQuiz: SomaQuiz | undefined = isPreview
-    ? { id: 0, title: (props as PreviewProps).previewTitle, topic: "", curriculumContext: "", status: "draft", createdAt: new Date().toISOString() } as SomaQuiz
+    ? { id: 0, title: (props as PreviewProps).previewTitle, topic: "", curriculumContext: null, status: "draft", createdAt: new Date() } as SomaQuiz
     : quiz;
 
   const isLoading = isPreview ? false : (quizLoading || questionsLoading);
@@ -273,20 +273,54 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
     setShowSummary(false);
   };
 
+  const previewBanner = isPreview ? (
+    <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-amber-500/90 via-orange-500/90 to-amber-500/90 backdrop-blur-sm border-b border-amber-400/30 shadow-lg shadow-amber-500/20" data-testid="banner-preview-mode">
+      <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-white" />
+          <span className="text-sm font-semibold text-white tracking-wide">Admin Preview Mode — Scores will not be saved.</span>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-white hover:bg-white/20 text-xs font-medium"
+          onClick={(props as PreviewProps).onExitPreview}
+          data-testid="button-exit-preview"
+        >
+          <X className="w-3.5 h-3.5 mr-1" />
+          Exit Preview
+        </Button>
+      </div>
+    </div>
+  ) : null;
+
   if (isLoading) return <LoadingSkeleton />;
-  if (error) return <ErrorView message={(error as Error).message} />;
+  if (error) {
+    if (isPreview) {
+      return <>{previewBanner}<div className="pt-12"><ErrorView message={(error as Error).message} /></div></>;
+    }
+    return <ErrorView message={(error as Error).message} />;
+  }
   if (!effectiveQuiz || !questions || questions.length === 0) {
+    if (isPreview) {
+      return <>{previewBanner}<div className="pt-12"><ErrorView message="No questions found for this assessment." /></div></>;
+    }
     return <ErrorView message="No questions found for this assessment." />;
   }
 
   if (showSummary) {
     return (
-      <SummaryView
-        quiz={effectiveQuiz}
-        questions={questions}
-        answers={answers}
-        onBack={() => setShowSummary(false)}
-      />
+      <>
+        {previewBanner}
+        <div className={isPreview ? "pt-10" : ""}>
+          <SummaryView
+            quiz={effectiveQuiz}
+            questions={questions}
+            answers={answers}
+            onBack={() => setShowSummary(false)}
+          />
+        </div>
+      </>
     );
   }
 
@@ -297,26 +331,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
 
   return (
     <div className="min-h-screen bg-background px-4 py-8">
-      {isPreview && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-amber-500/90 via-orange-500/90 to-amber-500/90 backdrop-blur-sm border-b border-amber-400/30 shadow-lg shadow-amber-500/20" data-testid="banner-preview-mode">
-          <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-white" />
-              <span className="text-sm font-semibold text-white tracking-wide">Admin Preview Mode — Scores will not be saved.</span>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-white/20 text-xs font-medium"
-              onClick={(props as PreviewProps).onExitPreview}
-              data-testid="button-exit-preview"
-            >
-              <X className="w-3.5 h-3.5 mr-1" />
-              Exit Preview
-            </Button>
-          </div>
-        </div>
-      )}
+      {previewBanner}
       <div className={`max-w-3xl mx-auto ${isPreview ? "pt-8" : ""}`}>
         <div className="flex items-center justify-between mb-6">
           {isPreview ? (

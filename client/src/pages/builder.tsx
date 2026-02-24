@@ -13,10 +13,12 @@ import { Link, useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Send, Loader2, Sparkles, FileStack, Upload, Trash2,
   Plus, Save, FileText, ImagePlus, X, Pencil, BookOpen,
-  Scan, Brain, Search, CheckCircle2
+  Scan, Brain, Search, CheckCircle2, Eye
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { BlockMath, InlineMath } from 'react-katex';
+import SomaQuizEngine from "./soma-quiz";
+import type { StudentQuestion } from "./soma-quiz";
 
 const unescapeLatex = (str: string) => str.replace(/\\\\/g, '\\');
 
@@ -84,6 +86,7 @@ export default function BuilderPage() {
   const [stageLabel, setStageLabel] = useState("");
 
   const [activeTab, setActiveTab] = useState<"copilot" | "questions">("copilot");
+  const [showPreview, setShowPreview] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -364,6 +367,16 @@ export default function BuilderPage() {
             <Badge className="bg-white/5 text-slate-400 border-white/10">
               {totalQuestions} question{totalQuestions !== 1 ? "s" : ""}
             </Badge>
+            <Button
+              className="border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:border-violet-500/50 transition-all"
+              size="sm"
+              onClick={() => setShowPreview(true)}
+              disabled={totalQuestions === 0}
+              data-testid="button-preview-quiz"
+            >
+              <Eye className="w-4 h-4 mr-1.5" />
+              Preview Quiz
+            </Button>
             <Button
               className="glow-button"
               size="sm"
@@ -743,6 +756,32 @@ export default function BuilderPage() {
           )}
         </div>
       </main>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 bg-background overflow-auto" data-testid="modal-preview">
+          <SomaQuizEngine
+            previewMode={true}
+            previewTitle={title || "Untitled Quiz"}
+            previewQuestions={[
+              ...savedQuestions.map((q, idx) => ({
+                id: q.id,
+                quizId: editId || 0,
+                stem: unescapeLatex(q.promptText),
+                options: q.options,
+                marks: q.marksWorth,
+              } as StudentQuestion)),
+              ...drafts.map((d, idx) => ({
+                id: -(idx + 1),
+                quizId: editId || 0,
+                stem: unescapeLatex(d.prompt_text),
+                options: d.options,
+                marks: d.marks_worth,
+              } as StudentQuestion)),
+            ]}
+            onExitPreview={() => setShowPreview(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }
