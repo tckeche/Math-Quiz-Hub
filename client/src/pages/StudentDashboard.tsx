@@ -8,7 +8,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import {
   LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
-  Loader2, AlertTriangle, Filter, ChevronDown, Sparkles, FileText,
+  Loader2, AlertTriangle, Filter, ChevronDown, Sparkles, FileText, Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -534,6 +534,17 @@ export default function StudentDashboard() {
                               <div className="text-[10px] text-slate-500">
                                 {item.score}/{item.maxScore}
                               </div>
+                              {item.type === "soma" && (
+                                <Link href={`/soma/review/${item.id}`}>
+                                  <button
+                                    className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 mt-1 transition-colors"
+                                    data-testid={`button-review-quiz-${item.type}-${item.id}`}
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    Review
+                                  </button>
+                                </Link>
+                              )}
                               {item.feedbackHtml && !isPending && (
                                 <button
                                   onClick={() => {

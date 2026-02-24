@@ -11,6 +11,8 @@ import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
 import AnalyticsPage from "@/pages/analytics";
 import SomaQuizEngine from "@/pages/soma-quiz";
+import SomaQuizReview from "@/pages/SomaQuizReview";
+import SomaChat from "@/pages/SomaChat";
 import StudentAuth from "@/pages/StudentAuth";
 import StudentDashboard from "@/pages/StudentDashboard";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -28,6 +30,8 @@ function Router() {
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
       <Route path="/quiz/:id">{(params) => <ProtectedRoute component={QuizPage} params={params} />}</Route>
       <Route path="/soma/quiz/:id">{(params) => <ProtectedRoute component={SomaQuizEngine} params={params} />}</Route>
+      <Route path="/soma/review/:reportId">{(params) => <ProtectedRoute component={SomaQuizReview} params={params} />}</Route>
+      <Route path="/soma/chat">{() => <ProtectedRoute component={SomaChat} />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={StudentDashboard} />}</Route>
       <Route component={NotFound} />
     </Switch>

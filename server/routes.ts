@@ -738,6 +738,7 @@ Sections to include:
         studentName,
         score: totalScore,
         status: "pending",
+        answersJson: answers,
       });
 
       res.json(report);
@@ -755,6 +756,42 @@ Sections to include:
       }
       const exists = await storage.checkSomaSubmission(quizId, studentId);
       res.json({ submitted: exists });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/soma/reports/:reportId/review", async (req, res) => {
+    try {
+      const reportId = parseInt(req.params.reportId);
+      if (isNaN(reportId)) return res.status(400).json({ message: "Invalid report ID" });
+
+      const report = await storage.getSomaReportById(reportId);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+
+      const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
+
+      res.json({
+        report,
+        questions: questions.map((q) => ({
+          id: q.id,
+          stem: q.stem,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          marks: q.marks,
+          explanation: q.explanation,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/soma/global-tutor", async (req, res) => {
+    try {
+      const { message, studentId } = req.body;
+      if (!message) return res.status(400).json({ message: "Message is required" });
+      res.json({ reply: "The Global AI Tutor is coming soon. Stay tuned for personalized learning assistance!" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
