@@ -8,7 +8,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import {
   LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
-  Loader2, AlertTriangle, Filter, ChevronDown, Sparkles,
+  Loader2, AlertTriangle, Filter, ChevronDown, Sparkles, FileText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,7 +47,7 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
   return (
     <div className={CARD_CLASS} data-testid={`card-donut-${subject}`}>
       <div className="flex flex-col items-center">
-        <div className="w-32 h-32 relative">
+        <div className="w-32 h-32 relative" style={{ filter: `drop-shadow(0 4px 12px ${color}40)` }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -89,6 +89,8 @@ export default function StudentDashboard() {
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [showAllAvailable, setShowAllAvailable] = useState(false);
+  const [showAllCompleted, setShowAllCompleted] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -405,7 +407,7 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500">No available quizzes</p>
                     </div>
                   ) : (
-                    filteredQuizzes.map((q) => {
+                    (showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 5)).map((q) => {
                       const isOverdue = q.dueDate && new Date(q.dueDate) < now;
                       const sc = getSubjectColor(q.subject);
                       return (
@@ -457,6 +459,15 @@ export default function StudentDashboard() {
                       );
                     })
                   )}
+                  {filteredQuizzes.length > 5 && (
+                    <button
+                      onClick={() => setShowAllAvailable(!showAllAvailable)}
+                      className="w-full text-center text-xs text-violet-400 hover:text-violet-300 transition-colors py-2 mt-1"
+                      data-testid="button-toggle-available"
+                    >
+                      {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 5} more)`}
+                    </button>
+                  )}
                 </div>
               </section>
 
@@ -471,7 +482,7 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500">No completed quizzes yet</p>
                     </div>
                   ) : (
-                    completedItems.map((item) => {
+                    (showAllCompleted ? completedItems : completedItems.slice(0, 5)).map((item) => {
                       const sc = getSubjectColor(item.subject);
                       const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
                       const isPending = item.status === "pending";
@@ -482,7 +493,12 @@ export default function StudentDashboard() {
                           data-testid={`card-completed-${item.type}-${item.id}`}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FileText
+                                className={`w-5 h-5 flex-shrink-0 ${isPending ? "text-orange-400 animate-pulse" : "text-emerald-400"}`}
+                                data-testid={`icon-report-${item.type}-${item.id}`}
+                              />
+                              <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1.5">
                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
                                   {item.subject}
@@ -504,6 +520,7 @@ export default function StudentDashboard() {
                               </h3>
                               <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
                                 <span>{format(new Date(item.date), "MMM d, yyyy")}</span>
+                              </div>
                               </div>
                             </div>
                             <div className="text-right flex-shrink-0">
@@ -541,6 +558,15 @@ export default function StudentDashboard() {
                         </div>
                       );
                     })
+                  )}
+                  {completedItems.length > 5 && (
+                    <button
+                      onClick={() => setShowAllCompleted(!showAllCompleted)}
+                      className="w-full text-center text-xs text-violet-400 hover:text-violet-300 transition-colors py-2 mt-1"
+                      data-testid="button-toggle-completed"
+                    >
+                      {showAllCompleted ? "Show Less" : `Show More (${completedItems.length - 5} more)`}
+                    </button>
                   )}
                 </div>
               </section>
