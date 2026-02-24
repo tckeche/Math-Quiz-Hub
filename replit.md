@@ -52,6 +52,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/soma/quizzes/:id/submit` - Submit soma quiz answers (auto-scored, creates soma_report with status=pending, stores answers in answersJson)
 - `GET /api/soma/quizzes/:id/check-submission?studentId=` - Check if student already submitted soma quiz
 - `GET /api/soma/reports/:reportId/review` - Get report + quiz questions with correct answers for review mode
+- `POST /api/soma/reports/:reportId/retry` - Retry failed AI grading (resets to pending, re-runs background grading)
 - `POST /api/soma/global-tutor` - Global AI Tutor endpoint (accepts { message }, returns { reply })
 
 ### Key Features

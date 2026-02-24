@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { getSubjectColor } from "@/lib/subjectColors";
@@ -84,6 +84,7 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
 }
 
 export default function StudentDashboard() {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [, setLocation] = useLocation();
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
@@ -268,6 +269,17 @@ export default function StudentDashboard() {
 
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [submissions, reports]);
+
+  const retryMutation = useMutation({
+    mutationFn: async (reportId: number) => {
+      const res = await fetch(`/api/soma/reports/${reportId}/retry`, { method: "POST" });
+      if (!res.ok) throw new Error("Retry failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/student/reports", userId] });
+    },
+  });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -515,7 +527,7 @@ export default function StudentDashboard() {
                                   </span>
                                 ) : isFailed ? (
                                   <span className="flex items-center gap-1 text-[10px] text-red-400" data-testid={`status-failed-${item.id}`}>
-                                    <XCircle className="w-3 h-3" />
+                                    <AlertTriangle className="w-3 h-3" />
                                     Analysis Failed
                                   </span>
                                 ) : (
@@ -555,7 +567,22 @@ export default function StudentDashboard() {
                                   </button>
                                 </Link>
                               )}
-                              {item.feedbackHtml && !isPending && (
+                              {isFailed && item.type === "soma" && (
+                                <button
+                                  onClick={() => retryMutation.mutate(item.id)}
+                                  disabled={retryMutation.isPending}
+                                  className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300 mt-1 transition-colors disabled:opacity-50"
+                                  data-testid={`button-retry-analysis-${item.id}`}
+                                >
+                                  {retryMutation.isPending ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <AlertTriangle className="w-3 h-3" />
+                                  )}
+                                  Retry Analysis
+                                </button>
+                              )}
+                              {item.feedbackHtml && !isPending && !isFailed && (
                                 <button
                                   onClick={() => {
                                     const w = window.open("", "_blank");

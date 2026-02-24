@@ -848,6 +848,33 @@ Sections to include:
     }
   });
 
+  app.post("/api/soma/reports/:reportId/retry", async (req, res) => {
+    try {
+      const reportId = parseInt(req.params.reportId);
+      if (isNaN(reportId)) return res.status(400).json({ message: "Invalid report ID" });
+
+      const report = await storage.getSomaReportById(reportId);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+
+      if (report.status !== "failed") {
+        return res.status(400).json({ message: "Only failed reports can be retried" });
+      }
+
+      await storage.updateSomaReport(reportId, { status: "pending", aiFeedbackHtml: null });
+
+      const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
+      const answers = (report.answersJson as Record<string, string>) || {};
+      const maxPossibleScore = questions.reduce((s, q) => s + q.marks, 0);
+
+      res.json({ message: "Retry started", reportId });
+
+      runBackgroundGrading(reportId, questions, answers, report.score, maxPossibleScore).catch(() => {});
+    } catch (err: any) {
+      console.error("[Retry Grading] Error:", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/soma/global-tutor", async (req, res) => {
     try {
       const { message, studentId } = req.body;
