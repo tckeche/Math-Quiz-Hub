@@ -11,21 +11,36 @@ import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
 import AnalyticsPage from "@/pages/analytics";
 import SomaQuizEngine from "@/pages/soma-quiz";
+import StudentAuth from "@/pages/StudentAuth";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/login" component={StudentAuth} />
       <Route path="/portal" component={Home} />
       <Route path="/admin" component={AdminPage} />
       <Route path="/admin/builder/:id" component={BuilderPage} />
       <Route path="/admin/builder" component={BuilderPage} />
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
-      <Route path="/quiz/:id" component={QuizPage} />
-      <Route path="/soma/quiz/:id" component={SomaQuizEngine} />
+      <Route path="/quiz/:id">{(params) => <ProtectedRoute component={QuizPage} params={params} />}</Route>
+      <Route path="/soma/quiz/:id">{(params) => <ProtectedRoute component={SomaQuizEngine} params={params} />}</Route>
+      <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPlaceholder} />}</Route>
       <Route component={NotFound} />
     </Switch>
+  );
+}
+
+function DashboardPlaceholder() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold gradient-text mb-2">Student Dashboard</h1>
+        <p className="text-sm text-slate-400">Coming soon</p>
+      </div>
+    </div>
   );
 }
 

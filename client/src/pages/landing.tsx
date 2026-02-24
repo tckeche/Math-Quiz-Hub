@@ -18,7 +18,7 @@ export default function Landing() {
           by MCEC
         </p>
 
-        <Link href="/portal">
+        <Link href="/login">
           <button
             className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-[0_0_20px_rgba(139,92,246,0.6)] text-white font-medium rounded-full px-8 py-4 mt-10 transition-all block w-fit mx-auto cursor-pointer"
             data-testid="button-enter-portal"

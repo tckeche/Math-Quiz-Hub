@@ -28,6 +28,8 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `client/src/pages/admin.tsx` - Admin dashboard (login, quiz listing, quiz detail view with results, PDF generation, AI analysis)
 - `client/src/pages/builder.tsx` - Unified quiz builder/editor: 2-column layout with quiz params (left) and AI copilot + questions (right). Supports create (`/admin/builder`) and edit (`/admin/builder/:id`) modes.
 - `client/src/pages/quiz.tsx` - Student quiz interface (entry gate, exam view, timer, submission, single-attempt enforcement)
+- `client/src/pages/StudentAuth.tsx` - Student login/signup with Supabase Auth (glassmorphism UI)
+- `client/src/components/ProtectedRoute.tsx` - Auth-gated route wrapper using supabase.auth.onAuthStateChange
 
 ### API Endpoints
 - `GET /api/quizzes` - List all quizzes
