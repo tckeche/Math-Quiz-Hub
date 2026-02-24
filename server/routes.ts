@@ -880,29 +880,65 @@ Sections to include:
       const { message, studentId } = req.body;
       if (!message) return res.status(400).json({ message: "Message is required" });
 
-      let historicalContext = "";
+      let completedContext = "";
+      let untestedContext = "";
+      let hasStudentData = false;
 
       if (studentId) {
-        const reports = await storage.getSomaReportsByStudentId(studentId);
+        const [reports, allSomaQuizzes] = await Promise.all([
+          storage.getSomaReportsByStudentId(studentId),
+          storage.getSomaQuizzes(),
+        ]);
+
         const completedReports = reports.filter(
           (r) => r.status === "completed" && r.aiFeedbackHtml
         );
 
         if (completedReports.length > 0) {
+          hasStudentData = true;
           const feedbackEntries = completedReports.map((r, i) => {
-            const scoreInfo = r.score !== null ? `Score: ${r.score}` : "Score: N/A";
-            return `--- Quiz ${i + 1}: "${r.quiz.title}" (${r.quiz.topic || "General"}) | ${scoreInfo} ---\n${r.aiFeedbackHtml}`;
+            const scoreInfo = r.score !== null ? `Score: ${r.score}/100 (${r.score}%)` : "Score: N/A";
+            return `--- Quiz ${i + 1}: "${r.quiz.title}" | Topic: ${r.quiz.topic || "General"} | ${scoreInfo} ---\n${r.aiFeedbackHtml}`;
           });
-          historicalContext = feedbackEntries.join("\n\n");
+          completedContext = feedbackEntries.join("\n\n");
+        }
+
+        const completedQuizIds = new Set(reports.map((r) => r.quizId));
+        const untestedQuizzes = allSomaQuizzes
+          .filter((q) => q.status === "published" && !completedQuizIds.has(q.id));
+
+        if (untestedQuizzes.length > 0) {
+          hasStudentData = true;
+          untestedContext = untestedQuizzes.map((q) => {
+            return `- "${q.title}" | Topic: ${q.topic || "General"} | Curriculum: ${q.curriculumContext || "N/A"}`;
+          }).join("\n");
         }
       }
 
-      const analysisCount = historicalContext.split("--- Quiz").length - 1;
-      const systemPrompt = historicalContext
-        ? `You are an elite academic advisor. Below are the individual AI analyses from this student's past quizzes. Synthesize all of this feedback into a single, cohesive analysis. Tell the student their current overall standing, identify the specific fundamental concepts they repeatedly struggle with across these analyses, and prescribe exactly what they need to revisit to achieve mastery.\n\nAlso answer any specific question the student asks, informed by their performance history.\n\n=== STUDENT PERFORMANCE HISTORY (${analysisCount} analyses) ===\n${historicalContext}\n=== END HISTORY ===`
+      const systemPrompt = hasStudentData
+        ? `You are an elite academic advisor. You are provided with a student's past quiz feedback, AND a list of upcoming syllabus topics they have not yet been tested on. You must output a 3-part HTML report:
+
+1. **Overall Standing**: A brutal but fair assessment of their current grades.
+
+2. **Weak Fundamentals**: What they keep getting wrong based on past feedback.
+
+3. **Untested Territory (CRITICAL)**: Look at the 'Untested Quizzes' array provided. Explicitly list the topics they have not taken yet, and advise them on how to prepare for those specific upcoming subjects.
+
+Also answer any specific question the student asks, informed by their performance history and untested topics. Use <h3> for section headings, <ul>/<li> for lists, <p> for paragraphs, and <strong> for emphasis. Format output as clean HTML.`
         : "You are a helpful and encouraging math tutor. Answer the student's question clearly and thoroughly. Use LaTeX notation where appropriate (wrap inline math in $...$ and display math in $$...$$).";
 
-      const userPrompt = message;
+      let userPrompt = message;
+      if (hasStudentData) {
+        const dataSections: string[] = [];
+        if (completedContext) {
+          dataSections.push(`=== COMPLETED QUIZ FEEDBACK (${completedContext.split("--- Quiz").length - 1} quizzes) ===\n${completedContext}\n=== END COMPLETED ===`);
+        }
+        if (untestedContext) {
+          dataSections.push(`=== UNTESTED QUIZZES (topics not yet attempted) ===\n${untestedContext}\n=== END UNTESTED ===`);
+        }
+        userPrompt = `${dataSections.join("\n\n")}\n\nStudent's Question: ${message}`;
+      }
+
       const result = await generateWithFallback(systemPrompt, userPrompt);
       res.json({ reply: result.data });
     } catch (err: any) {
