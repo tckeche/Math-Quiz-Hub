@@ -186,25 +186,33 @@ function SummaryView({
           </div>
 
           <div className="space-y-2 mb-6">
-            {questions.map((q, idx) => (
-              <div
-                key={q.id}
-                className="flex items-center gap-3 bg-white/[0.03] rounded-lg p-3 border border-white/5"
-              >
-                <span className="text-xs font-mono text-slate-500 w-6 text-right">{idx + 1}</span>
-                {answers[q.id] ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                ) : (
-                  <Circle className="w-4 h-4 text-slate-600 shrink-0" />
-                )}
-                <span className="text-sm text-slate-300 truncate flex-1">
-                  {q.stem.slice(0, 60)}{q.stem.length > 60 ? "..." : ""}
-                </span>
-                <Badge className={`text-xs ${answers[q.id] ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-white/5 text-slate-500 border-white/10"}`}>
-                  [{q.marks}]
-                </Badge>
-              </div>
-            ))}
+            {questions.map((q, idx) => {
+              const isAnswered = !!answers[q.id];
+              return (
+                <div
+                  key={q.id}
+                  className={`flex items-center gap-3 rounded-lg p-3 transition-all duration-200 ${
+                    isAnswered
+                      ? "bg-slate-800 ring-2 ring-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-500/30"
+                      : "opacity-50 grayscale bg-slate-900 border border-slate-700"
+                  }`}
+                  data-testid={`summary-question-${idx + 1}`}
+                >
+                  <span className={`text-xs font-mono w-6 text-right ${isAnswered ? "text-blue-300" : "text-slate-600"}`}>{idx + 1}</span>
+                  {isAnswered ? (
+                    <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                  ) : (
+                    <Circle className="w-4 h-4 text-slate-600 shrink-0" />
+                  )}
+                  <span className={`text-sm truncate flex-1 ${isAnswered ? "text-slate-200" : "text-slate-500"}`}>
+                    {q.stem.slice(0, 60)}{q.stem.length > 60 ? "..." : ""}
+                  </span>
+                  <Badge className={`text-xs ${isAnswered ? "bg-blue-500/15 text-blue-300 border-blue-500/40" : "bg-white/5 text-slate-600 border-slate-700"}`}>
+                    [{q.marks}]
+                  </Badge>
+                </div>
+              );
+            })}
           </div>
         </div>
 
