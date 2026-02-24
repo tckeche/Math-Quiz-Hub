@@ -19,21 +19,60 @@ import { BlockMath, InlineMath } from 'react-katex';
 
 function renderLatex(text: string) {
   if (!text) return null;
-  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('\\(') && part.endsWith('\\)')) {
-      return <InlineMath key={i} math={part.slice(2, -2)} />;
+
+  // Pre-process: normalize common Unicode math symbols to LaTeX
+  let processed = text
+    .replace(/±/g, '\\pm ')
+    .replace(/×/g, '\\times ')
+    .replace(/÷/g, '\\div ')
+    .replace(/≤/g, '\\leq ')
+    .replace(/≥/g, '\\geq ')
+    .replace(/≠/g, '\\neq ')
+    .replace(/√/g, '\\sqrt{}')
+    .replace(/π/g, '\\pi ')
+    .replace(/θ/g, '\\theta ')
+    .replace(/α/g, '\\alpha ')
+    .replace(/β/g, '\\beta ')
+    .replace(/∞/g, '\\infty ')
+    .replace(/∑/g, '\\sum ')
+    .replace(/∫/g, '\\int ')
+    .replace(/→/g, '\\rightarrow ')
+    .replace(/⁻/g, '^{-}')
+    .replace(/²/g, '^{2}')
+    .replace(/³/g, '^{3}');
+
+  // Split on code blocks first, then LaTeX delimiters
+  const codeBlockRegex = /(```[\s\S]*?```|`[^`]+`)/g;
+  const codeSegments = processed.split(codeBlockRegex);
+
+  return codeSegments.map((segment, si) => {
+    // Render code blocks with monospace styling
+    if (segment.startsWith('```') && segment.endsWith('```')) {
+      const code = segment.slice(3, -3).replace(/^\w+\n/, ''); // strip optional language tag
+      return <pre key={si} className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-4 py-3 my-2 text-sm font-mono text-emerald-300 overflow-x-auto whitespace-pre-wrap">{code}</pre>;
     }
-    if (part.startsWith('\\[') && part.endsWith('\\]')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
+    if (segment.startsWith('`') && segment.endsWith('`') && segment.length > 2) {
+      return <code key={si} className="bg-slate-800/50 border border-slate-700/40 rounded px-1.5 py-0.5 text-sm font-mono text-cyan-300">{segment.slice(1, -1)}</code>;
     }
-    if (part.startsWith('$$') && part.endsWith('$$')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
-      return <InlineMath key={i} math={part.slice(1, -1)} />;
-    }
-    return <span key={i}>{part}</span>;
+
+    // Handle LaTeX delimiters within non-code segments
+    const parts = segment.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
+    return parts.map((part, i) => {
+      const key = `${si}-${i}`;
+      if (part.startsWith('\\(') && part.endsWith('\\)')) {
+        try { return <InlineMath key={key} math={part.slice(2, -2)} />; } catch { return <span key={key}>{part}</span>; }
+      }
+      if (part.startsWith('\\[') && part.endsWith('\\]')) {
+        try { return <BlockMath key={key} math={part.slice(2, -2)} />; } catch { return <span key={key}>{part}</span>; }
+      }
+      if (part.startsWith('$$') && part.endsWith('$$')) {
+        try { return <BlockMath key={key} math={part.slice(2, -2)} />; } catch { return <span key={key}>{part}</span>; }
+      }
+      if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
+        try { return <InlineMath key={key} math={part.slice(1, -1)} />; } catch { return <span key={key}>{part}</span>; }
+      }
+      return <span key={key}>{part}</span>;
+    });
   });
 }
 

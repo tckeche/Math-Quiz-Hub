@@ -268,6 +268,18 @@ export interface AIResult {
   metadata: AIMetadata;
 }
 
+const PER_MODEL_TIMEOUT_MS = 60_000; // 60 seconds per provider call
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
 export async function generateWithFallback(
   systemPrompt: string,
   userPrompt: string,
@@ -277,19 +289,20 @@ export async function generateWithFallback(
     try {
       const startTime = Date.now();
       let result: string;
+      const timeoutLabel = `${config.provider}/${config.model}`;
       switch (config.provider) {
         case "google":
-          result = await callGoogle(config.model, systemPrompt, userPrompt, expectedSchema);
+          result = await withTimeout(callGoogle(config.model, systemPrompt, userPrompt, expectedSchema), PER_MODEL_TIMEOUT_MS, timeoutLabel);
           break;
         case "openai":
-          result = await callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema);
+          result = await withTimeout(callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema), PER_MODEL_TIMEOUT_MS, timeoutLabel);
           break;
         case "anthropic": {
           const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
           let anthropicResponse: any;
           if (expectedSchema) {
-            const msg = await anthropic.messages.create({
+            const msg = await withTimeout(anthropic.messages.create({
               model: config.model,
               max_tokens: 4096,
               temperature: 0.1,
@@ -301,19 +314,19 @@ export async function generateWithFallback(
                 input_schema: expectedSchema as any,
               }],
               tool_choice: { type: "tool" as const, name: "generate_structured_data" },
-            });
+            }), PER_MODEL_TIMEOUT_MS, timeoutLabel);
 
             const toolBlock = msg.content.find((block: any) => block.type === "tool_use");
             if (!toolBlock) throw new Error("Anthropic failed to use the structured data tool.");
             anthropicResponse = (toolBlock as any).input;
           } else {
-            const msg = await anthropic.messages.create({
+            const msg = await withTimeout(anthropic.messages.create({
               model: config.model,
               max_tokens: 4096,
               temperature: 0.1,
               system: systemPrompt,
               messages: [{ role: "user", content: userPrompt }],
-            });
+            }), PER_MODEL_TIMEOUT_MS, timeoutLabel);
             const textBlock = msg.content[0];
             anthropicResponse = textBlock.type === "text" ? textBlock.text : "";
           }
@@ -322,7 +335,7 @@ export async function generateWithFallback(
           return { data: anthropicData, metadata: { provider: config.provider, model: config.model, durationMs: Date.now() - startTime } };
         }
         case "deepseek":
-          result = await callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema);
+          result = await withTimeout(callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema), PER_MODEL_TIMEOUT_MS, timeoutLabel);
           break;
         default:
           continue;

@@ -37,7 +37,7 @@ interface SubmissionWithQuiz {
 }
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
-const SECTION_LABEL = "text-xs font-semibold tracking-wider text-slate-400 uppercase";
+const SECTION_LABEL = "text-sm font-semibold tracking-wider text-slate-400 uppercase";
 
 function DonutCard({ subject, percentage, color }: { subject: string; percentage: number; color: string }) {
   const data = [
@@ -69,7 +69,7 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
           </ResponsiveContainer>
           <div className="absolute inset-0 flex items-center justify-center">
             <span
-              className="text-4xl font-bold text-white"
+              className="text-xl font-bold text-white"
               style={{ textShadow: `0 0 20px ${color}60` }}
               data-testid={`text-donut-value-${subject}`}
             >
@@ -143,14 +143,18 @@ export default function StudentDashboard() {
 
   const subjectStats = useMemo(() => {
     const map: Record<string, { total: number; earned: number }> = {};
+    // Only use admin-assigned subjects from regular quizzes
     submissions.forEach((s) => {
-      const subj = s.quiz.subject || "General";
+      const subj = s.quiz.subject;
+      if (!subj) return; // skip quizzes without an admin-assigned subject
       if (!map[subj]) map[subj] = { total: 0, earned: 0 };
       map[subj].total += s.maxPossibleScore;
       map[subj].earned += s.totalScore;
     });
+    // Group soma reports under their quiz's topic only if it matches an admin subject
     reports.forEach((r) => {
-      const subj = r.quiz.topic || "General";
+      const subj = r.quiz.topic;
+      if (!subj) return;
       if (!map[subj]) map[subj] = { total: 0, earned: 0 };
       map[subj].total += 100;
       map[subj].earned += r.score;
@@ -405,7 +409,7 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500">No available quizzes</p>
                     </div>
                   ) : (
-                    filteredQuizzes.map((q) => {
+                    filteredQuizzes.slice(0, 4).map((q) => {
                       const isOverdue = q.dueDate && new Date(q.dueDate) < now;
                       const sc = getSubjectColor(q.subject);
                       return (

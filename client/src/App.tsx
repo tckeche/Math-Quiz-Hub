@@ -13,6 +13,7 @@ import AnalyticsPage from "@/pages/analytics";
 import SomaQuizEngine from "@/pages/soma-quiz";
 import StudentAuth from "@/pages/StudentAuth";
 import StudentDashboard from "@/pages/StudentDashboard";
+import SomaChatPage from "@/pages/soma-chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/error-boundary";
 
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
       <Route path="/quiz/:id">{(params) => <ProtectedRoute component={QuizPage} params={params} />}</Route>
       <Route path="/soma/quiz/:id">{(params) => <ProtectedRoute component={SomaQuizEngine} params={params} />}</Route>
+      <Route path="/soma/chat">{() => <ProtectedRoute component={SomaChatPage} />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={StudentDashboard} />}</Route>
       <Route component={NotFound} />
     </Switch>
