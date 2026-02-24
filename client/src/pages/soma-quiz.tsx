@@ -13,8 +13,7 @@ import {
   ChevronRight, SkipForward, Send, ArrowLeft, Home,
   AlertCircle, Loader2, CheckCircle2, Circle, BookOpen, X, Award
 } from "lucide-react";
-import 'katex/dist/katex.min.css';
-import { BlockMath, InlineMath } from 'react-katex';
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 import type { Session } from "@supabase/supabase-js";
 
 export type StudentQuestion = {
@@ -24,26 +23,6 @@ export type StudentQuestion = {
   options: string[];
   marks: number;
 };
-
-function renderLatex(text: string) {
-  if (!text) return null;
-  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('\\(') && part.endsWith('\\)')) {
-      return <InlineMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('\\[') && part.endsWith('\\]')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$$') && part.endsWith('$$')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
-      return <InlineMath key={i} math={part.slice(1, -1)} />;
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
 
 function LoadingSkeleton() {
   return (
@@ -526,7 +505,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
           </div>
 
           <div className="text-lg text-slate-100 leading-relaxed mb-2" data-testid="text-question-stem">
-            {renderLatex(currentQuestion.stem)}
+            <MarkdownRenderer content={currentQuestion.stem} />
           </div>
         </div>
 
@@ -554,7 +533,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
                     {letter}
                   </div>
                   <div className="text-sm text-slate-200 pt-1 flex-1">
-                    {renderLatex(option)}
+                    <MarkdownRenderer content={option} />
                   </div>
                 </div>
               </button>

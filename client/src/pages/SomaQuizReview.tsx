@@ -7,8 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Home, AlertCircle, Loader2, CheckCircle2, XCircle, BookOpen, Award,
 } from "lucide-react";
-import 'katex/dist/katex.min.css';
-import { BlockMath, InlineMath } from 'react-katex';
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 interface ReviewQuestion {
   id: number;
@@ -33,26 +32,6 @@ interface ReviewReport {
 interface ReviewData {
   report: ReviewReport;
   questions: ReviewQuestion[];
-}
-
-function renderLatex(text: string) {
-  if (!text) return null;
-  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('\\(') && part.endsWith('\\)')) {
-      return <InlineMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('\\[') && part.endsWith('\\]')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$$') && part.endsWith('$$')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
-      return <InlineMath key={i} math={part.slice(1, -1)} />;
-    }
-    return <span key={i}>{part}</span>;
-  });
 }
 
 export default function SomaQuizReview() {
@@ -189,7 +168,7 @@ export default function SomaQuizReview() {
                 </div>
 
                 <div className="text-base text-slate-100 leading-relaxed mb-4" data-testid={`text-review-stem-${idx + 1}`}>
-                  {renderLatex(q.stem)}
+                  <MarkdownRenderer content={q.stem} />
                 </div>
 
                 <div className="grid gap-2.5">
@@ -231,7 +210,7 @@ export default function SomaQuizReview() {
                           <div className={`text-sm pt-0.5 flex-1 ${
                             isCorrectOption ? "text-green-200" : isStudentWrongPick ? "text-red-200" : "text-slate-300"
                           }`}>
-                            {renderLatex(option)}
+                            <MarkdownRenderer content={option} />
                           </div>
                           {iconEl}
                         </div>
@@ -244,7 +223,7 @@ export default function SomaQuizReview() {
                   <div className="mt-4 bg-violet-500/5 border border-violet-500/20 rounded-xl p-4">
                     <p className="text-xs font-semibold text-violet-400 mb-1 uppercase tracking-wider">Explanation</p>
                     <div className="text-sm text-slate-300 leading-relaxed">
-                      {renderLatex(q.explanation)}
+                      <MarkdownRenderer content={q.explanation} />
                     </div>
                   </div>
                 )}
