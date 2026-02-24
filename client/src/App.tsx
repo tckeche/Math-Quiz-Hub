@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
-import Home from "@/pages/home";
+
 import AdminPage from "@/pages/admin";
 import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
@@ -22,7 +22,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/login" component={StudentAuth} />
-      <Route path="/portal" component={Home} />
+      <Route path="/portal">{() => <ProtectedRoute component={StudentDashboard} />}</Route>
       <Route path="/admin" component={AdminPage} />
       <Route path="/admin/builder/:id" component={BuilderPage} />
       <Route path="/admin/builder" component={BuilderPage} />
