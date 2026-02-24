@@ -10,35 +10,221 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 import {
   Clock, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2,
-  Circle, Send, ArrowLeft, Home, ShieldAlert, Loader2, Award, FileText
+  Circle, Send, ArrowLeft, Home, ShieldAlert, Loader2, Award, FileText, Eye
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
-import { BlockMath, InlineMath } from 'react-katex';
+import { renderLatex } from '@/lib/render-latex';
 
-function renderLatex(text: string) {
-  if (!text) return null;
-  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('\\(') && part.endsWith('\\)')) {
-      return <InlineMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('\\[') && part.endsWith('\\]')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$$') && part.endsWith('$$')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
-      return <InlineMath key={i} math={part.slice(1, -1)} />;
-    }
-    return <span key={i}>{part}</span>;
-  });
+function ReviewView({
+  quizTitle,
+  questions,
+  answersBreakdown,
+  onBack,
+}: {
+  quizTitle: string;
+  questions: (Question & { correctAnswer: string })[];
+  answersBreakdown: Record<string, { answer: string; correct: boolean; marksEarned: number }>;
+  onBack: () => void;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const question = questions[currentIndex];
+  const qData = answersBreakdown[String(question.id)];
+  const optionLabels = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="sticky top-0 z-50 bg-white/[0.03] backdrop-blur-lg border-b border-white/5 px-4 py-3">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+          <Button variant="ghost" size="sm" onClick={onBack} className="text-slate-400 hover:text-slate-200">
+            <ArrowLeft className="w-4 h-4 mr-1" /> Back
+          </Button>
+          <h2 className="font-bold text-lg text-slate-100 truncate max-w-[200px]">{quizTitle}</h2>
+          <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30">
+            Q{currentIndex + 1}/{questions.length}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <div className="glass-card p-6 md:p-8 mb-8">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <h3 className="text-lg font-semibold text-slate-100">
+              Question {currentIndex + 1}
+            </h3>
+            <div className="flex items-center gap-2">
+              {qData?.correct ? (
+                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs">
+                  <CheckCircle2 className="w-3 h-3 mr-1" /> Correct
+                </Badge>
+              ) : (
+                <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-xs">
+                  <AlertCircle className="w-3 h-3 mr-1" /> Incorrect
+                </Badge>
+              )}
+              <span className="text-sm font-bold whitespace-nowrap bg-violet-500/10 text-violet-300 px-3 py-1 rounded-lg border border-violet-500/20">
+                [{question.marksWorth}]
+              </span>
+            </div>
+          </div>
+
+          <div className="text-base leading-relaxed mb-6 text-slate-200">
+            {renderLatex(question.promptText)}
+          </div>
+
+          {question.imageUrl && (
+            <div className="flex justify-center mb-6">
+              <img
+                src={question.imageUrl}
+                alt={`Diagram for question ${currentIndex + 1}`}
+                className="max-w-full max-h-96 object-contain rounded-lg border border-white/10"
+              />
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {question.options.map((option, idx) => {
+              const isStudentAnswer = qData?.answer === option;
+              const isCorrectAnswer = option === question.correctAnswer;
+              const isWrong = isStudentAnswer && !qData?.correct;
+
+              let borderClass = "border-white/10 bg-white/[0.02]";
+              let glowClass = "";
+
+              if (isCorrectAnswer) {
+                borderClass = "border-emerald-500 bg-emerald-500/10";
+                glowClass = "shadow-[0_0_15px_rgba(16,185,129,0.3)]";
+              }
+              if (isWrong) {
+                borderClass = "border-red-500 bg-red-500/10";
+                glowClass = "shadow-[0_0_15px_rgba(239,68,68,0.3)]";
+              }
+
+              return (
+                <div
+                  key={idx}
+                  className={`w-full text-left rounded-xl border-2 p-4 flex items-start gap-3 transition-all ${borderClass} ${glowClass}`}
+                >
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold ${
+                    isCorrectAnswer
+                      ? "bg-emerald-500/30 text-emerald-200"
+                      : isWrong
+                        ? "bg-red-500/30 text-red-200"
+                        : "bg-white/5 text-slate-400 border border-white/10"
+                  }`}>
+                    {optionLabels[idx]}
+                  </span>
+                  <div className="flex-1 pt-1">
+                    <span className="text-slate-200">{renderLatex(option)}</span>
+                    {isStudentAnswer && qData?.correct && (
+                      <span className="ml-2 text-xs text-emerald-400 font-semibold">Your Answer (Correct)</span>
+                    )}
+                    {isCorrectAnswer && !isStudentAnswer && (
+                      <span className="ml-2 text-xs text-emerald-400 font-semibold">Correct Answer</span>
+                    )}
+                    {isWrong && (
+                      <span className="ml-2 text-xs text-red-400 font-semibold">Your Answer</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 pt-4">
+          <Button
+            className="glow-button-outline"
+            onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+            disabled={currentIndex === 0}
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+          </Button>
+
+          <div className="flex gap-1.5 flex-wrap justify-center">
+            {questions.map((q, idx) => {
+              const d = answersBreakdown[String(q.id)];
+              return (
+                <button
+                  key={q.id}
+                  onClick={() => setCurrentIndex(idx)}
+                  className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                    idx === currentIndex
+                      ? "bg-violet-500 shadow-[0_0_6px_rgba(139,92,246,0.6)]"
+                      : d?.correct
+                        ? "bg-emerald-500/60"
+                        : "bg-red-500/60"
+                  }`}
+                />
+              );
+            })}
+          </div>
+
+          <Button
+            className="glow-button-outline"
+            onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+            disabled={currentIndex === questions.length - 1}
+          >
+            Next <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function ResultsView({ quizTitle, totalScore, maxPossibleScore }: { quizTitle: string; totalScore: number; maxPossibleScore: number }) {
+function ResultsView({
+  quizTitle,
+  totalScore,
+  maxPossibleScore,
+  quizId,
+  studentFirstName,
+  studentLastName,
+}: {
+  quizTitle: string;
+  totalScore: number;
+  maxPossibleScore: number;
+  quizId?: number;
+  studentFirstName?: string;
+  studentLastName?: string;
+}) {
   const percentage = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewData, setReviewData] = useState<{
+    questions: (Question & { correctAnswer: string })[];
+    submission: { answersBreakdown: Record<string, { answer: string; correct: boolean; marksEarned: number }> };
+  } | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  const handleReview = async () => {
+    if (!quizId || !studentFirstName || !studentLastName) return;
+    setReviewLoading(true);
+    try {
+      const res = await fetch(`/api/student/quiz-review?quizId=${quizId}&firstName=${encodeURIComponent(studentFirstName)}&lastName=${encodeURIComponent(studentLastName)}`);
+      if (!res.ok) throw new Error("Could not load review data");
+      const data = await res.json();
+      setReviewData(data);
+      setReviewing(true);
+    } catch {
+      // silently fail
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  if (reviewing && reviewData) {
+    return (
+      <ReviewView
+        quizTitle={quizTitle}
+        questions={reviewData.questions}
+        answersBreakdown={reviewData.submission.answersBreakdown}
+        onBack={() => setReviewing(false)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -60,14 +246,29 @@ function ResultsView({ quizTitle, totalScore, maxPossibleScore }: { quizTitle: s
           </p>
         </div>
 
-        <p className="text-sm text-slate-400 italic mb-8" data-testid="text-wait-message">
+        <p className="text-sm text-slate-400 italic mb-6" data-testid="text-wait-message">
           Please wait for your tutor to evaluate your points of weakness.
         </p>
 
-        <Link href="/portal">
+        {quizId && studentFirstName && studentLastName && (
+          <Button
+            className="glow-button-outline w-full mb-3"
+            onClick={handleReview}
+            disabled={reviewLoading}
+            data-testid="button-review-answers"
+          >
+            {reviewLoading ? (
+              <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Loading Review...</>
+            ) : (
+              <><Eye className="w-4 h-4 mr-1.5" /> Review My Answers</>
+            )}
+          </Button>
+        )}
+
+        <Link href="/dashboard">
           <Button className="glow-button w-full" data-testid="button-back-home">
             <Home className="w-4 h-4 mr-1.5" />
-            Return to Portal
+            Return to Dashboard
           </Button>
         </Link>
       </div>
@@ -105,7 +306,7 @@ function EntryGate({ quiz, onStart, checking, error }: { quiz: Quiz; onStart: (f
               <p className="text-sm text-slate-400 mt-2">
                 This assessment closed on {new Date(quiz.dueDate).toLocaleDateString()}.
               </p>
-              <Link href="/portal">
+              <Link href="/dashboard">
                 <Button className="glow-button-outline mt-4" data-testid="button-back-home-closed">
                   <Home className="w-4 h-4 mr-1.5" />
                   Return Home
@@ -204,7 +405,7 @@ function Timer({ startTime, timeLimitMinutes, onTimeUp }: { startTime: number; t
   );
 }
 
-function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Question[]; studentId: number }) {
+function ExamView({ quiz, questions, studentId, studentFirstName, studentLastName }: { quiz: Quiz; questions: Question[]; studentId: number; studentFirstName: string; studentLastName: string }) {
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -279,6 +480,9 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
         quizTitle={quiz.title}
         totalScore={submissionResult.totalScore}
         maxPossibleScore={submissionResult.maxPossibleScore}
+        quizId={quiz.id}
+        studentFirstName={studentFirstName}
+        studentLastName={studentLastName}
       />
     );
   }
@@ -311,8 +515,8 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                       onClick={() => { setCurrentIndex(idx); setShowSummary(false); }}
                       className={`w-full aspect-square rounded-lg flex items-center justify-center text-sm font-medium border transition-all ${
                         isAnswered
-                          ? "bg-violet-500/10 border-violet-500/30 text-violet-300"
-                          : "bg-white/5 border-white/10 text-slate-500"
+                          ? "bg-cyan-500/15 border-cyan-400/40 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.25)]"
+                          : "bg-slate-800/60 border-slate-700/50 text-slate-600 grayscale"
                       }`}
                       data-testid={`button-summary-q-${idx + 1}`}
                     >
@@ -322,8 +526,14 @@ function ExamView({ quiz, questions, studentId }: { quiz: Quiz; questions: Quest
                 })}
               </div>
               <div className="flex items-center gap-4 text-sm text-slate-400 mb-6">
-                <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-violet-400" /> Answered</span>
-                <span className="flex items-center gap-1.5"><Circle className="w-4 h-4" /> Unanswered</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-cyan-500/30 border border-cyan-400/40 shadow-[0_0_6px_rgba(34,211,238,0.3)]" />
+                  Answered
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-slate-800/60 border border-slate-700/50" />
+                  Unanswered
+                </span>
               </div>
               <div className="flex gap-3">
                 <Button className="glow-button-outline" onClick={() => setShowSummary(false)} data-testid="button-back-to-questions">
@@ -491,10 +701,28 @@ export default function QuizPage() {
   const params = useParams<{ id: string }>();
   const quizId = parseInt(params.id || "0");
   const [studentId, setStudentId] = useState<number | null>(null);
+  const [studentFirstName, setStudentFirstName] = useState("");
+  const [studentLastName, setStudentLastName] = useState("");
   const [started, setStarted] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(false);
   const [entryError, setEntryError] = useState("");
+  const [session, setSession] = useState<Session | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const autoStartRef = useRef(false);
+
+  // Check for Supabase session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setSessionLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      setSessionLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   if (!Number.isFinite(quizId) || quizId <= 0) {
     return (
@@ -532,6 +760,8 @@ export default function QuizPage() {
       const data = await res.json();
       if (data.hasSubmitted) {
         setBlocked(true);
+        setStudentFirstName(firstName);
+        setStudentLastName(lastName);
         localStorage.setItem(`completed_quiz_${quizId}`, "true");
         if (data.totalScore !== undefined) {
           localStorage.setItem(`quiz_result_${quizId}`, JSON.stringify({ totalScore: data.totalScore, maxPossibleScore: data.maxPossibleScore }));
@@ -541,6 +771,8 @@ export default function QuizPage() {
       const studentRes = await apiRequest("POST", "/api/students", { firstName, lastName });
       const studentData = await studentRes.json();
       setStudentId(studentData.id);
+      setStudentFirstName(firstName);
+      setStudentLastName(lastName);
       setStarted(true);
     } catch (err: any) {
       const message = String(err?.message || "");
@@ -555,7 +787,19 @@ export default function QuizPage() {
     }
   };
 
-  if (quizLoading) {
+  // Auto-start for logged-in users (skip EntryGate)
+  useEffect(() => {
+    if (!session || autoStartRef.current || started || blocked || !quiz || quizLoading || sessionLoading) return;
+    if (new Date(quiz.dueDate) < new Date()) return; // quiz is closed
+    autoStartRef.current = true;
+    const displayName = session.user?.user_metadata?.display_name || session.user?.email?.split("@")[0] || "Student";
+    const parts = displayName.split(" ");
+    const firstName = parts[0] || "Student";
+    const lastName = parts.slice(1).join(" ") || "User";
+    handleStart(firstName, lastName);
+  }, [session, quiz, quizLoading, started, blocked, sessionLoading]);
+
+  if (quizLoading || sessionLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-4 w-full max-w-md px-4">
@@ -585,7 +829,7 @@ export default function QuizPage() {
           <AlertCircle className="w-12 h-12 mx-auto text-red-400/60 mb-3" />
           <h2 className="text-xl font-bold text-slate-100">Quiz Not Found</h2>
           <p className="text-sm text-slate-400 mt-2">This assessment does not exist.</p>
-          <Link href="/portal">
+          <Link href="/dashboard">
             <Button className="glow-button-outline mt-4" data-testid="button-back-home-notfound">
               <Home className="w-4 h-4 mr-1.5" />
               Return Home
@@ -607,12 +851,36 @@ export default function QuizPage() {
         maxPossibleScore = parsed.maxPossibleScore;
       } catch {}
     }
+    // Get student name for review - prefer state, fallback to session
+    let fn = studentFirstName;
+    let ln = studentLastName;
+    if (!fn && session) {
+      const displayName = session.user?.user_metadata?.display_name || session.user?.email?.split("@")[0] || "Student";
+      const parts = displayName.split(" ");
+      fn = parts[0] || "Student";
+      ln = parts.slice(1).join(" ") || "User";
+    }
     return (
       <ResultsView
         quizTitle={quiz.title}
         totalScore={totalScore}
         maxPossibleScore={maxPossibleScore}
+        quizId={quizId}
+        studentFirstName={fn}
+        studentLastName={ln}
       />
+    );
+  }
+
+  // If session exists and auto-start is in progress, show loading
+  if (session && (!started || !studentId) && !blocked) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+          <p className="text-sm text-slate-400">Preparing your assessment...</p>
+        </div>
+      </div>
     );
   }
 
@@ -655,5 +923,5 @@ export default function QuizPage() {
     );
   }
 
-  return <ExamView quiz={quiz} questions={questions} studentId={studentId} />;
+  return <ExamView quiz={quiz} questions={questions} studentId={studentId} studentFirstName={studentFirstName} studentLastName={studentLastName} />;
 }

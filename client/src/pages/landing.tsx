@@ -1,23 +1,33 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 import { Loader2 } from "lucide-react";
 
 export default function Landing() {
-  const [checking, setChecking] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setLocation("/dashboard");
-      } else {
-        setChecking(false);
-      }
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setLoading(false);
     });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      setLoading(false);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  if (checking) {
+  useEffect(() => {
+    if (!loading && session) {
+      setLocation("/dashboard");
+    }
+  }, [loading, session, setLocation]);
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />

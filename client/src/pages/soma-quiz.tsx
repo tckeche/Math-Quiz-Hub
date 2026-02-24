@@ -13,8 +13,8 @@ import {
   ChevronRight, SkipForward, Send, ArrowLeft, Home,
   AlertCircle, Loader2, CheckCircle2, Circle, BookOpen, X, Award
 } from "lucide-react";
-import MarkdownRenderer from "@/components/MarkdownRenderer";
-import type { Session } from "@supabase/supabase-js";
+import 'katex/dist/katex.min.css';
+import { renderLatex } from '@/lib/render-latex';
 
 export type StudentQuestion = {
   id: number;
@@ -170,23 +170,22 @@ function SummaryView({
               return (
                 <div
                   key={q.id}
-                  className={`flex items-center gap-3 rounded-lg p-3 transition-all duration-200 ${
+                  className={`flex items-center gap-3 rounded-lg p-3 border transition-all ${
                     isAnswered
-                      ? "bg-slate-800 ring-2 ring-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-500/30"
-                      : "opacity-50 grayscale bg-slate-900 border border-slate-700"
+                      ? "bg-cyan-500/5 border-cyan-400/30 shadow-[0_0_10px_rgba(34,211,238,0.15)]"
+                      : "bg-slate-800/40 border-slate-700/40 grayscale opacity-60"
                   }`}
-                  data-testid={`summary-question-${idx + 1}`}
                 >
-                  <span className={`text-xs font-mono w-6 text-right ${isAnswered ? "text-blue-300" : "text-slate-600"}`}>{idx + 1}</span>
+                  <span className={`text-xs font-mono w-6 text-right ${isAnswered ? "text-cyan-400" : "text-slate-600"}`}>{idx + 1}</span>
                   {isAnswered ? (
-                    <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
                   ) : (
                     <Circle className="w-4 h-4 text-slate-600 shrink-0" />
                   )}
                   <span className={`text-sm truncate flex-1 ${isAnswered ? "text-slate-200" : "text-slate-500"}`}>
                     {q.stem.slice(0, 60)}{q.stem.length > 60 ? "..." : ""}
                   </span>
-                  <Badge className={`text-xs ${isAnswered ? "bg-blue-500/15 text-blue-300 border-blue-500/40" : "bg-white/5 text-slate-600 border-slate-700"}`}>
+                  <Badge className={`text-xs ${isAnswered ? "bg-cyan-500/10 text-cyan-400 border-cyan-400/30" : "bg-slate-800/60 text-slate-600 border-slate-700/40"}`}>
                     [{q.marks}]
                   </Badge>
                 </div>

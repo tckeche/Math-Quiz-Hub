@@ -12,7 +12,7 @@ export default function NotFound() {
         <p className="text-sm text-slate-400 mb-6">
           The page you're looking for doesn't exist.
         </p>
-        <Link href="/portal">
+        <Link href="/dashboard">
           <Button className="glow-button" data-testid="button-back-home-404">
             <Home className="w-4 h-4 mr-1.5" />
             Return Home

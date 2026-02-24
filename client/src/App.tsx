@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
-import Home from "@/pages/home";
+
 import AdminPage from "@/pages/admin";
 import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
@@ -15,6 +15,7 @@ import SomaQuizReview from "@/pages/SomaQuizReview";
 import SomaChat from "@/pages/SomaChat";
 import StudentAuth from "@/pages/StudentAuth";
 import StudentDashboard from "@/pages/StudentDashboard";
+import SomaChatPage from "@/pages/soma-chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/error-boundary";
 
@@ -23,15 +24,14 @@ function Router() {
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/login" component={StudentAuth} />
-      <Route path="/portal" component={Home} />
+      <Route path="/portal">{() => <ProtectedRoute component={StudentDashboard} />}</Route>
       <Route path="/admin" component={AdminPage} />
       <Route path="/admin/builder/:id" component={BuilderPage} />
       <Route path="/admin/builder" component={BuilderPage} />
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
       <Route path="/quiz/:id">{(params) => <ProtectedRoute component={QuizPage} params={params} />}</Route>
       <Route path="/soma/quiz/:id">{(params) => <ProtectedRoute component={SomaQuizEngine} params={params} />}</Route>
-      <Route path="/soma/review/:reportId">{(params) => <ProtectedRoute component={SomaQuizReview} params={params} />}</Route>
-      <Route path="/soma/chat">{() => <ProtectedRoute component={SomaChat} />}</Route>
+      <Route path="/soma/chat">{() => <ProtectedRoute component={SomaChatPage} />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={StudentDashboard} />}</Route>
       <Route component={NotFound} />
     </Switch>
