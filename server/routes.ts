@@ -562,7 +562,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { message } = req.body;
       if (!message) return res.status(400).json({ message: "message is required" });
 
-      const systemPrompt = `You are a curriculum assistant for mathematics teachers. Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }]. Use double-escaped LaTeX in all math strings.`;
+      const systemPrompt = `You are a curriculum assistant for teachers across ALL subjects (Mathematics, Physics, Chemistry, Biology, Economics, Business Studies, Computer Science, English Language, English Literature, Geography, History, etc.). You generate assessment questions aligned with Cambridge International Education (CIE) syllabi — including IGCSE, AS Level, and A Level.
+
+QUESTION STYLE GUIDELINES:
+- Structure questions using CIE command words: Calculate, State, Explain, Describe, Evaluate, Compare, Suggest, Define, Outline, Analyse, Discuss, Assess, Justify.
+- For quantitative subjects, model questions after CIE past paper formats (pastpapers.co, papacambridge.com) with realistic values and proper units.
+- Use multi-part questions where appropriate (a, b, c) with escalating difficulty.
+- Allocate marks realistically (1-2 marks for recall, 3-4 for application, 5+ for evaluation/analysis).
+
+FORMATTING RULES:
+- Wrap ALL mathematical expressions in LaTeX delimiters: \\( ... \\) for inline, \\[ ... \\] for display.
+- Use proper LaTeX for fractions (\\frac{}{}), powers (^{}), subscripts (_{}), units (\\text{m/s}^{2}), Greek letters (\\alpha, \\beta, \\theta), etc.
+- NEVER output bare LaTeX commands without delimiters.
+- For non-math subjects, use clean plain text with proper formatting.
+
+Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }].`;
 
       const { data, metadata } = await generateWithFallback(systemPrompt, String(message));
       const drafts = extractJsonArray(data) || [];
@@ -593,7 +607,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
       });
 
-      const systemPrompt = `You are an expert mathematics tutor. Analyze student quiz submissions and provide detailed performance reports.
+      const systemPrompt = `You are an expert academic tutor across all subjects. Analyze student quiz submissions and provide detailed performance reports.
 
 IMPORTANT FORMATTING RULES:
 1. Reference questions using their "questionNumber" field (e.g., "Question 1", "Question 2"), NOT their database IDs.
@@ -634,7 +648,7 @@ Sections to include:
         answersBreakdown: s.answersBreakdown,
       }));
 
-      const systemPrompt = `You are a master mathematics tutor. Analyze cohort quiz data. Identify macro-trends, the most commonly failed questions, and the specific mathematical concepts the class as a whole is struggling with. Output in clean, professional HTML — no markdown, no code fences.`;
+      const systemPrompt = `You are a master academic tutor. Analyze cohort quiz data. Identify macro-trends, the most commonly failed questions, and the specific concepts the class as a whole is struggling with. Output in clean, professional HTML — no markdown, no code fences.`;
 
       const userPrompt = `Questions:\n${JSON.stringify(questions, null, 2)}\n\nSubmissions:\n${JSON.stringify(payload, null, 2)}`;
 
@@ -701,7 +715,7 @@ Sections to include:
         quiz,
         questions: insertedQuestions,
         pipeline: {
-          stages: ["Claude 3.5 Sonnet → Generation", "DeepSeek R1 → Math Audit", "Gemini 2.5 Flash → Syllabus Audit"],
+          stages: ["Claude 3.5 Sonnet → Generation", "DeepSeek R1 → Content Audit", "Gemini 2.5 Flash → Syllabus Audit"],
           totalQuestions: insertedQuestions.length,
         },
       });

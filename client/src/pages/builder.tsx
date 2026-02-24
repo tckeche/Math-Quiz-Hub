@@ -16,31 +16,9 @@ import {
   Scan, Brain, Search, CheckCircle2, Eye
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
-import { BlockMath, InlineMath } from 'react-katex';
+import { renderLatex, unescapeLatex } from '@/lib/render-latex';
 import SomaQuizEngine from "./soma-quiz";
 import type { StudentQuestion } from "./soma-quiz";
-
-const unescapeLatex = (str: string) => str.replace(/\\\\/g, '\\');
-
-function renderLatex(text: string) {
-  if (!text) return null;
-  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('\\(') && part.endsWith('\\)')) {
-      return <InlineMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('\\[') && part.endsWith('\\]')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$$') && part.endsWith('$$')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
-      return <InlineMath key={i} math={part.slice(1, -1)} />;
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
 
 type DraftQuestion = {
   id?: number;
@@ -55,8 +33,8 @@ const LEVEL_OPTIONS = ["IGCSE", "AS", "A2", "IB1", "IB2", "Grade 9", "Grade 10",
 
 const PIPELINE_STAGES = [
   { stage: 1, icon: "scan", label: "Gemini is reading the PDF...", aiName: "Google Gemini" },
-  { stage: 2, icon: "brain", label: "DeepSeek is solving the mathematics...", aiName: "DeepSeek R1" },
-  { stage: 3, icon: "pencil", label: "Claude is formatting the LaTeX...", aiName: "Claude Sonnet" },
+  { stage: 2, icon: "brain", label: "DeepSeek is analysing the content...", aiName: "DeepSeek R1" },
+  { stage: 3, icon: "pencil", label: "Claude is formatting the questions...", aiName: "Claude Sonnet" },
   { stage: 4, icon: "search", label: "ChatGPT is validating the database schema...", aiName: "GPT-4o" },
 ];
 
@@ -86,6 +64,7 @@ export default function BuilderPage() {
   const [stageLabel, setStageLabel] = useState("");
 
   const [showPreview, setShowPreview] = useState(false);
+  const [supportingDocs, setSupportingDocs] = useState<{ name: string; type: string; processing: boolean }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -125,7 +104,14 @@ export default function BuilderPage() {
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      const res = await apiRequest("POST", "/api/admin/copilot-chat", { message });
+      // Prepend subject/level/syllabus context so the AI generates relevant questions
+      const context = [
+        subject && `Subject: ${subject}`,
+        level && `Level: ${level}`,
+        syllabus && `Syllabus: ${syllabus}`,
+      ].filter(Boolean).join(", ");
+      const enrichedMessage = context ? `[${context}]\n\n${message}` : message;
+      const res = await apiRequest("POST", "/api/admin/copilot-chat", { message: enrichedMessage });
       return res.json();
     },
     onSuccess: (data, message) => {
@@ -162,7 +148,7 @@ export default function BuilderPage() {
     onSuccess: (quiz) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
       toast({ title: "Quiz created successfully" });
-      navigate(`/admin/builder/${quiz.id}`);
+      navigate("/admin");
     },
     onError: (err: Error) => toast({ title: "Failed to create quiz", description: err.message, variant: "destructive" }),
   });
@@ -274,6 +260,19 @@ export default function BuilderPage() {
       toast({ title: "AI pipeline failed", description: err.message, variant: "destructive" });
     } finally {
       setPipelineActive(false);
+    }
+  };
+
+  const handleSupportingDoc = async (file: File, docType: string) => {
+    const docEntry = { name: file.name, type: docType, processing: true };
+    setSupportingDocs((prev) => [...prev, docEntry]);
+    try {
+      await startPipeline(file);
+      setSupportingDocs((prev) =>
+        prev.map((d) => (d.name === file.name && d.type === docType ? { ...d, processing: false } : d))
+      );
+    } catch {
+      setSupportingDocs((prev) => prev.filter((d) => !(d.name === file.name && d.type === docType)));
     }
   };
 
@@ -491,6 +490,70 @@ export default function BuilderPage() {
               <Plus className="w-3.5 h-3.5 mr-1" />
               Add Manually
             </Button>
+          </div>
+
+          {/* Supporting Documents */}
+          <div className="glass-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Upload className="w-4 h-4 text-violet-400" />
+              <h2 className="font-semibold text-slate-100 text-sm">Supporting Documents</h2>
+              <span className="text-[10px] text-slate-500">(Syllabi, past papers, textbook excerpts)</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                id="doc-type-select"
+                className="glass-input px-2.5 py-1.5 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-xs"
+                defaultValue="past-paper"
+                data-testid="select-doc-type"
+              >
+                <option value="past-paper">Past Exam Paper</option>
+                <option value="syllabus">Cambridge Syllabus</option>
+                <option value="textbook">Textbook Excerpt</option>
+                <option value="notes">Custom Notes</option>
+              </select>
+              <Label htmlFor="supporting-doc-input" className="cursor-pointer">
+                <div className="flex items-center gap-1.5 text-xs text-violet-300 border border-violet-500/30 bg-violet-500/10 rounded-lg px-3 py-1.5 hover:bg-violet-500/20 transition-colors">
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload PDF
+                </div>
+                <input
+                  id="supporting-doc-input"
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  disabled={pipelineActive}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    const docType = (document.getElementById("doc-type-select") as HTMLSelectElement)?.value || "past-paper";
+                    if (file) handleSupportingDoc(file, docType);
+                    e.target.value = "";
+                  }}
+                  data-testid="input-supporting-doc"
+                />
+              </Label>
+            </div>
+            {supportingDocs.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {supportingDocs.map((doc, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-slate-400 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-1.5">
+                    <FileText className="w-3 h-3 text-violet-400 shrink-0" />
+                    <span className="truncate flex-1">{doc.name}</span>
+                    <span className="text-[10px] uppercase text-slate-500 shrink-0">{doc.type}</span>
+                    {doc.processing ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-violet-400 shrink-0" />
+                    ) : (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                    )}
+                    <button
+                      className="text-slate-500 hover:text-red-400 shrink-0"
+                      onClick={() => setSupportingDocs((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Pipeline Progress */}

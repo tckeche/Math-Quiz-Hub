@@ -21,29 +21,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import 'katex/dist/katex.min.css';
-import { BlockMath, InlineMath } from 'react-katex';
-
-const unescapeLatex = (str: string) => str.replace(/\\\\/g, '\\');
-
-function renderLatex(text: string) {
-  if (!text) return null;
-  const parts = text.split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('\\(') && part.endsWith('\\)')) {
-      return <InlineMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('\\[') && part.endsWith('\\]')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$$') && part.endsWith('$$')) {
-      return <BlockMath key={i} math={part.slice(2, -2)} />;
-    }
-    if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
-      return <InlineMath key={i} math={part.slice(1, -1)} />;
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
+import { renderLatex, unescapeLatex } from '@/lib/render-latex';
 
 interface GeneratedQuestion {
   prompt_text: string;
@@ -909,12 +887,6 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/admin/builder">
-              <Button className="glow-button-outline text-sm" size="sm" data-testid="button-ai-builder">
-                <MessageSquare className="w-4 h-4 mr-1" />
-                AI Builder
-              </Button>
-            </Link>
             <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-slate-200" onClick={handleLogout} data-testid="button-admin-logout">
               <LogOut className="w-4 h-4 mr-1" />
               Log Out
@@ -930,15 +902,11 @@ export default function AdminPage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-lg font-semibold text-slate-100">Quizzes</h2>
-              <Button size="sm" className="glow-button" onClick={() => setShowCreateForm(true)} data-testid="button-create-quiz">
+              <Button size="sm" className="glow-button" onClick={() => navigate("/admin/builder")} data-testid="button-create-quiz">
                 <Plus className="w-4 h-4 mr-1" />
                 New Quiz
               </Button>
             </div>
-
-            {showCreateForm && (
-              <CreateQuizForm onClose={() => setShowCreateForm(false)} />
-            )}
 
             {quizzesError ? (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 p-4">

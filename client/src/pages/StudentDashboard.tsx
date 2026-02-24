@@ -306,7 +306,7 @@ export default function StudentDashboard() {
   const visibleCompleted = showAllCompleted ? completedItems : completedItems.slice(0, 5);
 
   return (
-    <div className="min-h-screen" style={{ background: `#0b0f1a url('/wallpaper.jpg') center/cover fixed` }}>
+    <div className="min-h-screen">
       <header className="border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/">
