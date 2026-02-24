@@ -21,10 +21,12 @@ vi.mock("express-rate-limit", () => ({
 }));
 
 // ─── Mock AI services to avoid real API calls ─────────────────────────────────
+// generateWithFallback now returns { data: string, metadata: AIMetadata }
 vi.mock("../server/services/aiOrchestrator", () => ({
-  generateWithFallback: vi.fn().mockResolvedValue(
-    "<h3>Analysis</h3><ul><li>Good performance</li></ul>"
-  ),
+  generateWithFallback: vi.fn().mockResolvedValue({
+    data: "<h3>Analysis</h3><ul><li>Good performance</li></ul>",
+    metadata: { provider: "mock", model: "mock-model", durationMs: 42 },
+  }),
 }));
 
 vi.mock("../server/services/aiPipeline", () => ({

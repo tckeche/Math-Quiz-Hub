@@ -132,10 +132,16 @@ describe("QuizResultSchema validation", () => {
 });
 
 // ─── generateAuditedQuiz: Success path ───────────────────────────────────────
+// generateWithFallback now returns { data: string, metadata: AIMetadata }
+const makeAIResult = (data: string) => ({
+  data,
+  metadata: { provider: "mock", model: "mock-model", durationMs: 10 },
+});
+
 describe("generateAuditedQuiz: Full pipeline success", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGenerateWithFallback.mockResolvedValue(JSON.stringify(validQuizResult));
+    mockGenerateWithFallback.mockResolvedValue(makeAIResult(JSON.stringify(validQuizResult)));
   });
 
   it("calls generateWithFallback 3 times (3 pipeline stages)", async () => {
@@ -196,33 +202,33 @@ describe("generateAuditedQuiz: Error handling", () => {
   });
 
   it("throws when AI returns invalid JSON", async () => {
-    mockGenerateWithFallback.mockResolvedValue("not valid json at all!!!");
+    mockGenerateWithFallback.mockResolvedValue(makeAIResult("not valid json at all!!!"));
     await expect(generateAuditedQuiz("Topic")).rejects.toThrow();
   });
 
   it("throws when AI returns JSON that fails schema validation", async () => {
-    mockGenerateWithFallback.mockResolvedValue(JSON.stringify({
+    mockGenerateWithFallback.mockResolvedValue(makeAIResult(JSON.stringify({
       questions: [{ stem: "Q?", options: ["A", "B"], correct_answer: "A", marks: 999 }],
-    }));
+    })));
     await expect(generateAuditedQuiz("Topic")).rejects.toThrow();
   });
 
   it("throws when AI returns empty questions array", async () => {
-    mockGenerateWithFallback.mockResolvedValue(JSON.stringify({ questions: [] }));
+    mockGenerateWithFallback.mockResolvedValue(makeAIResult(JSON.stringify({ questions: [] })));
     await expect(generateAuditedQuiz("Topic")).rejects.toThrow();
   });
 
   it("throws when stage 2 fails after stage 1 succeeds", async () => {
     mockGenerateWithFallback
-      .mockResolvedValueOnce(JSON.stringify(validQuizResult))
+      .mockResolvedValueOnce(makeAIResult(JSON.stringify(validQuizResult)))
       .mockRejectedValueOnce(new Error("Stage 2 failed"));
     await expect(generateAuditedQuiz("Topic")).rejects.toThrow("Stage 2 failed");
   });
 
   it("throws when stage 3 fails after stages 1-2 succeed", async () => {
     mockGenerateWithFallback
-      .mockResolvedValueOnce(JSON.stringify(validQuizResult))
-      .mockResolvedValueOnce(JSON.stringify(validQuizResult))
+      .mockResolvedValueOnce(makeAIResult(JSON.stringify(validQuizResult)))
+      .mockResolvedValueOnce(makeAIResult(JSON.stringify(validQuizResult)))
       .mockRejectedValueOnce(new Error("Stage 3 failed"));
     await expect(generateAuditedQuiz("Topic")).rejects.toThrow("Stage 3 failed");
   });
@@ -232,7 +238,7 @@ describe("generateAuditedQuiz: Error handling", () => {
 describe("generateAuditedQuiz: System prompt content", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGenerateWithFallback.mockResolvedValue(JSON.stringify(validQuizResult));
+    mockGenerateWithFallback.mockResolvedValue(makeAIResult(JSON.stringify(validQuizResult)));
   });
 
   it("stage 1 system prompt mentions 'expert mathematics'", async () => {
