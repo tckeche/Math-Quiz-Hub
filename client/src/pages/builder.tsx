@@ -65,7 +65,7 @@ export default function BuilderPage() {
 
   const [showPreview, setShowPreview] = useState(false);
   const [supportingDocs, setSupportingDocs] = useState<{ name: string; type: string; processing: boolean }[]>([]);
-  const [docContext, setDocContext] = useState<{ name: string; type: string; text: string }[]>([]);
+  const [docContext, setDocContext] = useState<{ name: string; type: string; fileId: string }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -112,13 +112,11 @@ export default function BuilderPage() {
         syllabus && `Syllabus: ${syllabus}`,
       ].filter(Boolean).join(", ");
       const enrichedMessage = context ? `[${context}]\n\n${message}` : message;
-      // Include extracted document content so the copilot knows about uploaded files
-      const docSummaries = docContext.map((d) =>
-        `--- Uploaded Document: "${d.name}" (${d.type}) ---\n${d.text}`
-      ).join("\n\n");
+      // Pass uploaded PDF file IDs so the copilot sends actual PDFs to Gemini
+      const docIds = docContext.map((d) => d.fileId);
       const res = await apiRequest("POST", "/api/admin/copilot-chat", {
         message: enrichedMessage,
-        documentContext: docSummaries || undefined,
+        documentIds: docIds.length > 0 ? docIds : undefined,
       });
       return res.json();
     },
@@ -237,7 +235,7 @@ export default function BuilderPage() {
     setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, image_url: data.url } : d)));
   };
 
-  const startPipeline = async (file: File): Promise<string | null> => {
+  const startPipeline = async (file: File) => {
     setPipelineActive(true);
     setCurrentStage(0);
     setCompletedStages(new Set());
@@ -245,7 +243,6 @@ export default function BuilderPage() {
 
     const formData = new FormData();
     formData.append("pdf", file);
-    let extractedText: string | null = null;
 
     try {
       const res = await fetch("/api/generate-questions", { method: "POST", body: formData, credentials: "include" });
@@ -277,8 +274,6 @@ export default function BuilderPage() {
                 setStageLabel(data.label);
               } else if (evType === "stage_done") {
                 setCompletedStages(prev => { const next = new Set(Array.from(prev)); next.add(data.stage); return next; });
-              } else if (evType === "extracted_text") {
-                extractedText = data.text;
               } else if (evType === "result") {
                 setDrafts(prev => [...prev, ...data.questions]);
                 toast({ title: `${data.questions.length} questions extracted from PDF` });
@@ -296,20 +291,34 @@ export default function BuilderPage() {
     } finally {
       setPipelineActive(false);
     }
-    return extractedText;
   };
 
   const handleSupportingDoc = async (file: File, docType: string) => {
     const docEntry = { name: file.name, type: docType, processing: true };
     setSupportingDocs((prev) => [...prev, docEntry]);
     try {
-      const extractedText = await startPipeline(file);
+      // Upload the PDF to the server so the copilot can reference the original file
+      const uploadForm = new FormData();
+      uploadForm.append("pdf", file);
+      const uploadRes = await fetch("/api/admin/upload-supporting-doc", {
+        method: "POST",
+        body: uploadForm,
+        credentials: "include",
+      });
+      let fileId: string | null = null;
+      if (uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        fileId = uploadData.id;
+      }
+
+      // Also run the pipeline to extract questions
+      await startPipeline(file);
       setSupportingDocs((prev) =>
         prev.map((d) => (d.name === file.name && d.type === docType ? { ...d, processing: false } : d))
       );
-      // Store extracted text so the copilot can reference this document
-      if (extractedText) {
-        setDocContext((prev) => [...prev, { name: file.name, type: docType, text: extractedText }]);
+      // Store the file reference so the copilot can send the actual PDF to Gemini
+      if (fileId) {
+        setDocContext((prev) => [...prev, { name: file.name, type: docType, fileId }]);
       }
     } catch {
       setSupportingDocs((prev) => prev.filter((d) => !(d.name === file.name && d.type === docType)));
@@ -587,10 +596,10 @@ export default function BuilderPage() {
                     <button
                       className="text-slate-500 hover:text-red-400 shrink-0"
                       onClick={() => {
-                        const removedDoc = supportingDocs[i];
+                        const removed = supportingDocs[i];
                         setSupportingDocs((prev) => prev.filter((_, j) => j !== i));
-                        setDocContext((prev) => prev.filter((d) => !(d.name === removedDoc.name && d.type === removedDoc.type)));
-                      }}
+                        setDocContext((prev) => prev.filter((d) => !(d.name === removed.name && d.type === removed.type)));
+                      }
                     >
                       <X className="w-3 h-3" />
                     </button>

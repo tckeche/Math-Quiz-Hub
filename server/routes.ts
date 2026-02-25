@@ -40,6 +40,21 @@ const upload = multer({
 
 const pdfUpload = multer({ storage: multer.memoryStorage() });
 
+const supportingDocUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const dir = path.resolve(process.cwd(), "supporting-docs");
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit for supporting docs
+});
+
 function getGeminiModel() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
@@ -358,6 +373,13 @@ ${JSON.stringify(breakdown, null, 2)}`;
   });
 
   app.use("/api/admin", requireAdmin);
+
+  // Upload supporting documents (PDFs) — stored on disk so copilot can reference them
+  app.post("/api/admin/upload-supporting-doc", supportingDocUpload.single("pdf"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No PDF uploaded" });
+    res.json({ id: req.file.filename, originalName: req.file.originalname });
+  });
+
   app.get("/api/quizzes", async (_req, res) => {
     const quizzes = await storage.getQuizzes();
     res.json(quizzes);
@@ -720,10 +742,10 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
 
   app.post("/api/admin/copilot-chat", async (req, res) => {
     try {
-      const { message, documentContext } = req.body;
+      const { message, documentIds } = req.body;
       if (!message) return res.status(400).json({ message: "message is required" });
 
-      let systemPrompt = `You are a curriculum assistant for teachers across ALL subjects (Mathematics, Physics, Chemistry, Biology, Economics, Business Studies, Computer Science, English Language, English Literature, Geography, History, etc.). You generate assessment questions aligned with Cambridge International Education (CIE) syllabi — including IGCSE, AS Level, and A Level.
+      const systemPrompt = `You are a curriculum assistant for teachers across ALL subjects (Mathematics, Physics, Chemistry, Biology, Economics, Business Studies, Computer Science, English Language, English Literature, Geography, History, etc.). You generate assessment questions aligned with Cambridge International Education (CIE) syllabi — including IGCSE, AS Level, and A Level.
 
 QUESTION STYLE GUIDELINES:
 - Structure questions using CIE command words: Calculate, State, Explain, Describe, Evaluate, Compare, Suggest, Define, Outline, Analyse, Discuss, Assess, Justify.
@@ -739,13 +761,42 @@ FORMATTING RULES:
 
 Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }].`;
 
-      // Inject uploaded document content so the copilot can reference it
-      let userMessage = String(message);
-      if (documentContext && typeof documentContext === "string" && documentContext.trim().length > 0) {
-        systemPrompt += `\n\nIMPORTANT: The teacher has uploaded supporting documents (past papers, syllabi, textbook excerpts). Their extracted content is provided below. Use this content to inform your question generation — match the style, difficulty, topic coverage, and format of the uploaded materials. When the teacher asks you to generate questions "like the uploaded paper" or "based on the document", refer directly to this content.\n\n=== UPLOADED DOCUMENTS ===\n${documentContext.slice(0, 15000)}\n=== END DOCUMENTS ===`;
+      // If PDFs were uploaded as supporting docs, send them directly to Gemini
+      // as multimodal input so it can see the original formatting, tables, diagrams
+      const pdfFileIds = Array.isArray(documentIds) ? documentIds : [];
+      const docsDir = path.resolve(process.cwd(), "supporting-docs");
+      const pdfParts: { inlineData: { mimeType: string; data: string } }[] = [];
+      for (const fileId of pdfFileIds) {
+        // Validate filename to prevent directory traversal
+        if (typeof fileId !== "string" || fileId.includes("..") || fileId.includes("/")) continue;
+        const filePath = path.join(docsDir, fileId);
+        if (fs.existsSync(filePath)) {
+          const buffer = fs.readFileSync(filePath);
+          pdfParts.push({ inlineData: { mimeType: "application/pdf", data: buffer.toString("base64") } });
+        }
       }
 
-      const { data, metadata } = await generateWithFallback(systemPrompt, userMessage);
+      if (pdfParts.length > 0) {
+        // Use Gemini directly for multimodal PDF + text input
+        try {
+          const geminiModel = getGeminiModel();
+          const start = Date.now();
+          const result = await geminiModel.generateContent([
+            { text: systemPrompt + "\n\nThe teacher has uploaded supporting documents (past papers, syllabi, textbook excerpts) as PDFs attached below. Use these documents to inform your question generation — match the style, difficulty, topic coverage, and format of the uploaded materials. When the teacher asks you to generate questions based on the uploaded documents, refer directly to their content.\n\nTeacher's message: " + String(message) },
+            ...pdfParts,
+          ]);
+          const data = result.response.text();
+          const durationMs = Date.now() - start;
+          const drafts = extractJsonArray(data) || [];
+          res.json({ reply: data, drafts, metadata: { provider: "google", model: "gemini-2.5-flash", durationMs } });
+          return;
+        } catch (geminiErr: any) {
+          console.error("Gemini multimodal failed, falling back to text-only:", geminiErr.message);
+          // Fall through to text-only generateWithFallback below
+        }
+      }
+
+      const { data, metadata } = await generateWithFallback(systemPrompt, String(message));
       const drafts = extractJsonArray(data) || [];
       res.json({ reply: data, drafts, metadata });
     } catch (err: any) {
