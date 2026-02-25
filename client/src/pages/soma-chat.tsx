@@ -144,7 +144,9 @@ export default function SomaChatPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
+      // Guard against HTML responses (SPA catch-all returning index.html)
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok || !contentType.includes("application/json")) {
         // Fall back: use the orchestrator via a direct prompt without admin auth
         // Build the analysis client-side from existing feedback
         const feedbackParts = reports

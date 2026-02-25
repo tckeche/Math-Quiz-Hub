@@ -28,12 +28,26 @@ const UNICODE_MAP: [RegExp, string][] = [
   [/∑/g, '\\sum '],
   [/∫/g, '\\int '],
   [/→/g, '\\rightarrow '],
-  [/⁻/g, '^{-}'],
-  [/²/g, '^{2}'],
-  [/³/g, '^{3}'],
-  [/¹/g, '^{1}'],
-  [/⁰/g, '^{0}'],
 ];
+
+// Unicode superscript/subscript characters mapped to their plain equivalents
+const SUPERSCRIPT_MAP: Record<string, string> = {
+  '⁻': '-', '⁺': '+', '⁰': '0', '¹': '1', '²': '2', '³': '3',
+  '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+  'ⁿ': 'n', 'ⁱ': 'i',
+};
+const SUPERSCRIPT_RE = new RegExp(`[${Object.keys(SUPERSCRIPT_MAP).join('')}]+`, 'g');
+
+/**
+ * Combine consecutive Unicode superscript characters into a single ^{...} block.
+ * E.g. "x⁻²" → "x^{-2}", "m/s²" → "m/s^{2}", "x²³" → "x^{23}"
+ */
+function combineSuperscripts(text: string): string {
+  return text.replace(SUPERSCRIPT_RE, (match) => {
+    const inner = Array.from(match).map(ch => SUPERSCRIPT_MAP[ch] || ch).join('');
+    return `^{${inner}}`;
+  });
+}
 
 // Regex to detect undelimited LaTeX commands in plain text
 const LATEX_CMD_RE = /(?:\\frac\{[^}]*\}\{[^}]*\}|\\sqrt(?:\[[^\]]*\])?\{[^}]*\}|\\(?:sum|prod|int|lim|log|ln|sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan)(?:\b|[_^{]))[^\\]*/g;
@@ -45,8 +59,9 @@ const LATEX_CMD_RE = /(?:\\frac\{[^}]*\}\{[^}]*\}|\\sqrt(?:\[[^\]]*\])?\{[^}]*\}
 function autoWrapLatex(text: string): string {
   // Don't process if already has delimiters
   if (/\\\(|\\\[|\$/.test(text)) return text;
-  // If it contains known LaTeX commands, wrap the whole thing
-  if (/\\(?:frac|sqrt|sum|prod|int|lim|log|ln|sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|pm|times|div|leq|geq|neq|infty|rightarrow|alpha|beta|gamma|delta|theta|pi|lambda|mu|sigma|omega)\b/.test(text)) {
+  // If it contains known LaTeX commands OR caret/underscore braces, wrap the whole thing
+  if (/\\(?:frac|sqrt|sum|prod|int|lim|log|ln|sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|pm|times|div|leq|geq|neq|infty|rightarrow|alpha|beta|gamma|delta|theta|pi|lambda|mu|sigma|omega)\b/.test(text)
+    || /[\^_]\{/.test(text)) {
     return `\\(${text}\\)`;
   }
   return text;
@@ -59,8 +74,8 @@ export function unescapeLatex(str: string): string {
 export function renderLatex(text: string) {
   if (!text) return null;
 
-  // Pre-process: normalize Unicode math symbols to LaTeX
-  let processed = text;
+  // Pre-process: combine Unicode superscripts first (⁻² → ^{-2}), then other symbols
+  let processed = combineSuperscripts(text);
   for (const [pattern, replacement] of UNICODE_MAP) {
     processed = processed.replace(pattern, replacement);
   }
