@@ -637,6 +637,8 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
         return;
       }
       sendEvent("stage_done", { stage: 1 });
+      // Emit extracted text so the client can feed it to the copilot as context
+      sendEvent("extracted_text", { text: extractedText });
       if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
 
       // --- STAGE 2: AI solves the mathematics (waterfall fallback) ---
@@ -718,10 +720,10 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
 
   app.post("/api/admin/copilot-chat", async (req, res) => {
     try {
-      const { message } = req.body;
+      const { message, documentContext } = req.body;
       if (!message) return res.status(400).json({ message: "message is required" });
 
-      const systemPrompt = `You are a curriculum assistant for teachers across ALL subjects (Mathematics, Physics, Chemistry, Biology, Economics, Business Studies, Computer Science, English Language, English Literature, Geography, History, etc.). You generate assessment questions aligned with Cambridge International Education (CIE) syllabi — including IGCSE, AS Level, and A Level.
+      let systemPrompt = `You are a curriculum assistant for teachers across ALL subjects (Mathematics, Physics, Chemistry, Biology, Economics, Business Studies, Computer Science, English Language, English Literature, Geography, History, etc.). You generate assessment questions aligned with Cambridge International Education (CIE) syllabi — including IGCSE, AS Level, and A Level.
 
 QUESTION STYLE GUIDELINES:
 - Structure questions using CIE command words: Calculate, State, Explain, Describe, Evaluate, Compare, Suggest, Define, Outline, Analyse, Discuss, Assess, Justify.
@@ -737,7 +739,13 @@ FORMATTING RULES:
 
 Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }].`;
 
-      const { data, metadata } = await generateWithFallback(systemPrompt, String(message));
+      // Inject uploaded document content so the copilot can reference it
+      let userMessage = String(message);
+      if (documentContext && typeof documentContext === "string" && documentContext.trim().length > 0) {
+        systemPrompt += `\n\nIMPORTANT: The teacher has uploaded supporting documents (past papers, syllabi, textbook excerpts). Their extracted content is provided below. Use this content to inform your question generation — match the style, difficulty, topic coverage, and format of the uploaded materials. When the teacher asks you to generate questions "like the uploaded paper" or "based on the document", refer directly to this content.\n\n=== UPLOADED DOCUMENTS ===\n${documentContext.slice(0, 15000)}\n=== END DOCUMENTS ===`;
+      }
+
+      const { data, metadata } = await generateWithFallback(systemPrompt, userMessage);
       const drafts = extractJsonArray(data) || [];
       res.json({ reply: data, drafts, metadata });
     } catch (err: any) {
