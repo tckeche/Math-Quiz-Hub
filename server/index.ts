@@ -6,16 +6,6 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
-if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
-  app.use((req, res, next) => {
-    if (req.headers["x-forwarded-proto"] !== "https") {
-      return res.redirect(301, `https://${req.headers.host}${req.url}`);
-    }
-    next();
-  });
-}
-
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
@@ -71,6 +61,10 @@ app.use((req, res, next) => {
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/_health", (_req, res) => {
+  res.status(200).send("ok");
 });
 
 const port = parseInt(process.env.PORT || "5000", 10);
