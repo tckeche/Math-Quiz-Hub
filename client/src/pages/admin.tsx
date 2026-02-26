@@ -45,7 +45,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
       setError("");
       onLogin();
     } catch (err: any) {
-      setError(err?.message || "Incorrect password. Access denied.");
+      setError(err?.message || "Incorrect password. Please try again.");
     } finally {
       setLoading(false);
     }

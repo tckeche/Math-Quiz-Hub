@@ -93,9 +93,11 @@ describe("questionUploadSchema", () => {
     expect(result.success).toBe(true); // valid empty array
   });
 
-  it("rejects question with less than 2 options", () => {
-    const result = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A"] }]);
-    expect(result.success).toBe(false);
+  it("allows questions with fewer than 2 options (structured/essay types)", () => {
+    const oneOption = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A"] }]);
+    expect(oneOption.success).toBe(true);
+    const noOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: [] }]);
+    expect(noOptions.success).toBe(true);
   });
 
   it("rejects missing prompt_text", () => {

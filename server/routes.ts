@@ -243,7 +243,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/login", loginLimiter, async (req, res) => {
     const { password } = req.body;
     if (String(password || "") !== getAdminPassword()) {
-      return res.status(401).json({ message: "Invalid admin credentials" });
+      return res.status(401).json({ message: "Incorrect password. Please try again." });
     }
     const token = jwt.sign({ role: "admin" }, getJwtSecret(), { expiresIn: "12h" });
     res.cookie(ADMIN_COOKIE_NAME, token, {

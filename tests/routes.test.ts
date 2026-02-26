@@ -134,7 +134,7 @@ describe("POST /api/admin/login", () => {
   it("returns 401 with wrong password", async () => {
     const res = await request.post("/api/admin/login").send({ password: "wrongpassword" });
     expect(res.status).toBe(401);
-    expect(res.body.message).toMatch(/invalid/i);
+    expect(res.body.message).toMatch(/incorrect password/i);
   });
 
   it("returns 401 with empty password", async () => {
@@ -1284,7 +1284,7 @@ describe("Security: Additional hardening", () => {
     expect(res.status).toBe(400);
   });
 
-  it("question upload rejects items with too few options", async () => {
+  it("question upload accepts items with fewer than 2 options (structured/essay)", async () => {
     const cookie = await loginAsAdmin();
     const quiz = await createTestQuiz(cookie);
     const res = await request.post(`/api/admin/quizzes/${quiz.id}/questions`)
@@ -1292,7 +1292,7 @@ describe("Security: Additional hardening", () => {
       .send({
         questions: [{ prompt_text: "Q?", options: ["A"], correct_answer: "A", marks_worth: 1 }],
       });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
   });
 
   it("submission with non-finite startTime is rejected", async () => {

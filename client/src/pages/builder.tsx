@@ -599,7 +599,7 @@ export default function BuilderPage() {
                         const removed = supportingDocs[i];
                         setSupportingDocs((prev) => prev.filter((_, j) => j !== i));
                         setDocContext((prev) => prev.filter((d) => !(d.name === removed.name && d.type === removed.type)));
-                      }
+                      }}
                     >
                       <X className="w-3 h-3" />
                     </button>
