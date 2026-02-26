@@ -396,7 +396,8 @@ ${JSON.stringify(breakdown, null, 2)}`;
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     const qs = await storage.getQuestionsByQuizId(quizId);
-    const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
+    const validQs = qs.filter((q) => Array.isArray(q.options) && q.options.length >= 4);
+    const sanitized = validQs.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
   });
 
@@ -747,11 +748,19 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
 
       const systemPrompt = `You are a curriculum assistant for teachers across ALL subjects (Mathematics, Physics, Chemistry, Biology, Economics, Business Studies, Computer Science, English Language, English Literature, Geography, History, etc.). You generate assessment questions aligned with Cambridge International Education (CIE) syllabi — including IGCSE, AS Level, and A Level.
 
+CRITICAL RULE — MCQ ONLY:
+- Every question you generate MUST be a multiple-choice question (MCQ).
+- Every question MUST have exactly 4 options in the "options" array. NEVER leave options empty.
+- There must be exactly 1 correct answer and 3 plausible distractors.
+- Distractors must be based on common student misconceptions, partial knowledge, or typical exam errors.
+- NEVER generate open-ended, essay, short-answer, or free-response questions. This platform ONLY supports MCQs.
+- Even for subjects like Geography, History, English — convert the assessment into MCQ format with 4 distinct options.
+- The "correct_answer" value MUST exactly match one of the 4 strings in the "options" array.
+
 QUESTION STYLE GUIDELINES:
-- Structure questions using CIE command words: Calculate, State, Explain, Describe, Evaluate, Compare, Suggest, Define, Outline, Analyse, Discuss, Assess, Justify.
-- For quantitative subjects, model questions after CIE past paper formats (pastpapers.co, papacambridge.com) with realistic values and proper units.
-- Use multi-part questions where appropriate (a, b, c) with escalating difficulty.
-- Allocate marks realistically (1-2 marks for recall, 3-4 for application, 5+ for evaluation/analysis).
+- Structure question stems using CIE command words where appropriate: Identify, State, Which of the following, Select, Determine.
+- For quantitative subjects, model questions after CIE past paper MCQ formats with realistic values and proper units.
+- Allocate marks realistically (1-2 marks for recall, 2-3 for application, 3-5 for higher-order thinking).
 
 FORMATTING RULES:
 - Wrap ALL mathematical expressions in LaTeX delimiters: \\( ... \\) for inline, \\[ ... \\] for display.
@@ -759,7 +768,7 @@ FORMATTING RULES:
 - NEVER output bare LaTeX commands without delimiters.
 - For non-math subjects, use clean plain text with proper formatting.
 
-Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }].`;
+Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": ["option A", "option B", "option C", "option D"], "correct_answer": string, "marks_worth": number, "image_url": null }]. The "options" array MUST always contain exactly 4 strings.`;
 
       // If PDFs were uploaded as supporting docs, send them directly to Gemini
       // as multimodal input so it can see the original formatting, tables, diagrams
@@ -787,7 +796,8 @@ Respond conversationally first, then include a strict JSON array of draft questi
           ]);
           const data = result.response.text();
           const durationMs = Date.now() - start;
-          const drafts = extractJsonArray(data) || [];
+          const rawDrafts = extractJsonArray(data) || [];
+          const drafts = rawDrafts.filter((d: any) => Array.isArray(d.options) && d.options.length >= 4);
           res.json({ reply: data, drafts, metadata: { provider: "google", model: "gemini-2.5-flash", durationMs } });
           return;
         } catch (geminiErr: any) {
@@ -797,7 +807,8 @@ Respond conversationally first, then include a strict JSON array of draft questi
       }
 
       const { data, metadata } = await generateWithFallback(systemPrompt, String(message));
-      const drafts = extractJsonArray(data) || [];
+      const rawDrafts = extractJsonArray(data) || [];
+      const drafts = rawDrafts.filter((d: any) => Array.isArray(d.options) && d.options.length >= 4);
       res.json({ reply: data, drafts, metadata });
     } catch (err: any) {
       res.status(500).json({ message: `Copilot failed: ${err.message}` });
