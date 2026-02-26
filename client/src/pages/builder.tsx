@@ -12,8 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Send, Loader2, Sparkles, FileStack, Upload, Trash2,
-  FileText, X, Pencil, BookOpen,
-  Scan, Brain, Search, CheckCircle2, Eye, PartyPopper, LayoutDashboard
+  FileText, X, Pencil, BookOpen, Calendar,
+  Scan, Brain, Search, CheckCircle2, Eye, PartyPopper, LayoutDashboard, Clock
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { renderLatex, unescapeLatex } from '@/lib/render-latex';
@@ -61,6 +61,7 @@ export default function BuilderPage() {
   const [docContext, setDocContext] = useState<{ name: string; type: string; fileId: string }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const dueDateRef = useRef<HTMLInputElement>(null);
 
   const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
     queryKey: ["/api/admin/session"],
@@ -101,6 +102,8 @@ export default function BuilderPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat]);
+
+  const markMeta = () => { if (activeQuizId) setMetaDirty(true); };
 
   const ensureQuizExists = async (): Promise<number> => {
     if (activeQuizId) return activeQuizId;
@@ -291,12 +294,12 @@ export default function BuilderPage() {
   }
 
   if (sessionError) {
-    return <div className="min-h-screen bg-background p-6 text-red-400">Failed to verify admin session.</div>;
+    return <div className="min-h-screen bg-background p-4 md:p-6 text-red-400">Failed to verify admin session.</div>;
   }
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="glass-card p-8 text-center">
           <p className="text-slate-300">Please log in via <Link href="/admin" className="text-violet-400 underline">/admin</Link> first.</p>
         </div>
@@ -308,11 +311,11 @@ export default function BuilderPage() {
     return (
       <div className="min-h-screen bg-background">
         <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm">
-          <div className="max-w-[1400px] mx-auto px-6 py-4">
+          <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-4">
             <Skeleton className="h-8 w-48 bg-white/5" />
           </div>
         </header>
-        <main className="max-w-[1400px] mx-auto p-6 space-y-4">
+        <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-4">
           <Skeleton className="h-64 w-full bg-white/5" />
           <Skeleton className="h-64 w-full bg-white/5" />
         </main>
@@ -322,78 +325,94 @@ export default function BuilderPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Header */}
       <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <Link href="/admin">
-              <Button className="glow-button-outline" size="sm" data-testid="button-back-admin">
-                <ArrowLeft className="w-4 h-4 mr-1" />
-                Back
+              <Button className="glow-button-outline min-h-[44px] md:min-h-0" size="sm" data-testid="button-back-admin">
+                <ArrowLeft className="w-4 h-4 md:mr-1" />
+                <span className="hidden md:inline">Back</span>
               </Button>
             </Link>
-            <div className="flex items-center gap-3">
-              <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-8 w-auto object-contain" />
-              <div>
-                <h1 className="text-lg font-bold gradient-text" data-testid="text-builder-title">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-7 md:h-8 w-auto object-contain" />
+              <div className="min-w-0">
+                <h1 className="text-base md:text-lg font-bold gradient-text truncate" data-testid="text-builder-title">
                   {activeQuizId ? "Edit Assessment" : "New Assessment"}
                 </h1>
-                {activeQuizId && <p className="text-xs text-slate-500">ID: {activeQuizId}</p>}
+                {activeQuizId && <p className="text-[10px] md:text-xs text-slate-500">ID: {activeQuizId}</p>}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge className="bg-white/5 text-slate-400 border-white/10">
-              {totalQuestions} question{totalQuestions !== 1 ? "s" : ""}
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge className="bg-white/5 text-slate-400 border-white/10 text-[10px] md:text-xs">
+              {totalQuestions} Q{totalQuestions !== 1 ? "s" : ""}
             </Badge>
             <Button
-              className="border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:border-violet-500/50 transition-all"
+              className="border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:border-violet-500/50 transition-all min-h-[44px] md:min-h-0"
               size="sm"
               onClick={() => setShowPreview(true)}
               disabled={totalQuestions === 0}
               data-testid="button-preview-quiz"
             >
-              <Eye className="w-4 h-4 mr-1.5" />
-              Preview Quiz
+              <Eye className="w-4 h-4 md:mr-1.5" />
+              <span className="hidden md:inline">Preview Quiz</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="lg:col-span-3 space-y-4">
-          <div className="glass-card p-4">
+      {/* Main content — single column on mobile, 2-col grid on desktop */}
+      <main className="max-w-[1600px] mx-auto flex flex-col md:grid md:grid-cols-12 gap-4 p-4 md:p-6 lg:p-8">
+
+        {/* LEFT COLUMN (parameters + copilot + pipeline + docs) */}
+        <div className="md:col-span-8 flex flex-col gap-4">
+
+          {/* 1. Quiz Parameters */}
+          <div className="glass-card p-4 md:p-5">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="w-4 h-4 text-violet-400" />
               <h2 className="font-semibold text-slate-100 text-sm">Quiz Parameters</h2>
               {activeQuizId && <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] ml-auto">Live &middot; ID {activeQuizId}</Badge>}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-              <div className="col-span-2 md:col-span-1 space-y-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                 <Label className="text-slate-400 text-xs">Title</Label>
                 <Input
                   value={title}
-                  onChange={(e) => { setTitle(e.target.value); if (activeQuizId) setMetaDirty(true); }}
+                  onChange={(e) => { setTitle(e.target.value); markMeta(); }}
                   placeholder="e.g. Pure Mathematics Paper 1"
-                  className="glass-input text-sm"
+                  className="glass-input text-sm h-12"
                   data-testid="input-quiz-title"
                 />
               </div>
-              <div className="space-y-1 md:col-span-2">
+              <div className="space-y-1.5">
+                <Label className="text-slate-400 text-xs uppercase">Subject</Label>
+                <Input
+                  value={subject}
+                  onChange={(e) => { setSubject(e.target.value); markMeta(); }}
+                  placeholder="Mathematics"
+                  className="glass-input text-sm h-12"
+                  data-testid="input-quiz-subject"
+                />
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-slate-400 text-xs uppercase">Syllabus</Label>
                 <Input
                   value={syllabus}
-                  onChange={(e) => { setSyllabus(e.target.value); if (activeQuizId) setMetaDirty(true); }}
+                  onChange={(e) => { setSyllabus(e.target.value); markMeta(); }}
                   placeholder="Cambridge, Edexcel"
-                  className="glass-input text-sm"
+                  className="glass-input text-sm h-12"
                   data-testid="input-quiz-syllabus"
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label className="text-slate-400 text-xs uppercase">Level</Label>
                 <select
-                  className="w-full glass-input px-2.5 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm"
+                  className="w-full glass-input px-3 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm h-12"
                   value={level}
-                  onChange={(e) => { setLevel(e.target.value); if (activeQuizId) setMetaDirty(true); }}
+                  onChange={(e) => { setLevel(e.target.value); markMeta(); }}
                   data-testid="select-quiz-level"
                 >
                   <option value="">Select level</option>
@@ -402,34 +421,33 @@ export default function BuilderPage() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-1 md:col-span-2">
-                <Label className="text-slate-400 text-xs uppercase">Subject</Label>
-                <Input
-                  value={subject}
-                  onChange={(e) => { setSubject(e.target.value); if (activeQuizId) setMetaDirty(true); }}
-                  placeholder="Mathematics"
-                  className="glass-input text-sm"
-                  data-testid="input-quiz-subject"
-                />
+              <div className="space-y-1.5">
+                <Label className="text-slate-400 text-xs flex items-center gap-1">
+                  <Calendar className="w-3 h-3" /> Due Date
+                </Label>
+                <div className="relative">
+                  <Input
+                    ref={dueDateRef}
+                    type="datetime-local"
+                    value={dueDate}
+                    onChange={(e) => { setDueDate(e.target.value); markMeta(); }}
+                    className="glass-input text-sm h-12 pl-9 cursor-pointer"
+                    onClick={() => dueDateRef.current?.showPicker?.()}
+                    data-testid="input-quiz-due"
+                  />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-slate-400 text-xs">Due Date</Label>
-                <Input
-                  type="datetime-local"
-                  value={dueDate}
-                  onChange={(e) => { setDueDate(e.target.value); if (activeQuizId) setMetaDirty(true); }}
-                  className="glass-input text-sm"
-                  data-testid="input-quiz-due"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-slate-400 text-xs">Time (min)</Label>
+              <div className="space-y-1.5">
+                <Label className="text-slate-400 text-xs flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Time (min)
+                </Label>
                 <Input
                   type="number"
                   min="1"
                   value={timeLimit}
-                  onChange={(e) => { setTimeLimit(e.target.value); if (activeQuizId) setMetaDirty(true); }}
-                  className="glass-input text-sm"
+                  onChange={(e) => { setTimeLimit(e.target.value); markMeta(); }}
+                  className="glass-input text-sm h-12"
                   data-testid="input-quiz-time"
                 />
               </div>
@@ -437,7 +455,7 @@ export default function BuilderPage() {
             {metaDirty && activeQuizId && (
               <div className="mt-3 flex justify-end">
                 <Button
-                  className="glow-button text-xs"
+                  className="glow-button text-xs min-h-[44px]"
                   size="sm"
                   onClick={() => updateMetaMutation.mutate()}
                   disabled={updateMetaMutation.isPending || !title.trim() || !dueDate}
@@ -453,16 +471,128 @@ export default function BuilderPage() {
             )}
           </div>
 
-          <div className="glass-card p-4">
-            <div className="flex items-center gap-2 mb-3">
+          {/* 2. AI Copilot — Main Focus */}
+          <div className="glass-card flex flex-col overflow-hidden" style={{ minHeight: "400px" }}>
+            <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-violet-400" />
+              <span className="text-sm font-semibold text-slate-200" data-testid="tab-copilot">AI Co-Pilot</span>
+              {pipelineActive && <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400 ml-auto" />}
+              {totalQuestions > 0 && !pipelineActive && (
+                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] ml-auto">
+                  {totalQuestions} saved
+                </Badge>
+              )}
+            </div>
+
+            {/* Pipeline Progress */}
+            {pipelineActive && (
+              <div className="px-4 py-3 border-b border-white/5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {PIPELINE_STAGES.map((s) => {
+                    const isDone = completedStages.has(s.stage);
+                    const isActive = currentStage === s.stage && !isDone;
+                    return (
+                      <div
+                        key={s.stage}
+                        className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs transition-all ${
+                          isDone ? "bg-emerald-500/10 border-emerald-500/30" :
+                          isActive ? "bg-violet-500/10 border-violet-500/30 shadow-[0_0_15px_rgba(139,92,246,0.1)]" :
+                          "bg-white/[0.02] border-white/5 opacity-40"
+                        }`}
+                        data-testid={`pipeline-stage-${s.stage}`}
+                      >
+                        <span className="shrink-0">
+                          {s.icon === "scan" && <Scan className="w-3 h-3" />}
+                          {s.icon === "brain" && <Brain className="w-3 h-3" />}
+                          {s.icon === "pencil" && <Pencil className="w-3 h-3" />}
+                          {s.icon === "search" && <Search className="w-3 h-3" />}
+                        </span>
+                        <span className={`flex-1 truncate ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-500"}`}>
+                          {isActive ? s.label : s.aiName}
+                        </span>
+                        {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" /> :
+                         isActive ? <Loader2 className="w-3 h-3 animate-spin text-violet-400 shrink-0" /> :
+                         <div className="w-3 h-3 rounded-full border border-white/10 shrink-0" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Chat messages */}
+            <div className="flex-1 p-4 overflow-auto space-y-3 h-[50vh] md:h-auto md:min-h-[300px] md:max-h-[500px]">
+              {chat.length === 0 && (
+                <div className="text-center pt-8 space-y-2">
+                  <Sparkles className="w-8 h-8 mx-auto text-violet-400/40" />
+                  <p className="text-sm text-slate-400">Ask the AI to generate quiz questions.</p>
+                  <p className="text-xs text-slate-500">Questions are auto-saved to the database.</p>
+                  <p className="text-xs text-slate-600 italic">"Generate 5 IGCSE quadratics MCQs"</p>
+                </div>
+              )}
+              {docContext.length > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
+                  <FileText className="w-3.5 h-3.5 shrink-0" />
+                  {docContext.length} document{docContext.length > 1 ? "s" : ""} loaded as context
+                </div>
+              )}
+              {chat.map((m, i) => (
+                <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+                  <div className={`inline-block max-w-[90%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap leading-relaxed ${
+                    m.role === "user"
+                      ? "bg-violet-600/20 text-violet-200 border border-violet-500/20"
+                      : "bg-white/5 text-slate-300 border border-white/5"
+                  }`}>
+                    {m.text}
+                    {m.metadata && (
+                      <div className="mt-1.5 inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-slate-900/50 border border-white/5 text-[9px] text-slate-400 font-mono" data-testid={`badge-telemetry-${i}`}>
+                        <span>{m.metadata.model}</span>
+                        <span>{(m.metadata.durationMs / 1000).toFixed(2)}s</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat input */}
+            <div className="p-3 md:p-4 border-t border-white/5">
+              <div className="flex gap-2">
+                <Textarea
+                  value={msg}
+                  onChange={(e) => setMsg(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={activeQuizId ? "Ask to edit or add questions..." : "Ask for questions..."}
+                  className="glass-input flex-1 min-h-[44px] max-h-[100px] resize-none text-sm"
+                  data-testid="input-copilot-message"
+                />
+                <Button
+                  className="glow-button shrink-0 self-end min-h-[44px] min-w-[44px]"
+                  size="icon"
+                  onClick={handleSend}
+                  disabled={!msg.trim() || chatMutation.isPending}
+                  data-testid="button-copilot-send"
+                >
+                  {chatMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Supporting Documents — Below Copilot */}
+          <div className="glass-card p-4 md:p-5">
+            <div className="flex items-center gap-2 mb-2">
               <Upload className="w-4 h-4 text-violet-400" />
               <h2 className="font-semibold text-slate-100 text-sm">Supporting Documents</h2>
-              <span className="text-[10px] text-slate-500">(Syllabi, past papers, textbook excerpts)</span>
             </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Upload a syllabus, past paper, or any other documents that the AI can help with generating questions from.
+            </p>
             <div className="flex flex-wrap items-center gap-3">
               <select
                 id="doc-type-select"
-                className="glass-input px-2.5 py-1.5 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-xs"
+                className="glass-input px-3 py-2 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm min-h-[44px]"
                 defaultValue="past-paper"
                 data-testid="select-doc-type"
               >
@@ -472,8 +602,8 @@ export default function BuilderPage() {
                 <option value="notes">Custom Notes</option>
               </select>
               <Label htmlFor="supporting-doc-input" className="cursor-pointer">
-                <div className="flex items-center gap-1.5 text-xs text-violet-300 border border-violet-500/30 bg-violet-500/10 rounded-lg px-3 py-1.5 hover:bg-violet-500/20 transition-colors">
-                  <Upload className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-1.5 text-sm text-violet-300 border border-violet-500/30 bg-violet-500/10 rounded-lg px-4 py-2.5 min-h-[44px] hover:bg-violet-500/20 transition-colors">
+                  <Upload className="w-4 h-4" />
                   Upload PDF
                 </div>
                 <input
@@ -493,89 +623,63 @@ export default function BuilderPage() {
               </Label>
             </div>
             {supportingDocs.length > 0 && (
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-3 space-y-2">
                 {supportingDocs.map((doc, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-slate-400 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-1.5">
-                    <FileText className="w-3 h-3 text-violet-400 shrink-0" />
+                  <div key={i} className="flex items-center gap-2 text-sm text-slate-400 bg-white/[0.03] border border-white/5 rounded-lg px-4 py-2.5 min-h-[44px]">
+                    <FileText className="w-4 h-4 text-violet-400 shrink-0" />
                     <span className="truncate flex-1">{doc.name}</span>
                     <span className="text-[10px] uppercase text-slate-500 shrink-0">{doc.type}</span>
                     {doc.processing ? (
-                      <Loader2 className="w-3 h-3 animate-spin text-violet-400 shrink-0" />
+                      <Loader2 className="w-4 h-4 animate-spin text-violet-400 shrink-0" />
                     ) : (
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     )}
                     <button
-                      className="text-slate-500 hover:text-red-400 shrink-0"
+                      className="text-slate-500 hover:text-red-400 shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
                       onClick={() => {
                         const removed = supportingDocs[i];
                         setSupportingDocs((prev) => prev.filter((_, j) => j !== i));
                         setDocContext((prev) => prev.filter((d) => !(d.name === removed.name && d.type === removed.type)));
                       }}
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
+        </div>
 
-          {pipelineActive && (
-            <div className="glass-card p-3">
-              <div className="grid grid-cols-4 gap-2">
-                {PIPELINE_STAGES.map((s) => {
-                  const isDone = completedStages.has(s.stage);
-                  const isActive = currentStage === s.stage && !isDone;
-                  return (
-                    <div
-                      key={s.stage}
-                      className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs transition-all ${
-                        isDone ? "bg-emerald-500/10 border-emerald-500/30" :
-                        isActive ? "bg-violet-500/10 border-violet-500/30 shadow-[0_0_15px_rgba(139,92,246,0.1)]" :
-                        "bg-white/[0.02] border-white/5 opacity-40"
-                      }`}
-                      data-testid={`pipeline-stage-${s.stage}`}
-                    >
-                      <span className="shrink-0">
-                        {s.icon === "scan" && <Scan className="w-3 h-3" />}
-                        {s.icon === "brain" && <Brain className="w-3 h-3" />}
-                        {s.icon === "pencil" && <Pencil className="w-3 h-3" />}
-                        {s.icon === "search" && <Search className="w-3 h-3" />}
-                      </span>
-                      <span className={`flex-1 truncate ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-500"}`}>
-                        {isActive ? s.label : s.aiName}
-                      </span>
-                      {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> :
-                       isActive ? <Loader2 className="w-3 h-3 animate-spin text-violet-400" /> :
-                       <div className="w-3 h-3 rounded-full border border-white/10" />}
-                    </div>
-                  );
-                })}
-              </div>
+        {/* RIGHT COLUMN — Saved Questions (desktop sidebar) */}
+        <div className="md:col-span-4">
+          <div className="glass-card p-4 md:p-5 md:sticky md:top-20">
+            <div className="flex items-center gap-2 mb-3">
+              <FileStack className="w-4 h-4 text-emerald-400" />
+              <h2 className="font-semibold text-slate-100 text-sm">Saved Questions</h2>
+              <Badge className="bg-white/5 text-slate-400 border-white/10 text-[10px] ml-auto">{totalQuestions}</Badge>
             </div>
-          )}
 
-          <div className="space-y-3">
-            {savedQuestions.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
-                  Saved Questions ({savedQuestions.length})
-                </p>
+            {savedQuestions.length === 0 && !pipelineActive ? (
+              <div className="py-8 text-center space-y-2">
+                <FileStack className="w-8 h-8 mx-auto text-slate-700" />
+                <p className="text-sm text-slate-500">No questions yet.</p>
+                <p className="text-xs text-slate-600">Use the AI Co-Pilot to generate and auto-save questions.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[60vh] md:max-h-[calc(100vh-180px)] overflow-auto">
                 {savedQuestions.map((q, idx) => (
-                  <div key={q.id} className="glass-card p-4 flex items-start gap-3" data-testid={`card-saved-q-${q.id}`}>
-                    <span className="text-xs font-mono text-emerald-400 font-medium mt-0.5 shrink-0 w-7">Q{idx + 1}</span>
+                  <div key={q.id} className="bg-white/[0.03] border border-white/5 rounded-lg p-3 flex items-start gap-2" data-testid={`card-saved-q-${q.id}`}>
+                    <span className="text-xs font-mono text-emerald-400 font-medium mt-0.5 shrink-0 w-6">Q{idx + 1}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-slate-200 mb-1.5">{renderLatex(unescapeLatex(q.promptText))}</div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">{q.options.length} options</Badge>
-                        <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">{q.marksWorth} marks</Badge>
-                        {q.imageUrl && <Badge className="bg-white/5 text-slate-400 border-white/10 text-xs">Has image</Badge>}
+                      <div className="text-xs text-slate-300 line-clamp-2">{renderLatex(unescapeLatex(q.promptText))}</div>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.options.length} opts</Badge>
+                        <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.marksWorth}m</Badge>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="w-7 h-7 text-slate-500 hover:text-red-400 shrink-0"
+                    <button
+                      className="text-slate-600 hover:text-red-400 shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg transition-colors"
                       onClick={() => {
                         if (confirm("Delete this question permanently?")) {
                           deleteQuestionMutation.mutate(q.id);
@@ -584,91 +688,19 @@ export default function BuilderPage() {
                       data-testid={`button-delete-saved-${q.id}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                    </button>
                   </div>
                 ))}
               </div>
             )}
-
-            {savedQuestions.length === 0 && !pipelineActive && (
-              <div className="glass-card p-8 text-center space-y-2">
-                <FileStack className="w-8 h-8 mx-auto text-slate-600" />
-                <p className="text-sm text-slate-500">No questions yet.</p>
-                <p className="text-xs text-slate-600">Use the AI Co-Pilot to generate and auto-save questions.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="lg:col-span-1">
-          <div className="glass-card flex flex-col overflow-hidden sticky top-16 z-10" style={{ height: "calc(100vh - 90px)" }}>
-            <div className="px-3 py-2.5 border-b border-white/5 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-              <span className="text-xs font-semibold text-slate-300" data-testid="tab-copilot">AI Co-Pilot</span>
-              {pipelineActive && <Loader2 className="w-3 h-3 animate-spin text-violet-400 ml-auto" />}
-            </div>
-            <div className="flex-1 p-2.5 overflow-auto space-y-2">
-              {chat.length === 0 && (
-                <div className="text-center pt-8 space-y-1.5">
-                  <Sparkles className="w-6 h-6 mx-auto text-violet-400/50" />
-                  <p className="text-xs text-slate-500">Ask the AI to generate quiz questions.</p>
-                  <p className="text-[10px] text-slate-600 leading-relaxed">Questions are auto-saved to the database.</p>
-                  <p className="text-[10px] text-slate-600">"Generate 5 IGCSE quadratics MCQs"</p>
-                </div>
-              )}
-              {docContext.length > 0 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400">
-                  <FileText className="w-3 h-3 shrink-0" />
-                  {docContext.length} document{docContext.length > 1 ? "s" : ""} loaded as context
-                </div>
-              )}
-              {chat.map((m, i) => (
-                <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
-                  <div className={`inline-block max-w-[92%] rounded-lg px-2.5 py-1.5 text-xs whitespace-pre-wrap leading-relaxed ${
-                    m.role === "user"
-                      ? "bg-violet-600/20 text-violet-200 border border-violet-500/20"
-                      : "bg-white/5 text-slate-300 border border-white/5"
-                  }`}>
-                    {m.text}
-                    {m.metadata && (
-                      <div className="mt-1.5 inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-slate-900/50 border border-white/5 text-[9px] text-slate-400 font-mono" data-testid={`badge-telemetry-${i}`}>
-                        <span>{m.metadata.model}</span>
-                        <span>{(m.metadata.durationMs / 1000).toFixed(2)}s</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-            <div className="p-2.5 border-t border-white/5">
-              <div className="flex gap-1.5">
-                <Textarea
-                  value={msg}
-                  onChange={(e) => setMsg(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={activeQuizId ? "Ask to edit or add questions..." : "Ask for questions..."}
-                  className="glass-input flex-1 min-h-[36px] max-h-[80px] resize-none text-xs"
-                  data-testid="input-copilot-message"
-                />
-                <Button
-                  className="glow-button shrink-0 self-end"
-                  size="icon"
-                  onClick={handleSend}
-                  disabled={!msg.trim() || chatMutation.isPending}
-                  data-testid="button-copilot-send"
-                >
-                  {chatMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                </Button>
-              </div>
-            </div>
           </div>
         </div>
       </main>
 
+      {/* Success Modal */}
       {showSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="modal-success">
-          <div className="glass-card w-full max-w-md p-8 text-center space-y-5 border border-violet-500/20 shadow-[0_0_40px_rgba(139,92,246,0.15)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="modal-success">
+          <div className="glass-card w-full max-w-md p-6 md:p-8 text-center space-y-5 border border-violet-500/20 shadow-[0_0_40px_rgba(139,92,246,0.15)]">
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500/20 to-violet-500/20 flex items-center justify-center mx-auto border border-emerald-500/30">
               <PartyPopper className="w-8 h-8 text-emerald-400" />
             </div>
@@ -680,7 +712,7 @@ export default function BuilderPage() {
             </div>
             <div className="flex flex-col gap-2.5 pt-2">
               <Button
-                className="w-full glow-button"
+                className="w-full glow-button min-h-[48px]"
                 onClick={() => { setShowSuccessModal(false); setShowPreview(true); }}
                 data-testid="button-success-preview"
               >
@@ -688,7 +720,7 @@ export default function BuilderPage() {
                 Preview Quiz
               </Button>
               <Link href="/admin">
-                <Button className="w-full glow-button-outline" data-testid="button-success-dashboard">
+                <Button className="w-full glow-button-outline min-h-[48px]" data-testid="button-success-dashboard">
                   <LayoutDashboard className="w-4 h-4 mr-2" />
                   Back to Dashboard
                 </Button>
@@ -698,6 +730,7 @@ export default function BuilderPage() {
         </div>
       )}
 
+      {/* Preview Modal */}
       {showPreview && (
         <div className="fixed inset-0 z-50 bg-background overflow-auto" data-testid="modal-preview">
           <SomaQuizEngine

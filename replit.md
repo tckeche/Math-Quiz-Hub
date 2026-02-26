@@ -26,7 +26,8 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `server/seed.ts` - Database seeding with sample quizzes
 - `client/src/pages/home.tsx` - Homepage with quiz listing
 - `client/src/pages/admin.tsx` - Admin dashboard (login, quiz listing, quiz detail view with results, PDF generation, AI analysis)
-- `client/src/pages/builder.tsx` - Zero-click quiz builder: 2-column layout with quiz params (left) and AI copilot + saved questions (right). Copilot auto-creates quiz and saves questions directly to DB (no draft state). Success modal with Preview/Dashboard buttons. Supports create (`/admin/builder`) and edit (`/admin/builder/:id`) modes.
+- `client/src/pages/builder.tsx` - Zero-click quiz builder: mobile-first responsive layout (flex-col → md:grid-cols-12). Order: Quiz Parameters → AI Copilot (main focus) → Supporting Documents → Saved Questions sidebar. Copilot auto-creates quiz and saves questions directly to DB (no draft state). All inputs h-12 with 44px touch targets. Calendar/Clock icons on date/time fields. Success modal with Preview/Dashboard buttons. Supports create (`/admin/builder`) and edit (`/admin/builder/:id`) modes.
+- `client/src/lib/subjectColors.ts` - Shared subject color & icon utility. `getSubjectColor(subject)` returns hex + Tailwind classes (bg, border, ring, label). `getSubjectIcon(subject)` returns contextual Lucide icon (Calculator for math, FlaskConical for chemistry, Code for CS, etc.). Both cached for performance. Used by admin quiz cards, student quiz cards, and donut charts.
 - `client/src/pages/quiz.tsx` - Student quiz interface (entry gate, exam view, timer, submission, single-attempt enforcement)
 - `client/src/pages/StudentAuth.tsx` - Student login/signup with Supabase Auth (glassmorphism UI)
 - `client/src/components/ProtectedRoute.tsx` - Auth-gated route wrapper using supabase.auth.onAuthStateChange

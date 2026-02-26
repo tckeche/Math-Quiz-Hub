@@ -1,0 +1,26 @@
+{
+  "system_prompt": {
+    "task": "SOMA Admin UI Refactor - Mobile Optimization & Layout Restructuring",
+    "role": "Lead Frontend Architect & UI/UX Expert",
+    "objective": "The current Admin Quiz Builder is fundamentally broken on mobile screens and has a disjointed layout. You must restructure the component hierarchy, fix input sizing anomalies, implement a modern datetime picker, and completely overhaul the Tailwind classes for a flawless, crisp mobile experience.",
+    "execution_instructions": "Read the JSON configuration below. Rewrite AdminQuizBuilder.tsx and any child components to match these layout and mobile-responsive rules exactly. Output a summary of the UI fixes."
+  },
+  "architecture_updates": {
+    "1_parameter_grid_and_sizing": {
+      "target_file": "AdminQuizBuilder.tsx",
+      "level_input_fix": "The 'Level' input is weirdly sized. Wrap Title, Subject, Syllabus, and Level in a uniform CSS Grid: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'. Ensure all input boxes have the exact same 'h-12' (or similar) height and full width.",
+      "due_date_picker": "Replace the standard text/date input for 'Due Date/Time Limit'. Implement a sleek input with a leading Lucide 'Calendar' icon. When clicked, it must pop up a native native datetime picker (or a clean UI calendar/time dial) formatted for our dark glassmorphism theme."
+    },
+    "2_layout_restructuring": {
+      "remove_questions_ui": "Completely DELETE the 'Questions' draft section from the DOM. It is no longer needed in the direct-to-database flow.",
+      "component_order": "The vertical flow of the page MUST be exactly this: 1. Quiz Parameters (Top), 2. Copilot Interface (Middle - Main Focus), 3. Supporting Documents (Bottom).",
+      "supporting_documents_ui": "Move the document upload section strictly BELOW the Copilot. Add this exact helper text above the upload zone: 'Upload a syllabus, past paper, or any other documents that the AI can help with generating questions from.'"
+    },
+    "3_mobile_optimization_overhaul": {
+      "responsive_stacking": "Remove any forced multi-column layouts on mobile. The main wrapper must use 'flex flex-col md:grid md:grid-cols-12'. On mobile (screens < 768px), EVERYTHING must stack in a single, easy-to-scroll column.",
+      "touch_targets": "Ensure every single button, dropdown arrow, and input field has a minimum touch target height of 44px ('min-h-[44px]' or 'h-12') so it is easily tappable on an iPhone/Android.",
+      "padding_and_margins": "Adjust padding for mobile. Use 'p-4' on mobile containers so content doesn't touch the screen edges, and scale up to 'md:p-6' or 'lg:p-8' on larger screens.",
+      "copilot_mobile_fix": "Ensure the Copilot chat window has a constrained height on mobile (e.g., 'h-[50vh]') so it doesn't push the rest of the page off into oblivion. The chat input must remain securely pinned to the bottom of the Copilot container without causing horizontal scrolling."
+    }
+  }
+}

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
-import { getSubjectColor } from "@/lib/subjectColors";
+import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
 import DOMPurify from "dompurify";
 import type { Quiz, SomaQuiz } from "@shared/schema";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
@@ -488,6 +488,7 @@ export default function StudentDashboard() {
                       {visibleAvailable.map((q) => {
                         const isOverdue = q.dueDate && new Date(q.dueDate) < now;
                         const sc = getSubjectColor(q.subject);
+                        const SubjectIcon = getSubjectIcon(q.subject);
                         return (
                           <Link
                             key={`${q.type}-${q.id}`}
@@ -498,6 +499,9 @@ export default function StudentDashboard() {
                               data-testid={`card-available-quiz-${q.type}-${q.id}`}
                             >
                               <div className="flex items-start justify-between gap-3">
+                                <div className={`w-10 h-10 rounded-xl ${sc.bg} border ${sc.border} flex items-center justify-center shrink-0`}>
+                                  <SubjectIcon className={`w-5 h-5 ${sc.label}`} />
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1.5">
                                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
@@ -564,6 +568,7 @@ export default function StudentDashboard() {
                     <>
                       {visibleCompleted.map((item) => {
                         const sc = getSubjectColor(item.subject);
+                        const CompletedSubjectIcon = getSubjectIcon(item.subject);
                         const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
                         const isPending = item.status === "pending";
                         const isFailed = item.status === "failed";
@@ -578,6 +583,9 @@ export default function StudentDashboard() {
                             data-testid={`card-completed-${item.type}-${item.id}`}
                           >
                             <div className="flex items-start justify-between gap-3">
+                              <div className={`w-10 h-10 rounded-xl ${sc.bg} border ${sc.border} flex items-center justify-center shrink-0`}>
+                                <CompletedSubjectIcon className={`w-5 h-5 ${sc.label}`} />
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>

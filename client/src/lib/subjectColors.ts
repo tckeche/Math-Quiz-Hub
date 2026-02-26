@@ -1,3 +1,10 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Calculator, Sigma, FlaskConical, Dna, Code, Globe, BookOpen,
+  FileText, Atom, Languages, Music, Palette, Scale, TrendingUp,
+  Building2, Heart, Leaf, Microscope, Cpu, PenTool
+} from "lucide-react";
+
 function hashString(str: string): number {
   let hash = 5381;
   const normalized = str.toLowerCase().trim();
@@ -47,7 +54,7 @@ const TW_RING_CLASSES = [
   "ring-yellow-400", "ring-sky-400", "ring-green-400", "ring-red-400",
 ];
 
-interface SubjectColor {
+export interface SubjectColor {
   hex: string;
   bg: string;
   border: string;
@@ -79,4 +86,46 @@ export function getSubjectColor(subject: string | null | undefined): SubjectColo
 
   colorCache.set(key, color);
   return color;
+}
+
+const ICON_KEYWORDS: [string[], LucideIcon][] = [
+  [["math", "maths", "mathematics", "calculus", "algebra", "trigonometry", "geometry", "statistics", "arithmetic"], Calculator],
+  [["pure math", "pure maths", "further math", "further maths", "advanced math"], Sigma],
+  [["physics", "mechanics", "dynamics", "thermodynamics"], Atom],
+  [["chemistry", "chem", "organic", "inorganic", "biochemistry"], FlaskConical],
+  [["biology", "bio", "botany", "zoology", "genetics", "anatomy", "physiology"], Dna],
+  [["science", "natural science", "general science", "physical science"], Microscope],
+  [["computer", "computing", "cs", "programming", "coding", "software", "it", "information technology", "informatics"], Code],
+  [["engineering", "electrical", "mechanical", "civil"], Cpu],
+  [["history", "hist", "ancient", "medieval", "modern history"], Building2],
+  [["geography", "geog", "geo", "earth science", "environmental"], Globe],
+  [["english", "literature", "lang", "language arts", "writing", "creative writing", "essay"], PenTool],
+  [["french", "spanish", "german", "mandarin", "arabic", "latin", "linguistics", "foreign language", "second language"], Languages],
+  [["music", "musical"], Music],
+  [["art", "visual art", "design", "graphic", "fine art", "photography"], Palette],
+  [["economics", "econ", "business", "finance", "accounting", "commerce"], TrendingUp],
+  [["law", "legal", "politics", "political science", "government", "civics"], Scale],
+  [["health", "medicine", "medical", "nursing", "pe", "physical education", "sport", "sports science"], Heart],
+  [["environmental", "ecology", "sustainability", "agriculture"], Leaf],
+];
+
+const iconCache = new Map<string, LucideIcon>();
+
+export function getSubjectIcon(subject: string | null | undefined): LucideIcon {
+  if (!subject) return FileText;
+
+  const key = subject.toLowerCase().trim();
+  if (iconCache.has(key)) return iconCache.get(key)!;
+
+  for (const [keywords, icon] of ICON_KEYWORDS) {
+    for (const kw of keywords) {
+      if (key.includes(kw) || kw.includes(key)) {
+        iconCache.set(key, icon);
+        return icon;
+      }
+    }
+  }
+
+  iconCache.set(key, BookOpen);
+  return BookOpen;
 }

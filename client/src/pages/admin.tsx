@@ -22,6 +22,7 @@ import {
 import { format } from "date-fns";
 import 'katex/dist/katex.min.css';
 import { renderLatex, unescapeLatex } from '@/lib/render-latex';
+import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
 
 interface GeneratedQuestion {
   prompt_text: string;
@@ -946,6 +947,9 @@ export default function AdminPage() {
                 {quizzes.map((quiz) => {
                   const isClosed = new Date(quiz.dueDate) < new Date();
                   const isChecked = selectedIds.includes(quiz.id);
+                  const quizSubject = quiz.snapshot?.subject || quiz.subject || null;
+                  const sc = getSubjectColor(quizSubject);
+                  const SubjectIcon = getSubjectIcon(quizSubject);
                   return (
                     <div
                       key={quiz.id}
@@ -963,8 +967,8 @@ export default function AdminPage() {
                               setSelectedIds((prev) => e.target.checked ? [...prev, quiz.id] : prev.filter((id) => id !== quiz.id));
                             }}
                           />
-                          <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0 border border-violet-500/20">
-                            <BookOpen className="w-4 h-4 text-violet-400" />
+                          <div className={`w-9 h-9 rounded-lg ${sc.bg} flex items-center justify-center shrink-0 border ${sc.border}`}>
+                            <SubjectIcon className={`w-4 h-4 ${sc.label}`} />
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-semibold truncate text-slate-100">{quiz.title}</h3>
@@ -987,7 +991,7 @@ export default function AdminPage() {
                       <div className="mt-3 pt-3 border-t border-white/10 text-xs text-slate-400 flex gap-4 flex-wrap">
                         <span>Total Questions: {quiz.snapshot?.totalQuestions ?? 0}</span>
                         <span>Total Submissions: {quiz.snapshot?.totalSubmissions ?? 0}</span>
-                        <span>Subject: {quiz.snapshot?.subject || quiz.subject || "General"}</span>
+                        <span className={sc.label}>Subject: {quizSubject || "General"}</span>
                         <span>Level: {quiz.snapshot?.level || quiz.level || "N/A"}</span>
                       </div>
                     </div>
