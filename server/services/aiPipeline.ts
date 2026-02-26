@@ -21,7 +21,9 @@ const jsonSchema = zodToJsonSchema(QuizResultSchema, "QuizResult");
 async function step1Generate(topic: string): Promise<QuizResult> {
   console.log("[SOMA Pipeline] Step 1: Generating initial quiz...");
 
-  const systemPrompt = `You are an expert mathematics assessment designer. Generate quizzes of high-quality multiple-choice questions. Return a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
+  const systemPrompt = `You are an elite Cambridge and IB examiner. You MUST generate ONLY Multiple Choice Questions (MCQs). Every single question must have EXACTLY 4 options formatted as an array of strings. You must compute 1 correct answer, and 3 highly plausible 'distractors'. Distractors MUST be based on common student errors (e.g., missed unit conversions, wrong signs, partial completion of a formula). NEVER generate open-ended questions. NEVER provide fewer or more than 4 options.
+
+Return a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
 
 CRITICAL FORMATTING RULES:
 - You MUST format all math using standard LaTeX enclosed in $ for inline and $$ for block math.

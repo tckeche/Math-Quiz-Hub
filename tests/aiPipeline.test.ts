@@ -241,10 +241,10 @@ describe("generateAuditedQuiz: System prompt content", () => {
     mockGenerateWithFallback.mockResolvedValue(makeAIResult(JSON.stringify(validQuizResult)));
   });
 
-  it("stage 1 system prompt mentions 'expert mathematics'", async () => {
+  it("stage 1 system prompt enforces strict MCQ generation", async () => {
     await generateAuditedQuiz("Algebra");
     const [systemPrompt] = mockGenerateWithFallback.mock.calls[0];
-    expect(systemPrompt.toLowerCase()).toMatch(/expert|mathematics|assessment/i);
+    expect(systemPrompt.toLowerCase()).toMatch(/examiner|mcq|multiple choice|exactly 4/i);
   });
 
   it("stage 2 system prompt mentions 'audit' or 'accuracy'", async () => {

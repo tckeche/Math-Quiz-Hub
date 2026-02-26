@@ -93,11 +93,20 @@ describe("questionUploadSchema", () => {
     expect(result.success).toBe(true); // valid empty array
   });
 
-  it("allows questions with fewer than 2 options (structured/essay types)", () => {
+  it("rejects questions without exactly 4 options", () => {
     const oneOption = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A"] }]);
-    expect(oneOption.success).toBe(true);
+    expect(oneOption.success).toBe(false);
     const noOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: [] }]);
-    expect(noOptions.success).toBe(true);
+    expect(noOptions.success).toBe(false);
+    const threeOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A", "B", "C"] }]);
+    expect(threeOptions.success).toBe(false);
+    const fiveOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A", "B", "C", "D", "E"] }]);
+    expect(fiveOptions.success).toBe(false);
+  });
+
+  it("accepts questions with exactly 4 options", () => {
+    const fourOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A", "B", "C", "D"] }]);
+    expect(fourOptions.success).toBe(true);
   });
 
   it("rejects missing prompt_text", () => {

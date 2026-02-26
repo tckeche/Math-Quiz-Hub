@@ -704,7 +704,7 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
               type: "object",
               properties: {
                 prompt_text: { type: "string" },
-                options: { type: "array", items: { type: "string" } },
+                options: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 4 },
                 correct_answer: { type: "string" },
                 marks_worth: { type: "integer" },
               },
@@ -715,7 +715,7 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
         required: ["questions"],
       };
       const { data: gptOutput } = await generateWithFallback(
-        "You are a backend JSON inspector. Your ONLY job is to convert the input into a perfectly valid JSON object with a 'questions' array. Return ONLY valid JSON — no markdown, no code fences, no explanation.",
+        "You are a backend JSON inspector. Your ONLY job is to convert the input into a perfectly valid JSON object with a 'questions' array. Each question MUST have exactly 4 options — no more, no fewer. Return ONLY valid JSON — no markdown, no code fences, no explanation.",
         `Convert this structured question data into a JSON object with a "questions" array matching this schema:\n{ "questions": [{ "prompt_text": string, "options": [string, string, string, string], "correct_answer": string, "marks_worth": number }] }\n\nRules:\n- Every LaTeX backslash must be double-escaped (\\\\frac not \\frac)\n- The correct_answer must exactly match one of the options\n- marks_worth must be a positive integer\n- The JSON must be valid for JSON.parse()\n- Return ONLY the raw JSON object\n\nInput:\n${formattedText}`,
         stage4Schema
       );
@@ -759,7 +759,9 @@ FORMATTING RULES:
 - NEVER output bare LaTeX commands without delimiters.
 - For non-math subjects, use clean plain text with proper formatting.
 
-Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string], "correct_answer": string, "marks_worth": number, "image_url": string | null }].`;
+STRICT MCQ RULE: Every question you generate MUST be a Multiple Choice Question with EXACTLY 4 options. Compute 1 correct answer and 3 highly plausible distractors based on common student errors. NEVER generate open-ended or structured questions. NEVER provide fewer or more than 4 options.
+
+Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": [string, string, string, string], "correct_answer": string, "marks_worth": number, "image_url": string | null }].`;
 
       // If PDFs were uploaded as supporting docs, send them directly to Gemini
       // as multimodal input so it can see the original formatting, tables, diagrams

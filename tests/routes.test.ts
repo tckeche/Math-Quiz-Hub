@@ -1284,7 +1284,7 @@ describe("Security: Additional hardening", () => {
     expect(res.status).toBe(400);
   });
 
-  it("question upload accepts items with fewer than 2 options (structured/essay)", async () => {
+  it("question upload rejects items without exactly 4 options", async () => {
     const cookie = await loginAsAdmin();
     const quiz = await createTestQuiz(cookie);
     const res = await request.post(`/api/admin/quizzes/${quiz.id}/questions`)
@@ -1292,7 +1292,7 @@ describe("Security: Additional hardening", () => {
       .send({
         questions: [{ prompt_text: "Q?", options: ["A"], correct_answer: "A", marks_worth: 1 }],
       });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
   });
 
   it("submission with non-finite startTime is rejected", async () => {
