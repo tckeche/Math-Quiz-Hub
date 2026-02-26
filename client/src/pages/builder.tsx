@@ -432,7 +432,7 @@ export default function BuilderPage() {
                     value={dueDate}
                     onChange={(e) => { setDueDate(e.target.value); markMeta(); }}
                     className="glass-input text-sm h-12 pl-9 cursor-pointer"
-                    onClick={() => dueDateRef.current?.showPicker?.()}
+                    onClick={() => { try { dueDateRef.current?.showPicker?.(); } catch {} }}
                     data-testid="input-quiz-due"
                   />
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
