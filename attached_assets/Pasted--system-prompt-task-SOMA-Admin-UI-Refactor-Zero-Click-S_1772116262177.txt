@@ -1,0 +1,35 @@
+{
+  "system_prompt": {
+    "task": "SOMA Admin UI Refactor - Zero-Click Save & Bypass Draft State",
+    "role": "Principal React Engineer & UX Architect",
+    "objective": "Streamline the Admin Quiz Builder flow. Remove the intermediate 'Draft' state entirely. The Copilot must generate the quiz, audit it, save it directly to the database, and present a Success Modal with a Preview button.",
+    "execution_instructions": "Read the JSON configuration below. Refactor the AdminQuizBuilder and Copilot components to implement this direct-to-database flow. Output a summary of the code changes."
+  },
+  "architecture_updates": {
+    "1_remove_draft_ui": {
+      "target_file": "AdminQuizBuilder.tsx",
+      "action": "Delete the UI sections that map and render 'draft' questions. Remove any 'Save Quiz' or 'Create Quiz' buttons from the main workspace, as the save action will now be automated by the Copilot."
+    },
+    "2_automate_submission_logic": {
+      "target_file": "Copilot component / Quiz Builder State",
+      "action": "Update the Copilot's 'onComplete' or success handler. Instead of populating a local 'drafts' array, the Copilot must take the validated JSON (from the Maker-Checker pipeline) and INSTANTLY fire the POST request to save the quiz to the database."
+    },
+    "3_loading_animation_extension": {
+      "action": "Ensure the animated status sequence ('Claude is drafting...', 'Gemini is auditing...') remains active on the screen while the POST request to the database is resolving. Only clear the loading state when the database returns a 200 OK."
+    },
+    "4_success_modal_and_routing": {
+      "action": "Create a sleek, glassmorphism Success Modal that triggers upon a successful database save.",
+      "modal_contents": {
+        "title": "Quiz Created Successfully! 🎉",
+        "description": "The assessment has been generated, audited, and saved to the database.",
+        "buttons": [
+          "Preview Quiz (Routes the Admin directly to the read-only rendered preview route)",
+          "Back to Dashboard (Routes back to the main admin quiz list)"
+        ]
+      }
+    },
+    "5_copilot_editing_flow": {
+      "action": "Ensure that once the quiz is saved, if the Admin is on the 'Preview' screen and tells the Copilot to 'Make question 3 harder', the Copilot triggers a direct PUT/PATCH request to update the live quiz in the database, followed by a seamless UI refresh."
+    }
+  }
+}

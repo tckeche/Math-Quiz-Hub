@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Quiz, Question } from "@shared/schema";
@@ -12,30 +12,21 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Send, Loader2, Sparkles, FileStack, Upload, Trash2,
-  Plus, Save, FileText, ImagePlus, X, Pencil, BookOpen,
-  Scan, Brain, Search, CheckCircle2, Eye
+  FileText, X, Pencil, BookOpen,
+  Scan, Brain, Search, CheckCircle2, Eye, PartyPopper, LayoutDashboard
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { renderLatex, unescapeLatex } from '@/lib/render-latex';
 import SomaQuizEngine from "./soma-quiz";
 import type { StudentQuestion } from "./soma-quiz";
 
-type DraftQuestion = {
-  id?: number;
-  prompt_text: string;
-  options: string[];
-  correct_answer: string;
-  marks_worth: number;
-  image_url?: string | null;
-};
-
 const LEVEL_OPTIONS = ["University", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "IGCSE", "AS", "A2", "Other"];
 
 const PIPELINE_STAGES = [
-  { stage: 1, icon: "search", label: "🔍 Fetching Context...", aiName: "Context Engine" },
-  { stage: 2, icon: "brain", label: "🧠 Claude is drafting questions...", aiName: "Claude Sonnet" },
-  { stage: 3, icon: "scan", label: "🛡️ Gemini is auditing quality...", aiName: "Gemini QA" },
-  { stage: 4, icon: "pencil", label: "✅ Finalizing Assessment", aiName: "SOMA Pipeline" },
+  { stage: 1, icon: "search", label: "Fetching Context...", aiName: "Context Engine" },
+  { stage: 2, icon: "brain", label: "Claude is drafting questions...", aiName: "Claude Sonnet" },
+  { stage: 3, icon: "scan", label: "Gemini is auditing quality...", aiName: "Gemini QA" },
+  { stage: 4, icon: "pencil", label: "Saving to database...", aiName: "Database" },
 ];
 
 export default function BuilderPage() {
@@ -54,16 +45,18 @@ export default function BuilderPage() {
 
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState<{ role: "user" | "ai"; text: string; metadata?: { provider: string; model: string; durationMs: number } }[]>([]);
-  const [drafts, setDrafts] = useState<DraftQuestion[]>([]);
   const [savedQuestions, setSavedQuestions] = useState<Question[]>([]);
   const [populated, setPopulated] = useState(false);
+  const [activeQuizId, setActiveQuizId] = useState<number | null>(editId);
 
   const [pipelineActive, setPipelineActive] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
   const [completedStages, setCompletedStages] = useState<Set<number>>(new Set());
-  const [stageLabel, setStageLabel] = useState("");
 
   const [showPreview, setShowPreview] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastSavedCount, setLastSavedCount] = useState(0);
+  const [metaDirty, setMetaDirty] = useState(false);
   const [supportingDocs, setSupportingDocs] = useState<{ name: string; type: string; processing: boolean }[]>([]);
   const [docContext, setDocContext] = useState<{ name: string; type: string; fileId: string }[]>([]);
 
@@ -80,8 +73,8 @@ export default function BuilderPage() {
   const authenticated = adminSession?.authenticated === true;
 
   const { data: quizData, isLoading: quizLoading } = useQuery<Quiz & { questions: Question[] }>({
-    queryKey: ["/api/admin/quizzes", editId],
-    enabled: authenticated && isEditMode,
+    queryKey: ["/api/admin/quizzes", activeQuizId],
+    enabled: authenticated && activeQuizId !== null,
   });
 
   useEffect(() => {
@@ -100,44 +93,117 @@ export default function BuilderPage() {
   }, [quizData, populated]);
 
   useEffect(() => {
+    if (quizData?.questions) {
+      setSavedQuestions(quizData.questions);
+    }
+  }, [quizData]);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat]);
 
+  const ensureQuizExists = async (): Promise<number> => {
+    if (activeQuizId) return activeQuizId;
+    if (!title.trim()) throw new Error("Please fill in a quiz title before generating questions.");
+    if (!dueDate) throw new Error("Please set a due date before generating questions.");
+    const tl = parseInt(timeLimit);
+    if (isNaN(tl) || tl < 1) throw new Error("Time limit must be a positive number.");
+    const quizRes = await apiRequest("POST", "/api/admin/quizzes", {
+      title: title.trim(),
+      timeLimitMinutes: tl,
+      dueDate,
+      syllabus: syllabus || null,
+      level: level || null,
+      subject: subject || null,
+    });
+    const quiz = await quizRes.json();
+    setActiveQuizId(quiz.id);
+    return quiz.id;
+  };
+
+  const animatePipeline = (stage: number) => {
+    setPipelineActive(true);
+    setCurrentStage(stage);
+    setCompletedStages((prev) => {
+      const next = new Set(prev);
+      for (let i = 1; i < stage; i++) next.add(i);
+      return next;
+    });
+  };
+
+  const finishPipeline = () => {
+    setCompletedStages(new Set([1, 2, 3, 4]));
+    setCurrentStage(0);
+    setTimeout(() => setPipelineActive(false), 1500);
+  };
+
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      // Prepend subject/level/syllabus context so the AI generates relevant questions
+      animatePipeline(1);
       const context = [
         subject && `Subject: ${subject}`,
         level && `Level: ${level}`,
         syllabus && `Syllabus: ${syllabus}`,
       ].filter(Boolean).join(", ");
       const enrichedMessage = context ? `[${context}]\n\n${message}` : message;
-      // Pass uploaded PDF file IDs so the copilot sends actual PDFs to Gemini
       const docIds = docContext.map((d) => d.fileId);
+
+      animatePipeline(2);
       const res = await apiRequest("POST", "/api/admin/copilot-chat", {
         message: enrichedMessage,
         documentIds: docIds.length > 0 ? docIds : undefined,
       });
-      return res.json();
+      const data = await res.json();
+
+      if (data.needsClarification) {
+        setPipelineActive(false);
+        return { ...data, savedToDb: false };
+      }
+
+      if (Array.isArray(data.drafts) && data.drafts.length > 0) {
+        animatePipeline(3);
+        const quizId = await ensureQuizExists();
+
+        animatePipeline(4);
+        await apiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions: data.drafts });
+
+        await queryClient.refetchQueries({ queryKey: ["/api/admin/quizzes", quizId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+
+        const refetched = queryClient.getQueryData<Quiz & { questions: Question[] }>(["/api/admin/quizzes", quizId]);
+        if (refetched?.questions) {
+          setSavedQuestions(refetched.questions);
+        }
+
+        finishPipeline();
+        return { ...data, savedToDb: true, savedCount: data.drafts.length };
+      }
+
+      setPipelineActive(false);
+      return { ...data, savedToDb: false };
     },
     onSuccess: (data, message) => {
       setChat((prev) => [...prev, { role: "user", text: message }, { role: "ai", text: data.reply, metadata: data.metadata }]);
-      if (Array.isArray(data.drafts) && data.drafts.length > 0) {
-        setDrafts((prev) => [...prev, ...data.drafts]);
-        toast({ title: `${data.drafts.length} draft questions generated` });
+      if (data.savedToDb) {
+        setLastSavedCount(data.savedCount);
+        setShowSuccessModal(true);
       }
       setMsg("");
     },
-    onError: (err: Error) => toast({ title: "Copilot failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      setPipelineActive(false);
+      toast({ title: "Copilot failed", description: err.message, variant: "destructive" });
+    },
   });
 
-  const createMutation = useMutation({
+  const updateMetaMutation = useMutation({
     mutationFn: async () => {
-      if (!title.trim()) throw new Error("Title is required");
-      if (!dueDate) throw new Error("Due date is required");
+      if (!activeQuizId) throw new Error("No quiz to update");
       const tl = parseInt(timeLimit);
       if (isNaN(tl) || tl < 1) throw new Error("Time limit must be a positive number");
-      const quizRes = await apiRequest("POST", "/api/admin/quizzes", {
+      if (!title.trim()) throw new Error("Title is required");
+      if (!dueDate) throw new Error("Due date is required");
+      await apiRequest("PUT", `/api/admin/quizzes/${activeQuizId}`, {
         title: title.trim(),
         timeLimitMinutes: tl,
         dueDate,
@@ -145,74 +211,14 @@ export default function BuilderPage() {
         level: level || null,
         subject: subject || null,
       });
-      const quiz = await quizRes.json();
-      if (drafts.length > 0) {
-        await apiRequest("POST", `/api/admin/quizzes/${quiz.id}/questions`, { questions: drafts });
-      }
-      return quiz;
     },
-    onSuccess: async (quiz) => {
+    onSuccess: () => {
+      setMetaDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
-      toast({ title: "Quiz created successfully" });
-
-      // Run Gemini validation in background before navigating
-      if (drafts.length > 0) {
-        try {
-          toast({ title: "Validating quiz with AI...", description: "Checking correctness and formatting" });
-          const valRes = await apiRequest("POST", "/api/admin/validate-quiz", { questions: drafts });
-          const valData = await valRes.json();
-          const v = valData.validation;
-          if (v?.overall === "pass") {
-            toast({ title: "Quiz validated", description: `All ${drafts.length} questions passed AI review` });
-          } else if (v?.issues?.length > 0) {
-            const errorCount = v.issues.filter((i: any) => i.severity === "error").length;
-            const warnCount = v.issues.filter((i: any) => i.severity === "warning").length;
-            toast({
-              title: `Validation: ${errorCount} error(s), ${warnCount} warning(s)`,
-              description: v.summary || "Review your questions for potential issues",
-              variant: errorCount > 0 ? "destructive" : "default",
-            });
-          }
-        } catch {
-          // Validation failure shouldn't block quiz creation
-        }
-      }
-
-      navigate("/admin");
+      toast({ title: "Quiz details updated" });
     },
-    onError: (err: Error) => toast({ title: "Failed to create quiz", description: err.message, variant: "destructive" }),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!editId) throw new Error("No quiz ID");
-      const tl = parseInt(timeLimit);
-      if (isNaN(tl) || tl < 1) throw new Error("Time limit must be a positive number");
-      if (!title.trim()) throw new Error("Title is required");
-      if (!dueDate) throw new Error("Due date is required");
-      await apiRequest("PUT", `/api/admin/quizzes/${editId}`, {
-        title: title.trim(),
-        timeLimitMinutes: tl,
-        dueDate,
-        syllabus: syllabus || null,
-        level: level || null,
-        subject: subject || null,
-      });
-      if (drafts.length > 0) {
-        await apiRequest("POST", `/api/admin/quizzes/${editId}/questions`, { questions: drafts });
-      }
-    },
-    onSuccess: async () => {
-      setDrafts([]);
-      await queryClient.refetchQueries({ queryKey: ["/api/admin/quizzes", editId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
-      const refetched = queryClient.getQueryData<Quiz & { questions: Question[] }>(["/api/admin/quizzes", editId]);
-      if (refetched?.questions) {
-        setSavedQuestions(refetched.questions);
-      }
-      toast({ title: "Changes saved" });
-    },
-    onError: (err: Error) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed to update", description: err.message, variant: "destructive" }),
   });
 
   const deleteQuestionMutation = useMutation({
@@ -220,26 +226,16 @@ export default function BuilderPage() {
       apiRequest("DELETE", `/api/admin/questions/${questionId}`),
     onSuccess: (_data, questionId) => {
       setSavedQuestions((prev) => prev.filter((q) => q.id !== questionId));
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", editId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
       toast({ title: "Question deleted" });
     },
     onError: (err: Error) => toast({ title: "Failed to delete question", description: err.message, variant: "destructive" }),
   });
 
-  const handleAttachImage = async (index: number, file: File) => {
-    const formData = new FormData();
-    formData.append("image", file);
-    const res = await fetch("/api/upload-image", { method: "POST", body: formData, credentials: "include" });
-    if (!res.ok) throw new Error("Image upload failed");
-    const data = await res.json();
-    setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, image_url: data.url } : d)));
-  };
-
   const handleSupportingDoc = async (file: File, docType: string) => {
     const docEntry = { name: file.name, type: docType, processing: true };
     setSupportingDocs((prev) => [...prev, docEntry]);
     try {
-      // Upload the PDF to the server so the copilot can reference the original file
       const uploadForm = new FormData();
       uploadForm.append("pdf", file);
       const uploadRes = await fetch("/api/admin/upload-supporting-doc", {
@@ -252,11 +248,9 @@ export default function BuilderPage() {
         const uploadData = await uploadRes.json();
         fileId = uploadData.id;
       }
-
       setSupportingDocs((prev) =>
         prev.map((d) => (d.name === file.name && d.type === docType ? { ...d, processing: false } : d))
       );
-      // Store the file reference so the copilot can send the actual PDF to Gemini
       if (fileId) {
         setDocContext((prev) => [...prev, { name: file.name, type: docType, fileId }]);
       }
@@ -277,10 +271,16 @@ export default function BuilderPage() {
     }
   };
 
+  const totalQuestions = savedQuestions.length;
 
-
-  const totalQuestions = savedQuestions.length + drafts.length;
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const previewQuestions = useMemo(() =>
+    savedQuestions.map((q) => ({
+      id: q.id,
+      quizId: activeQuizId || 0,
+      stem: unescapeLatex(q.promptText),
+      options: q.options,
+      marks: q.marksWorth,
+    } as StudentQuestion)), [savedQuestions, activeQuizId]);
 
   if (sessionLoading) {
     return (
@@ -335,9 +335,9 @@ export default function BuilderPage() {
               <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-8 w-auto object-contain" />
               <div>
                 <h1 className="text-lg font-bold gradient-text" data-testid="text-builder-title">
-                  {isEditMode ? "Edit Assessment" : "New Assessment"}
+                  {activeQuizId ? "Edit Assessment" : "New Assessment"}
                 </h1>
-                {isEditMode && <p className="text-xs text-slate-500">ID: {editId}</p>}
+                {activeQuizId && <p className="text-xs text-slate-500">ID: {activeQuizId}</p>}
               </div>
             </div>
           </div>
@@ -355,38 +355,24 @@ export default function BuilderPage() {
               <Eye className="w-4 h-4 mr-1.5" />
               Preview Quiz
             </Button>
-            <Button
-              className="glow-button"
-              size="sm"
-              onClick={() => isEditMode ? updateMutation.mutate() : createMutation.mutate()}
-              disabled={isSaving || !title.trim() || !dueDate}
-              data-testid="button-save-quiz"
-            >
-              {isSaving ? (
-                <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />{isEditMode ? "Saving..." : "Creating..."}</>
-              ) : (
-                <><Save className="w-4 h-4 mr-1.5" />{isEditMode ? "Save Changes" : "Create Quiz"}</>
-              )}
-            </Button>
           </div>
         </div>
       </header>
 
       <main className="max-w-[1600px] mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* LEFT COLUMN — Main Workspace (9 cols) */}
         <div className="lg:col-span-3 space-y-4">
-          {/* Compact Settings Row */}
           <div className="glass-card p-4">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="w-4 h-4 text-violet-400" />
               <h2 className="font-semibold text-slate-100 text-sm">Quiz Parameters</h2>
+              {activeQuizId && <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] ml-auto">Live &middot; ID {activeQuizId}</Badge>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
               <div className="col-span-2 md:col-span-1 space-y-1">
                 <Label className="text-slate-400 text-xs">Title</Label>
                 <Input
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => { setTitle(e.target.value); if (activeQuizId) setMetaDirty(true); }}
                   placeholder="e.g. Pure Mathematics Paper 1"
                   className="glass-input text-sm"
                   data-testid="input-quiz-title"
@@ -396,7 +382,7 @@ export default function BuilderPage() {
                 <Label className="text-slate-400 text-xs uppercase">Syllabus</Label>
                 <Input
                   value={syllabus}
-                  onChange={(e) => setSyllabus(e.target.value)}
+                  onChange={(e) => { setSyllabus(e.target.value); if (activeQuizId) setMetaDirty(true); }}
                   placeholder="Cambridge, Edexcel"
                   className="glass-input text-sm"
                   data-testid="input-quiz-syllabus"
@@ -407,7 +393,7 @@ export default function BuilderPage() {
                 <select
                   className="w-full glass-input px-2.5 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm"
                   value={level}
-                  onChange={(e) => setLevel(e.target.value)}
+                  onChange={(e) => { setLevel(e.target.value); if (activeQuizId) setMetaDirty(true); }}
                   data-testid="select-quiz-level"
                 >
                   <option value="">Select level</option>
@@ -420,7 +406,7 @@ export default function BuilderPage() {
                 <Label className="text-slate-400 text-xs uppercase">Subject</Label>
                 <Input
                   value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
+                  onChange={(e) => { setSubject(e.target.value); if (activeQuizId) setMetaDirty(true); }}
                   placeholder="Mathematics"
                   className="glass-input text-sm"
                   data-testid="input-quiz-subject"
@@ -431,7 +417,7 @@ export default function BuilderPage() {
                 <Input
                   type="datetime-local"
                   value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
+                  onChange={(e) => { setDueDate(e.target.value); if (activeQuizId) setMetaDirty(true); }}
                   className="glass-input text-sm"
                   data-testid="input-quiz-due"
                 />
@@ -442,19 +428,31 @@ export default function BuilderPage() {
                   type="number"
                   min="1"
                   value={timeLimit}
-                  onChange={(e) => setTimeLimit(e.target.value)}
+                  onChange={(e) => { setTimeLimit(e.target.value); if (activeQuizId) setMetaDirty(true); }}
                   className="glass-input text-sm"
                   data-testid="input-quiz-time"
                 />
               </div>
             </div>
+            {metaDirty && activeQuizId && (
+              <div className="mt-3 flex justify-end">
+                <Button
+                  className="glow-button text-xs"
+                  size="sm"
+                  onClick={() => updateMetaMutation.mutate()}
+                  disabled={updateMetaMutation.isPending || !title.trim() || !dueDate}
+                  data-testid="button-save-metadata"
+                >
+                  {updateMetaMutation.isPending ? (
+                    <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving...</>
+                  ) : (
+                    <>Save Changes</>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
 
-          <div className="glass-card p-3 text-xs text-slate-400">
-            Upload supporting PDFs in Copilot, then request edits through chat. Direct manual/JSON editing is disabled by policy.
-          </div>
-
-          {/* Supporting Documents */}
           <div className="glass-card p-4">
             <div className="flex items-center gap-2 mb-3">
               <Upload className="w-4 h-4 text-violet-400" />
@@ -522,7 +520,6 @@ export default function BuilderPage() {
             )}
           </div>
 
-          {/* Pipeline Progress */}
           {pipelineActive && (
             <div className="glass-card p-3">
               <div className="grid grid-cols-4 gap-2">
@@ -534,7 +531,7 @@ export default function BuilderPage() {
                       key={s.stage}
                       className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs transition-all ${
                         isDone ? "bg-emerald-500/10 border-emerald-500/30" :
-                        isActive ? "bg-violet-500/10 border-violet-500/30" :
+                        isActive ? "bg-violet-500/10 border-violet-500/30 shadow-[0_0_15px_rgba(139,92,246,0.1)]" :
                         "bg-white/[0.02] border-white/5 opacity-40"
                       }`}
                       data-testid={`pipeline-stage-${s.stage}`}
@@ -546,7 +543,7 @@ export default function BuilderPage() {
                         {s.icon === "search" && <Search className="w-3 h-3" />}
                       </span>
                       <span className={`flex-1 truncate ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-500"}`}>
-                        {s.aiName}
+                        {isActive ? s.label : s.aiName}
                       </span>
                       {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> :
                        isActive ? <Loader2 className="w-3 h-3 animate-spin text-violet-400" /> :
@@ -558,11 +555,12 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Questions List */}
           <div className="space-y-3">
             {savedQuestions.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saved Questions ({savedQuestions.length})</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                  Saved Questions ({savedQuestions.length})
+                </p>
                 {savedQuestions.map((q, idx) => (
                   <div key={q.id} className="glass-card p-4 flex items-start gap-3" data-testid={`card-saved-q-${q.id}`}>
                     <span className="text-xs font-mono text-emerald-400 font-medium mt-0.5 shrink-0 w-7">Q{idx + 1}</span>
@@ -592,119 +590,30 @@ export default function BuilderPage() {
               </div>
             )}
 
-            {drafts.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">
-                  New Drafts ({drafts.length}) — save to persist
-                </p>
-                {drafts.map((d, idx) => (
-                  <div key={idx} className="glass-card p-4 space-y-2 border-violet-500/20" data-testid={`card-draft-q-${idx}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-mono text-violet-400">Draft {idx + 1}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-7 h-7 text-slate-500 hover:text-red-400"
-                        onClick={() => setDrafts((prev) => prev.filter((_, i) => i !== idx))}
-                        data-testid={`button-remove-draft-${idx}`}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                    <Textarea
-                      value={d.prompt_text}
-                      onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, prompt_text: e.target.value } : x))}
-                      className="glass-input text-sm min-h-[60px]"
-                      placeholder="Question text (supports LaTeX)"
-                      data-testid={`input-draft-prompt-${idx}`}
-                    />
-                    {d.prompt_text && (
-                      <div className="text-sm text-slate-300 bg-white/[0.03] border border-white/5 rounded-lg p-2">
-                        {renderLatex(unescapeLatex(d.prompt_text))}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {d.options.map((o, oi) => (
-                        <Input
-                          key={oi}
-                          value={o}
-                          onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, options: x.options.map((a, j) => j === oi ? e.target.value : a) } : x))}
-                          className="glass-input text-sm"
-                          placeholder={`Option ${String.fromCharCode(65 + oi)}`}
-                          data-testid={`input-draft-opt-${idx}-${oi}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        value={d.correct_answer}
-                        onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, correct_answer: e.target.value } : x))}
-                        className="glass-input text-sm"
-                        placeholder="Correct answer"
-                        data-testid={`input-draft-answer-${idx}`}
-                      />
-                      <Input
-                        type="number"
-                        min={1}
-                        value={d.marks_worth}
-                        onChange={(e) => setDrafts((prev) => prev.map((x, i) => i === idx ? { ...x, marks_worth: Number(e.target.value) || 1 } : x))}
-                        className="glass-input text-sm"
-                        placeholder="Marks"
-                        data-testid={`input-draft-marks-${idx}`}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor={`draft-img-${idx}`} className="cursor-pointer">
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400 border border-white/10 rounded-lg px-2.5 py-1.5 hover:border-violet-500/30 transition-colors">
-                          <ImagePlus className="w-3.5 h-3.5" />
-                          {d.image_url ? "Change Image" : "Attach Image"}
-                        </div>
-                        <input
-                          id={`draft-img-${idx}`}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) handleAttachImage(idx, f).catch((err) => toast({ title: "Upload failed", description: String(err), variant: "destructive" }));
-                          }}
-                        />
-                      </Label>
-                      {d.image_url && (
-                        <div className="flex items-center gap-2">
-                          <img src={d.image_url} alt="attached" className="h-8 w-8 object-cover rounded border border-white/10" />
-                          <button className="text-xs text-slate-500 hover:text-red-400" onClick={() => setDrafts(prev => prev.map((x, i) => i === idx ? { ...x, image_url: null } : x))}>Remove</button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {savedQuestions.length === 0 && drafts.length === 0 && (
+            {savedQuestions.length === 0 && !pipelineActive && (
               <div className="glass-card p-8 text-center space-y-2">
                 <FileStack className="w-8 h-8 mx-auto text-slate-600" />
                 <p className="text-sm text-slate-500">No questions yet.</p>
-                <p className="text-xs text-slate-600">Use the AI Co-Pilot, upload a PDF, or add questions manually.</p>
+                <p className="text-xs text-slate-600">Use the AI Co-Pilot to generate and auto-save questions.</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN — Copilot Chat (3 cols) */}
         <div className="lg:col-span-1">
           <div className="glass-card flex flex-col overflow-hidden sticky top-16 z-10" style={{ height: "calc(100vh - 90px)" }}>
             <div className="px-3 py-2.5 border-b border-white/5 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-violet-400" />
               <span className="text-xs font-semibold text-slate-300" data-testid="tab-copilot">AI Co-Pilot</span>
+              {pipelineActive && <Loader2 className="w-3 h-3 animate-spin text-violet-400 ml-auto" />}
             </div>
             <div className="flex-1 p-2.5 overflow-auto space-y-2">
               {chat.length === 0 && (
                 <div className="text-center pt-8 space-y-1.5">
                   <Sparkles className="w-6 h-6 mx-auto text-violet-400/50" />
                   <p className="text-xs text-slate-500">Ask the AI to generate quiz questions.</p>
-                  <p className="text-[10px] text-slate-600 leading-relaxed">"Generate 5 IGCSE differentiation MCQs"</p>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">Questions are auto-saved to the database.</p>
+                  <p className="text-[10px] text-slate-600">"Generate 5 IGCSE quadratics MCQs"</p>
                 </div>
               )}
               {docContext.length > 0 && (
@@ -738,7 +647,7 @@ export default function BuilderPage() {
                   value={msg}
                   onChange={(e) => setMsg(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask for questions..."
+                  placeholder={activeQuizId ? "Ask to edit or add questions..." : "Ask for questions..."}
                   className="glass-input flex-1 min-h-[36px] max-h-[80px] resize-none text-xs"
                   data-testid="input-copilot-message"
                 />
@@ -757,27 +666,44 @@ export default function BuilderPage() {
         </div>
       </main>
 
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-testid="modal-success">
+          <div className="glass-card w-full max-w-md p-8 text-center space-y-5 border border-violet-500/20 shadow-[0_0_40px_rgba(139,92,246,0.15)]">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500/20 to-violet-500/20 flex items-center justify-center mx-auto border border-emerald-500/30">
+              <PartyPopper className="w-8 h-8 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-100 mb-1" data-testid="text-success-title">Quiz Created Successfully!</h2>
+              <p className="text-sm text-slate-400">
+                {lastSavedCount} question{lastSavedCount !== 1 ? "s" : ""} generated, audited, and saved to the database.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2.5 pt-2">
+              <Button
+                className="w-full glow-button"
+                onClick={() => { setShowSuccessModal(false); setShowPreview(true); }}
+                data-testid="button-success-preview"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                Preview Quiz
+              </Button>
+              <Link href="/admin">
+                <Button className="w-full glow-button-outline" data-testid="button-success-dashboard">
+                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  Back to Dashboard
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPreview && (
         <div className="fixed inset-0 z-50 bg-background overflow-auto" data-testid="modal-preview">
           <SomaQuizEngine
             previewMode={true}
             previewTitle={title || "Untitled Quiz"}
-            previewQuestions={[
-              ...savedQuestions.map((q, idx) => ({
-                id: q.id,
-                quizId: editId || 0,
-                stem: unescapeLatex(q.promptText),
-                options: q.options,
-                marks: q.marksWorth,
-              } as StudentQuestion)),
-              ...drafts.map((d, idx) => ({
-                id: -(idx + 1),
-                quizId: editId || 0,
-                stem: unescapeLatex(d.prompt_text),
-                options: d.options,
-                marks: d.marks_worth,
-              } as StudentQuestion)),
-            ]}
+            previewQuestions={previewQuestions}
             onExitPreview={() => setShowPreview(false)}
           />
         </div>
