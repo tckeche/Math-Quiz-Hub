@@ -11,6 +11,7 @@ import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
+import crypto from "crypto";
 import { fetchPaperContext, generateAuditedQuiz, parsePdfTextFromBuffer } from "./services/aiPipeline";
 import { generateWithFallback } from "./services/aiOrchestrator";
 
@@ -71,10 +72,34 @@ function getJwtSecret(): string {
   return secret;
 }
 
-function getAdminPassword(): string {
-  const pw = process.env.ADMIN_PASSWORD;
-  if (!pw) throw new Error("ADMIN_PASSWORD environment variable is required");
-  return pw;
+function getAdminUsername(): string {
+  return String(process.env.ADMIN_USERNAME || "admin").toLowerCase();
+}
+
+function getAdminPasswordHash(): string {
+  return String(process.env.ADMIN_PASSWORD_HASH || "");
+}
+
+function getLegacyAdminPassword(): string {
+  return String(process.env.ADMIN_PASSWORD || "");
+}
+
+function verifyPassword(password: string, storedHash: string): boolean {
+  const [algorithm, iterationsRaw, salt, expectedHash] = storedHash.split("$");
+  if (!algorithm || !iterationsRaw || !salt || !expectedHash || algorithm !== "pbkdf2") {
+    return false;
+  }
+  const iterations = Number(iterationsRaw);
+  if (!Number.isFinite(iterations) || iterations < 10_000) {
+    return false;
+  }
+  const keyLength = Buffer.from(expectedHash, "hex").length;
+  const derived = crypto.pbkdf2Sync(password, salt, iterations, keyLength, "sha512");
+  const expected = Buffer.from(expectedHash, "hex");
+  if (derived.length !== expected.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(derived, expected);
 }
 
 function parseCookies(req: Request) {
@@ -113,6 +138,20 @@ const loginLimiter = rateLimit({
   message: { message: "Too many login attempts. Please try again in 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+const somaAiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: {
+      code: "RATE_LIMITED",
+      message: "Too many AI requests. Please wait before trying again.",
+      details: { retryWindowMs: 60_000 },
+    },
+  },
 });
 
 
@@ -202,6 +241,27 @@ Provide:
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.use((req, res, next) => {
+    const originalJson = res.json.bind(res);
+    res.json = ((body: any) => {
+      if (res.statusCode >= 400 && !(body && typeof body === "object" && "error" in body)) {
+        const message = typeof body?.message === "string" ? body.message : "Request failed";
+        const details = body?.details ?? (body && body !== message ? body : undefined);
+        return originalJson({
+          error: {
+            code: body?.code || `HTTP_${res.statusCode}`,
+            message,
+            details,
+          },
+        });
+      }
+      return originalJson(body);
+    }) as typeof res.json;
+    next();
+  });
+
+  app.use("/api/soma", somaAiLimiter);
+
   app.post("/api/auth/sync", async (req, res) => {
     try {
       const { id, email, user_metadata } = req.body;
@@ -244,11 +304,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/login", loginLimiter, async (req, res) => {
-    const { password } = req.body;
-    if (String(password || "") !== getAdminPassword()) {
-      return res.status(401).json({ message: "Incorrect password. Please try again." });
+    const username = String(req.body?.username || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+
+    const suppliedUsername = username || getAdminUsername();
+    const suppliedPassword = password;
+
+    const passwordHash = getAdminPasswordHash();
+    const legacyPassword = getLegacyAdminPassword();
+    const isValidUser = suppliedUsername === getAdminUsername();
+    const isValidPassword = passwordHash
+      ? verifyPassword(suppliedPassword, passwordHash)
+      : Boolean(legacyPassword)
+        && Buffer.byteLength(suppliedPassword) === Buffer.byteLength(legacyPassword)
+        && crypto.timingSafeEqual(Buffer.from(suppliedPassword), Buffer.from(legacyPassword));
+
+    if (!isValidUser || !isValidPassword) {
+      return res.status(401).json({ message: "Invalid admin credentials." });
     }
-    const token = jwt.sign({ role: "admin" }, getJwtSecret(), { expiresIn: "12h" });
+    const token = jwt.sign({ role: "admin", username: suppliedUsername }, getJwtSecret(), { expiresIn: "12h" });
     res.cookie(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",

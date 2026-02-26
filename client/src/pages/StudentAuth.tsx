@@ -127,7 +127,7 @@ export default function StudentAuth() {
         </Link>
 
         <div className="text-center mb-8">
-          <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-16 w-auto object-contain mx-auto mb-4" />
+          <img src="/MCEC - White Logo.png" alt="MCEC Logo" loading="lazy" className="h-16 w-auto object-contain mx-auto mb-4" />
           <h1 className="text-2xl font-bold gradient-text drop-shadow-[0_0_15px_rgba(139,92,246,0.5)]" data-testid="text-auth-title">
             SOMA
           </h1>
@@ -167,7 +167,7 @@ export default function StudentAuth() {
               <div>
                 <label className="text-xs text-slate-400 mb-1.5 block font-medium">Display Name</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     value={displayName}
@@ -183,7 +183,7 @@ export default function StudentAuth() {
             <div>
               <label className="text-xs text-slate-400 mb-1.5 block font-medium">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="email"
                   value={email}
@@ -199,7 +199,7 @@ export default function StudentAuth() {
             <div>
               <label className="text-xs text-slate-400 mb-1.5 block font-medium">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -213,7 +213,7 @@ export default function StudentAuth() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-300 transition-colors"
                   data-testid="button-toggle-password"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -224,7 +224,7 @@ export default function StudentAuth() {
             <button
               type="submit"
               disabled={loading}
-              className="glow-button w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="glow-button w-full py-3 min-h-[44px] text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="button-auth-submit"
             >
               {loading ? (
@@ -238,7 +238,7 @@ export default function StudentAuth() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-slate-500 mt-6">
+          <p className="text-center text-xs text-slate-400 mt-6">
             {mode === "login" ? (
               <>
                 Don't have an account?{" "}

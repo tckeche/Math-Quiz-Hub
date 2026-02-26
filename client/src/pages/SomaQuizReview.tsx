@@ -132,7 +132,7 @@ export default function SomaQuizReview() {
           <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30" data-testid="badge-review-mode">
             Review Mode
           </Badge>
-          <Button className="glow-button" size="sm" onClick={downloadPdf} data-testid="button-download-report">
+          <Button className="glow-button min-h-[44px]" size="sm" onClick={downloadPdf} data-testid="button-download-report">
             Download Report
           </Button>
         </div>
@@ -176,7 +176,7 @@ export default function SomaQuizReview() {
                     {idx + 1}
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs text-slate-500 uppercase tracking-wider">Question {idx + 1}</p>
+                    <p className="text-xs text-slate-400 uppercase tracking-wider">Question {idx + 1}</p>
                   </div>
                   <Badge className={`text-xs ${isCorrect ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : studentAnswer ? "bg-red-500/10 text-red-400 border-red-500/30" : "bg-slate-500/10 text-slate-400 border-slate-500/30"}`}>
                     {isCorrect ? "Correct" : studentAnswer ? "Incorrect" : "Skipped"} [{q.marks}]
@@ -219,7 +219,7 @@ export default function SomaQuizReview() {
                               ? "bg-green-500/30 text-green-200 border border-green-500/50"
                               : isStudentWrongPick
                                 ? "bg-red-500/30 text-red-200 border border-red-500/50"
-                                : "bg-white/5 text-slate-500 border border-white/10"
+                                : "bg-white/5 text-slate-400 border border-white/10"
                           }`}>
                             {letter}
                           </div>
@@ -253,7 +253,7 @@ export default function SomaQuizReview() {
 
         <div className="mt-8 flex justify-center">
           <Link href="/dashboard">
-            <Button className="glow-button" data-testid="button-review-done">
+            <Button className="glow-button min-h-[44px]" data-testid="button-review-done">
               <Home className="w-4 h-4 mr-1.5" />
               Return to Dashboard
             </Button>

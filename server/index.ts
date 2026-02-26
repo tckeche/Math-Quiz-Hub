@@ -82,21 +82,7 @@ httpServer.listen(
 
 (async () => {
   try {
-    const { db } = await import("./db");
-    if (db) {
-      const { sql } = await import("drizzle-orm");
-      const migrations = [
-        `ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false`,
-        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false`,
-        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS syllabus text DEFAULT 'IEB'`,
-        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS level text DEFAULT 'Grade 6-12'`,
-        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS subject text`,
-      ];
-      for (const m of migrations) {
-        try { await db.execute(sql.raw(m)); } catch {}
-      }
-      log("schema migrations applied", "bootstrap");
-    }
+    log("Skipping runtime ALTER TABLE statements. Use `npm run db:migrate` before startup.", "bootstrap");
 
     const { seedDatabase } = await import("./seed");
     try {
@@ -117,7 +103,13 @@ httpServer.listen(
         return next(err);
       }
 
-      return res.status(status).json({ message });
+      return res.status(status).json({
+        error: {
+          code: err.code || `HTTP_${status}`,
+          message,
+          details: err.details || null,
+        },
+      });
     });
 
     if (process.env.NODE_ENV === "production") {

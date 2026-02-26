@@ -33,6 +33,7 @@ interface GeneratedQuestion {
 }
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
@@ -42,11 +43,11 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await apiRequest("POST", "/api/admin/login", { password });
+      await apiRequest("POST", "/api/admin/login", { username, password });
       setError("");
       onLogin();
     } catch (err: any) {
-      setError(err?.message || "Incorrect password. Please try again.");
+      setError(err?.message || "Invalid admin credentials. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -56,11 +57,25 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="glass-card w-full max-w-md p-8">
         <div className="text-center mb-6">
-          <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-14 w-auto object-contain mx-auto mb-3" />
+          <img src="/MCEC - White Logo.png" alt="MCEC Logo" loading="lazy" className="h-14 w-auto object-contain mx-auto mb-3" />
           <h2 className="text-xl font-bold gradient-text">Admin Access</h2>
-          <p className="text-sm text-slate-400 mt-1">Enter the administrator password to continue.</p>
+          <p className="text-sm text-slate-400 mt-1">Sign in with your administrator credentials to continue.</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="username" className="text-slate-300">Admin Email</Label>
+            <Input
+              id="username"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => { setUsername(e.target.value); setError(""); }}
+              placeholder="admin@example.com"
+              className="glass-input min-h-[44px]"
+              data-testid="input-admin-username"
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="password" className="text-slate-300">Password</Label>
             <Input
@@ -69,7 +84,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(""); }}
               placeholder="Enter admin password"
-              className="glass-input"
+              className="glass-input min-h-[44px]"
               data-testid="input-admin-password"
             />
           </div>
@@ -79,7 +94,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
               {error}
             </div>
           )}
-          <Button type="submit" className="w-full glow-button" size="lg" data-testid="button-admin-login" disabled={loading}>
+          <Button type="submit" className="w-full glow-button min-h-[44px]" size="lg" data-testid="button-admin-login" disabled={loading}>
             {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
@@ -309,10 +324,10 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
                     {s.icon === "search" && <Search className="w-5 h-5" />}
                   </span>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-500"}`}>
+                  <p className={`text-sm font-medium ${isDone ? "text-emerald-400" : isActive ? "text-violet-300" : "text-slate-400"}`}>
                     {s.aiName}
                   </p>
-                  <p className="text-xs text-slate-500 truncate">
+                  <p className="text-xs text-slate-400 truncate">
                     {isDone ? "Complete" : isActive ? stageLabel : s.label.replace("...", "")}
                   </p>
                 </div>
@@ -356,12 +371,12 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
             <div key={idx} className="border border-white/10 rounded-xl p-4 space-y-3 bg-white/[0.02]" data-testid={`card-generated-q-${idx}`}>
               <div className="flex items-start justify-between gap-2">
                 <span className="font-mono text-sm text-violet-400 font-medium shrink-0">Q{idx + 1}</span>
-                <Button variant="ghost" size="icon" className="text-slate-500 hover:text-red-400" onClick={() => removeQuestion(idx)} data-testid={`button-remove-generated-${idx}`}>
+                <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-400" onClick={() => removeQuestion(idx)} data-testid={`button-remove-generated-${idx}`}>
                   <X className="w-4 h-4" />
                 </Button>
               </div>
               <div className="space-y-2">
-                <Label className="text-xs text-slate-500">Question Text (LaTeX)</Label>
+                <Label className="text-xs text-slate-400">Question Text (LaTeX)</Label>
                 <Textarea
                   value={q.prompt_text}
                   onChange={(e) => updateQuestion(idx, "prompt_text", e.target.value)}
@@ -373,7 +388,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500">Image URL (optional)</Label>
+                <Label className="text-xs text-slate-400">Image URL (optional)</Label>
                 <Input
                   value={q.image_url ?? ""}
                   onChange={(e) => updateQuestion(idx, "image_url", e.target.value || null)}
@@ -385,7 +400,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
               <div className="grid grid-cols-2 gap-2">
                 {q.options.map((opt, optIdx) => (
                   <div key={optIdx} className="space-y-1">
-                    <Label className="text-xs text-slate-500">Option {String.fromCharCode(65 + optIdx)}</Label>
+                    <Label className="text-xs text-slate-400">Option {String.fromCharCode(65 + optIdx)}</Label>
                     <Input
                       value={opt}
                       onChange={(e) => updateOption(idx, optIdx, e.target.value)}
@@ -397,7 +412,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label className="text-xs text-slate-500">Correct Answer</Label>
+                  <Label className="text-xs text-slate-400">Correct Answer</Label>
                   <Input
                     value={q.correct_answer}
                     onChange={(e) => updateQuestion(idx, "correct_answer", e.target.value)}
@@ -406,7 +421,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-slate-500">Marks</Label>
+                  <Label className="text-xs text-slate-400">Marks</Label>
                   <Input
                     type="number"
                     min="1"
@@ -728,7 +743,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           </div>
           <div className="p-5">
             {submissions.length === 0 ? (
-              <p className="text-sm text-slate-500 py-4 text-center">No submissions yet.</p>
+              <p className="text-sm text-slate-400 py-4 text-center">No submissions yet.</p>
             ) : (
               <div className="space-y-4">
                 {submissions.map((s) => (
@@ -764,12 +779,12 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
                       </div>
                     </div>
                     <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.03] p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Marks Breakdown</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Marks Breakdown</p>
                       <div className="grid gap-1">
                         {Object.entries(s.answersBreakdown).map(([questionId, detail]) => (
                           <div key={questionId} className="text-sm flex items-center justify-between gap-2">
                             <span className="text-slate-300">Q{questionId}: {detail.answer || "No answer"}</span>
-                            <span className={detail.correct ? "text-emerald-400" : "text-slate-500"}>
+                            <span className={detail.correct ? "text-emerald-400" : "text-slate-400"}>
                               {detail.correct ? `+${detail.marksEarned}` : "0"}
                             </span>
                           </div>
@@ -801,7 +816,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
           ) : !questions || questions.length === 0 ? (
             <div className="text-center py-8">
               <BookOpen className="w-10 h-10 mx-auto mb-2 text-slate-600" />
-              <p className="text-sm text-slate-500">No questions added yet. Use the Builder to add questions via AI or PDF.</p>
+              <p className="text-sm text-slate-400">No questions added yet. Use the Builder to add questions via AI or PDF.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -821,7 +836,8 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
                   <Button
                     variant="outline"
                     size="icon"
-                    className="border-white/10 text-slate-400"
+                    aria-label="Delete question"
+                    className="border-white/10 text-slate-400 min-h-[44px] min-w-[44px]"
                     onClick={() => deleteQuestionMutation.mutate(q.id)}
                     data-testid={`button-delete-question-${q.id}`}
                   >
@@ -890,7 +906,7 @@ export default function AdminPage() {
       <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-10 w-auto object-contain" />
+            <img src="/MCEC - White Logo.png" alt="MCEC Logo" loading="lazy" className="h-10 w-auto object-contain" />
             <div>
               <h1 className="text-xl font-bold gradient-text" data-testid="text-admin-title">Admin Dashboard</h1>
               <p className="text-xs text-slate-400">Manage assessments and view results</p>
@@ -912,7 +928,7 @@ export default function AdminPage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-lg font-semibold text-slate-100">Assessments</h2>
-              <Button size="sm" className="glow-button" onClick={() => navigate("/admin/builder")} data-testid="button-create-quiz">
+              <Button size="sm" className="glow-button min-h-[44px]" onClick={() => navigate("/admin/builder")} data-testid="button-create-quiz">
                 <Plus className="w-4 h-4 mr-1" />
                 New Assessment
               </Button>
@@ -923,14 +939,16 @@ export default function AdminPage() {
                 Failed to load assessments. Please refresh and try again.
               </div>
             ) : isLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full bg-white/5" />)}
+              <div className="space-y-3" data-testid="admin-skeleton-loading">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 w-full rounded-xl bg-slate-800 animate-pulse" />
+                ))}
               </div>
             ) : !quizzes || quizzes.length === 0 ? (
               <div className="text-center py-16">
                 <BookOpen className="w-12 h-12 mx-auto text-slate-600 mb-3" />
                 <h3 className="text-lg font-medium text-slate-400">No assessments yet</h3>
-                <p className="text-sm text-slate-500 mt-1">Create your first assessment to get started.</p>
+                <p className="text-sm text-slate-400 mt-1">Create your first assessment to get started.</p>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -985,7 +1003,7 @@ export default function AdminPage() {
                           }>
                             {isClosed ? "Closed" : "Open"}
                           </Badge>
-                          <Eye className="w-4 h-4 text-slate-500" />
+                          <Eye className="w-4 h-4 text-slate-400" />
                         </div>
                       </div>
                       <div className="mt-3 pt-3 border-t border-white/10 text-xs text-slate-400 flex gap-4 flex-wrap">

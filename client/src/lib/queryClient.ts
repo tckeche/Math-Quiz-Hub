@@ -6,6 +6,9 @@ async function throwIfResNotOk(res: Response) {
     // Try to extract a user-friendly message from JSON responses
     try {
       const json = JSON.parse(text);
+      if (json?.error?.message) {
+        throw new Error(json.error.message);
+      }
       if (json.message) {
         throw new Error(json.message);
       }
@@ -56,11 +59,13 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: 1000 * 60 * 5,
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30_000),
     },
     mutations: {
-      retry: false,
+      retry: 1,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10_000),
     },
   },
 });
