@@ -1,0 +1,49 @@
+{
+  "system_prompt": {
+    "task": "SOMA Enterprise Architecture V2 - Pipeline & UI Overhaul",
+    "role": "Lead Backend Architect and Principal React Engineer for SOMA (MCEC's Multi-Syllabus Assessment Platform)",
+    "objective": "I have defined a strict set of 12 new enterprise features. You must audit the existing codebase and rewrite the necessary schemas, API routes, and React components to implement these features perfectly. Do not leave placeholder code. Implement fully.",
+    "execution_instructions": "Read the JSON configuration below. Rewrite the necessary files to implement this architecture. Provide a bulleted summary of the specific code changes made."
+  },
+  "architecture_updates": {
+    "1_database_schema_and_mcec_identity": {
+      "target_file": "schema.ts",
+      "mcec_identity": "Ensure 'syllabus' and 'level' are flexible. Add 'IEB' and 'NSC' as primary examples for Syllabi. Add 'University' and 'Grade 6-12' to Levels.",
+      "quiz_archiving": "Add a boolean column 'is_archived' (default: false) to the 'SomaQuizzes' table.",
+      "preloaded_explanations": "Ensure the 'SomaQuestions' JSONB schema strictly requires an 'explanation' string field for every question to instantly explain why an answer is right or wrong."
+    },
+    "2_admin_dashboard_and_bulk_actions": {
+      "quiz_cards": "On the Admin Quiz list, add a snapshot footer to each quiz tile displaying: Total Questions, Total Submissions, Subject, and Level.",
+      "bulk_management_ui": "Add checkboxes to select multiple quizzes. Create a floating action bar.",
+      "bulk_actions_required": [
+        "Archive: Soft delete (sets is_archived: true, hiding it from students but preserving report data).",
+        "Hard Delete: Permanently deletes the quiz AND cascades to delete all associated student reports/grades.",
+        "Extend Available Time: Adds +24 hours to the 'due_date' of selected quizzes.",
+        "Mark Open/Overdue: Manually toggle status."
+      ]
+    },
+    "3_maker_checker_ai_pipeline": {
+      "target_file": "server/services/somaPipeline.ts",
+      "phase_1_maker": "Claude is the primary generator. It MUST take the syllabus/level context, uploaded PDF data, or Copilot prompts and generate the MCQs. It MUST preload short explanations for why the correct answer is right and why distractors are wrong.",
+      "phase_2_checker": "Gemini must act as the QA Auditor. It must receive Claude's JSON output, perform a sanity check against the requested syllabus/level, verify formatting, and return the final validated JSON.",
+      "document_uploads": "Remove the 'Generate from PDF' standalone option. Keep 'Upload Supporting Documents' inside the Copilot. The backend must parse uploaded PDFs and feed the raw text strictly to Claude first."
+    },
+    "4_copilot_web_fetching_tool": {
+      "pdf_fetcher": "If the Admin types a past paper code (e.g., '0620/v2/2021'), the AI must use a web search tool to find the past paper and mark scheme PDFs online, download them into buffer memory, parse the text, and feed it into the Maker-Checker pipeline.",
+      "missing_context_logic": "If the Admin's prompt lacks sufficient parameters (Level, Subject, etc.), Copilot must ask the Admin for clarification in the chat before generating."
+    },
+    "5_admin_quiz_builder_ui": {
+      "target_file": "AdminQuizBuilder.tsx",
+      "read_only_preview": "REMOVE raw JSON editing from the UI. The quiz preview must render exactly how students see it (using ReactMarkdown and KaTeX). To edit a question, the Admin MUST type the request into the Copilot chat.",
+      "parameter_ui": "Ensure the Syllabus, Level, and Subject input dropdowns/boxes are perfectly uniform in height and spacing.",
+      "animated_pipeline_ui": "While the AI is working, display an animated status sequence inside the Copilot window: '🔍 Fetching Context...' -> '🧠 Claude is drafting questions...' -> '🛡️ Gemini is auditing quality...' -> '✅ Finalizing Assessment'."
+    },
+    "6_student_ui_and_pdf_generation": {
+      "wording_change": "Change all instances of 'AI Analyzing...' to 'Your Report is being generated...'.",
+      "status_icon": "The document icon on completed quizzes must be Orange while generating, and Green when complete.",
+      "review_explanations": "When reviewing a quiz, instantly display the preloaded explanations (from Phase 1) under each question explaining why the student's answer was right/wrong.",
+      "accurate_numbering": "Ensure AI feedback and review screens number questions sequentially (1, 2, 3...) matching the quiz layout, NEVER using database IDs like 'Q156'.",
+      "frontend_pdf_export": "Implement 'react-to-pdf' or 'html2pdf.js' on the Student Review screen. Provide a 'Download Report' button that instantly generates a cleanly formatted PDF (Color Logo, Name, Grade, Explanations) locally in the browser, completely removing the need for 14-day server storage."
+    }
+  }
+}
