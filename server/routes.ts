@@ -151,24 +151,27 @@ async function runBackgroundGrading(
   try {
     console.log(`[SOMA Grading] Starting background AI grading for report ${reportId}`);
 
-    const breakdown = questions.map((q) => {
+    const breakdown = questions.map((q, idx) => {
+      const questionNumber = idx + 1;
       const studentAnswer = studentAnswers[String(q.id)] || "(no answer)";
       const isCorrect = studentAnswer === q.correctAnswer;
-      return `Q: ${q.stem}\nStudent Answer: ${studentAnswer}\nCorrect Answer: ${q.correctAnswer}\nResult: ${isCorrect ? "CORRECT" : "INCORRECT"} (${q.marks} marks)`;
+      return `Question ${questionNumber}: ${q.stem}\nStudent Answer: ${studentAnswer}\nCorrect Answer: ${q.correctAnswer}\nResult: ${isCorrect ? "CORRECT" : "INCORRECT"} (${q.marks} marks)`;
     }).join("\n\n");
 
-    const systemPrompt = `You are a mathematics tutor providing personalized feedback to a student. Analyze their quiz performance and provide actionable feedback in clean HTML format. Use <h3> for section headings, <ul>/<li> for lists, <p> for paragraphs, and <strong> for emphasis. Keep feedback encouraging yet specific about areas for improvement.`;
+    const systemPrompt = `You are a mathematics tutor providing personalized feedback to a student. Analyze their quiz performance and provide actionable feedback in clean HTML format. Use <h3> for section headings, <ul>/<li> for lists, <p> for paragraphs, and <strong> for emphasis. Keep feedback encouraging yet specific about areas for improvement.
+
+CRITICAL: When referencing specific questions in your report, you MUST use the sequential question numbers provided in the data (e.g., "In Question 1...", "For Question 4..."). You are strictly forbidden from making up numbers or using database IDs like Q156 or Q167. Always say "Question 1", "Question 2", etc.`;
 
     const userPrompt = `Student scored ${totalScore}/${maxPossibleScore} (${Math.round((totalScore / maxPossibleScore) * 100)}%).
 
-Here is the breakdown:
+Here is the question-by-question breakdown (numbered sequentially as they appear in the quiz):
 
 ${breakdown}
 
 Provide:
 1. An overall performance summary
 2. Specific strengths demonstrated
-3. Areas needing improvement with concrete study suggestions
+3. Areas needing improvement with concrete study suggestions — reference questions by their sequential number (e.g. "Question 3")
 4. Encouragement and next steps`;
 
     const gradePromise = generateWithFallback(systemPrompt, userPrompt);
