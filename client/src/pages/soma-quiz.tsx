@@ -376,21 +376,29 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
   };
 
   const previewBanner = isPreview ? (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-amber-500/90 via-orange-500/90 to-amber-500/90 backdrop-blur-sm border-b border-amber-400/30 shadow-lg shadow-amber-500/20" data-testid="banner-preview-mode">
+    <div className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 shadow-lg" data-testid="banner-preview-mode">
       <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-white" />
-          <span className="text-sm font-semibold text-white tracking-wide">Admin Preview Mode — Scores will not be saved.</span>
-        </div>
         <Button
           size="sm"
-          variant="ghost"
-          className="text-white hover:bg-white/20 text-xs font-medium"
+          className="hover:bg-slate-800 bg-transparent text-slate-300 transition-colors px-4 py-2 rounded-lg flex items-center gap-2 min-h-[44px]"
           onClick={(props as PreviewProps).onExitPreview}
           data-testid="button-exit-preview"
         >
-          <X className="w-3.5 h-3.5 mr-1" />
-          Exit Preview
+          <ArrowLeft className="w-4 h-4" />
+          <span className="hidden sm:inline">Exit Preview</span>
+        </Button>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          <span className="text-xs sm:text-sm font-semibold text-amber-300 tracking-wide">Admin Preview — Scores will not be saved</span>
+        </div>
+        <Button
+          size="sm"
+          className="hover:bg-slate-800 bg-transparent text-slate-400 transition-colors px-4 py-2 rounded-lg flex items-center gap-2 min-h-[44px]"
+          onClick={() => { (props as PreviewProps).onExitPreview(); setLocation("/admin"); }}
+          data-testid="button-preview-to-dashboard"
+        >
+          <Home className="w-4 h-4" />
+          <span className="hidden sm:inline">Dashboard</span>
         </Button>
       </div>
     </div>
