@@ -586,7 +586,7 @@ export default function StudentDashboard() {
                                   {isPending ? (
                                     <span className="flex items-center gap-1 text-[10px] text-amber-400" data-testid={`status-pending-${item.id}`}>
                                       <Loader2 className="w-3 h-3 animate-spin" />
-                                      AI Analyzing...
+                                      Your Report is being generated...
                                     </span>
                                   ) : isFailed ? (
                                     <span className="flex items-center gap-1 text-[10px] text-red-400" data-testid={`status-failed-${item.id}`}>
@@ -610,7 +610,7 @@ export default function StudentDashboard() {
                                             ? "text-emerald-400 hover:text-emerald-300 cursor-pointer"
                                             : "text-amber-500 animate-pulse hover:text-amber-400 cursor-pointer"
                                     }`}
-                                    title={isLoadingThis ? "Generating AI analysis..." : hasAiAnalysis ? "View AI analysis" : "Generate AI analysis"}
+                                    title={isLoadingThis ? "Your Report is being generated..." : hasAiAnalysis ? "View AI analysis" : "Generate AI analysis"}
                                     data-testid={`icon-ai-status-${item.type}-${item.id}`}
                                     onClick={(e) => {
                                       e.stopPropagation();

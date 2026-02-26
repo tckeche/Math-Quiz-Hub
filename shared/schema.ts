@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, serial, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, serial, uuid, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ export const quizzes = pgTable("quizzes", {
   syllabus: text("syllabus"),
   level: text("level"),
   subject: text("subject"),
+  isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -75,8 +76,12 @@ export const somaQuizzes = pgTable("soma_quizzes", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   topic: text("topic").notNull(),
+  syllabus: text("syllabus").default("IEB"),
+  level: text("level").default("Grade 6-12"),
+  subject: text("subject"),
   curriculumContext: text("curriculum_context"),
   status: text("status").notNull().default("draft"),
+  isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -86,7 +91,7 @@ export const somaQuestions = pgTable("soma_questions", {
   stem: text("stem").notNull(),
   options: json("options").$type<string[]>().notNull(),
   correctAnswer: text("correct_answer").notNull(),
-  explanation: text("explanation"),
+  explanation: text("explanation").notNull(),
   marks: integer("marks").notNull().default(1),
 });
 

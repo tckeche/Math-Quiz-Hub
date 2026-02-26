@@ -837,7 +837,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
 }
 
 export default function AdminPage() {
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
 
   const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
@@ -850,9 +850,18 @@ export default function AdminPage() {
 
   const authenticated = adminSession?.authenticated === true;
 
-  const { data: quizzes, isLoading, error: quizzesError } = useQuery<Quiz[]>({
+  const { data: quizzes, isLoading, error: quizzesError } = useQuery<(Quiz & { snapshot?: { totalQuestions: number; totalSubmissions: number; subject: string; level: string } })[]>({
     queryKey: ["/api/admin/quizzes"],
     enabled: authenticated,
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: async (action: "archive" | "hard_delete" | "extend_24h" | "mark_open" | "mark_overdue") =>
+      apiRequest("POST", "/api/admin/quizzes/bulk-action", { action, quizIds: selectedIds }),
+    onSuccess: () => {
+      setSelectedIds([]);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+    },
   });
 
   const [, navigate] = useLocation();
@@ -924,8 +933,19 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="grid gap-3">
+                {selectedIds.length > 0 && (
+                  <div className="sticky bottom-3 z-20 glass-card p-3 flex flex-wrap gap-2 items-center">
+                    <span className="text-xs text-slate-300">{selectedIds.length} selected</span>
+                    <Button size="sm" onClick={() => bulkMutation.mutate("archive")}>Archive</Button>
+                    <Button size="sm" onClick={() => bulkMutation.mutate("extend_24h")}>+24h</Button>
+                    <Button size="sm" onClick={() => bulkMutation.mutate("mark_open")}>Mark Open</Button>
+                    <Button size="sm" onClick={() => bulkMutation.mutate("mark_overdue")}>Mark Overdue</Button>
+                    <Button size="sm" variant="destructive" onClick={() => bulkMutation.mutate("hard_delete")}>Hard Delete</Button>
+                  </div>
+                )}
                 {quizzes.map((quiz) => {
                   const isClosed = new Date(quiz.dueDate) < new Date();
+                  const isChecked = selectedIds.includes(quiz.id);
                   return (
                     <div
                       key={quiz.id}
@@ -935,6 +955,14 @@ export default function AdminPage() {
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              setSelectedIds((prev) => e.target.checked ? [...prev, quiz.id] : prev.filter((id) => id !== quiz.id));
+                            }}
+                          />
                           <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0 border border-violet-500/20">
                             <BookOpen className="w-4 h-4 text-violet-400" />
                           </div>
@@ -955,6 +983,12 @@ export default function AdminPage() {
                           </Badge>
                           <Eye className="w-4 h-4 text-slate-500" />
                         </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-white/10 text-xs text-slate-400 flex gap-4 flex-wrap">
+                        <span>Total Questions: {quiz.snapshot?.totalQuestions ?? 0}</span>
+                        <span>Total Submissions: {quiz.snapshot?.totalSubmissions ?? 0}</span>
+                        <span>Subject: {quiz.snapshot?.subject || quiz.subject || "General"}</span>
+                        <span>Level: {quiz.snapshot?.level || quiz.level || "N/A"}</span>
                       </div>
                     </div>
                   );

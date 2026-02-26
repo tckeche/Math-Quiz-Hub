@@ -29,13 +29,13 @@ type DraftQuestion = {
   image_url?: string | null;
 };
 
-const LEVEL_OPTIONS = ["IGCSE", "AS", "A2", "IB1", "IB2", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "Other"];
+const LEVEL_OPTIONS = ["University", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "IGCSE", "AS", "A2", "Other"];
 
 const PIPELINE_STAGES = [
-  { stage: 1, icon: "scan", label: "Gemini is reading the PDF...", aiName: "Google Gemini" },
-  { stage: 2, icon: "brain", label: "DeepSeek is analysing the content...", aiName: "DeepSeek R1" },
-  { stage: 3, icon: "pencil", label: "Claude is formatting the questions...", aiName: "Claude Sonnet" },
-  { stage: 4, icon: "search", label: "ChatGPT is validating the database schema...", aiName: "GPT-4o" },
+  { stage: 1, icon: "search", label: "🔍 Fetching Context...", aiName: "Context Engine" },
+  { stage: 2, icon: "brain", label: "🧠 Claude is drafting questions...", aiName: "Claude Sonnet" },
+  { stage: 3, icon: "scan", label: "🛡️ Gemini is auditing quality...", aiName: "Gemini QA" },
+  { stage: 4, icon: "pencil", label: "✅ Finalizing Assessment", aiName: "SOMA Pipeline" },
 ];
 
 export default function BuilderPage() {
@@ -235,64 +235,6 @@ export default function BuilderPage() {
     setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, image_url: data.url } : d)));
   };
 
-  const startPipeline = async (file: File) => {
-    setPipelineActive(true);
-    setCurrentStage(0);
-    setCompletedStages(new Set());
-    setStageLabel("");
-
-    const formData = new FormData();
-    formData.append("pdf", file);
-
-    try {
-      const res = await fetch("/api/generate-questions", { method: "POST", body: formData, credentials: "include" });
-      if (!res.ok || !res.body) throw new Error("Server connection failed");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let pendingEventType = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            pendingEventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ") && pendingEventType) {
-            const evType = pendingEventType;
-            pendingEventType = "";
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (evType === "stage") {
-                setCurrentStage(data.stage);
-                setStageLabel(data.label);
-              } else if (evType === "stage_done") {
-                setCompletedStages(prev => { const next = new Set(Array.from(prev)); next.add(data.stage); return next; });
-              } else if (evType === "result") {
-                setDrafts(prev => [...prev, ...data.questions]);
-                toast({ title: `${data.questions.length} questions extracted from PDF` });
-              } else if (evType === "error") {
-                throw new Error(data.message);
-              }
-            } catch (parseErr: any) {
-              if (parseErr.message && !parseErr.message.includes("JSON")) throw parseErr;
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      toast({ title: "AI pipeline failed", description: err.message, variant: "destructive" });
-    } finally {
-      setPipelineActive(false);
-    }
-  };
-
   const handleSupportingDoc = async (file: File, docType: string) => {
     const docEntry = { name: file.name, type: docType, processing: true };
     setSupportingDocs((prev) => [...prev, docEntry]);
@@ -311,8 +253,6 @@ export default function BuilderPage() {
         fileId = uploadData.id;
       }
 
-      // Also run the pipeline to extract questions
-      await startPipeline(file);
       setSupportingDocs((prev) =>
         prev.map((d) => (d.name === file.name && d.type === docType ? { ...d, processing: false } : d))
       );
@@ -337,15 +277,7 @@ export default function BuilderPage() {
     }
   };
 
-  const addManualQuestion = () => {
-    setDrafts(prev => [...prev, {
-      prompt_text: "",
-      options: ["", "", "", ""],
-      correct_answer: "",
-      marks_worth: 1,
-      image_url: null,
-    }]);
-  };
+
 
   const totalQuestions = savedQuestions.length + drafts.length;
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -518,27 +450,8 @@ export default function BuilderPage() {
             </div>
           </div>
 
-          {/* PDF Upload + Add Manual — compact inline row */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="glass-card p-3 flex items-center gap-3 flex-1 min-w-[280px]">
-              <FileText className="w-4 h-4 text-violet-400 shrink-0" />
-              <span className="text-xs text-slate-400 shrink-0">Generate from PDF</span>
-              <Input
-                type="file"
-                accept=".pdf"
-                className="glass-input text-xs flex-1"
-                disabled={pipelineActive}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) startPipeline(file);
-                }}
-                data-testid="input-pdf-upload"
-              />
-            </div>
-            <Button className="glow-button-outline text-xs shrink-0" size="sm" onClick={addManualQuestion} data-testid="button-add-manual">
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Add Manually
-            </Button>
+          <div className="glass-card p-3 text-xs text-slate-400">
+            Upload supporting PDFs in Copilot, then request edits through chat. Direct manual/JSON editing is disabled by policy.
           </div>
 
           {/* Supporting Documents */}

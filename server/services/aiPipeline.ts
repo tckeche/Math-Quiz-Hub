@@ -3,110 +3,56 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { generateWithFallback } from "./aiOrchestrator";
 
 export const QuestionSchema = z.object({
-  stem: z.string().describe("The question text, may include LaTeX notation"),
-  options: z.array(z.string()).min(4).max(4).describe("Exactly 4 answer choices"),
-  correct_answer: z.string().describe("The correct answer, must match one of the options exactly"),
-  explanation: z.string().describe("A brief explanation of why the correct answer is right"),
-  marks: z.number().int().min(1).max(10).describe("Mark value for this question"),
+  stem: z.string(),
+  options: z.array(z.string()).length(4),
+  correct_answer: z.string(),
+  explanation: z.string().min(1),
+  marks: z.number().int().min(1).max(10),
 });
 
 export const QuizResultSchema = z.object({
-  questions: z.array(QuestionSchema).min(1).describe("Array of quiz questions"),
+  questions: z.array(QuestionSchema).min(1),
 });
 
 export type QuizResult = z.infer<typeof QuizResultSchema>;
+export interface SomaGenerationContext {
+  topic: string;
+  subject: string;
+  syllabus: string;
+  level: string;
+  copilotPrompt?: string;
+  supportingDocText?: string;
+}
 
 const jsonSchema = zodToJsonSchema(QuizResultSchema, "QuizResult");
 
-async function step1Generate(topic: string): Promise<QuizResult> {
-  console.log("[SOMA Pipeline] Step 1: Generating initial quiz...");
-
-  const systemPrompt = `You are an expert mathematics assessment designer. Generate quizzes of high-quality multiple-choice questions. Return a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
-
-CRITICAL FORMATTING RULES:
-- You MUST format all math using standard LaTeX enclosed in $ for inline and $$ for block math.
-- Format all programming code using standard markdown code blocks with the language specified (e.g. \`\`\`python).
-- Use markdown formatting (bold, lists, etc.) where appropriate for clarity.`;
-
-  const userPrompt = `Generate a quiz of 5 high-quality multiple-choice questions on the topic: "${topic}".
-
-Requirements:
-- Each question MUST be multiple-choice with exactly 4 options. NEVER generate open-ended or free-response questions.
-- There must be exactly 1 correct answer and 3 carefully calculated distractors. Distractors must be based on common student errors (e.g., sign errors, unit conversion mistakes, forgetting to apply a rule, off-by-one errors, partial solutions).
-- Include LaTeX notation where appropriate using $ for inline math and $$ for block math
-- Provide clear, educational explanations
-- Vary difficulty levels across questions
-- Assign marks between 1-5 based on difficulty
-- Ensure correct_answer exactly matches one of the options`;
-
-  const { data } = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
-  const parsed = QuizResultSchema.parse(JSON.parse(data));
-  console.log(`[SOMA Pipeline] Step 1 complete: ${parsed.questions.length} questions generated`);
-  return parsed;
+function extractJson(raw: string): QuizResult {
+  return QuizResultSchema.parse(JSON.parse(raw));
 }
 
-async function step2Audit(claudeResult: QuizResult, topic: string): Promise<QuizResult> {
-  console.log("[SOMA Pipeline] Step 2: Auditing mathematical accuracy...");
-
-  const systemPrompt = `You are a rigorous mathematics auditor. Review quiz questions for mathematical accuracy and return corrected data as a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
-
-CRITICAL FORMATTING RULES:
-- You MUST format all math using standard LaTeX enclosed in $ for inline and $$ for block math.
-- Format all programming code using standard markdown code blocks with the language specified (e.g. \`\`\`python).
-- Use markdown formatting (bold, lists, etc.) where appropriate for clarity.`;
-
-  const userPrompt = `Review the following quiz questions on "${topic}" for mathematical accuracy.
-
-For each question:
-1. Verify the correct_answer is actually correct by solving the problem
-2. Fix any mathematical errors in the stem, options, or explanation
-3. Ensure LaTeX notation uses $ for inline math and $$ for block math (NOT \\( \\) or \\[ \\])
-4. Keep the same structure but improve quality where needed
-
-Quiz data:
-${JSON.stringify(claudeResult)}`;
-
-  const { data } = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
-  const parsed = QuizResultSchema.parse(JSON.parse(data));
-  console.log(`[SOMA Pipeline] Step 2 complete: ${parsed.questions.length} questions audited`);
-  return parsed;
+export async function parsePdfTextFromBuffer(buffer: Buffer): Promise<string> {
+  const text = buffer.toString("latin1").replace(/\s+/g, " ").trim();
+  if (!text) throw new Error("Unable to parse PDF text content");
+  return text;
 }
 
-async function step3SyllabusAudit(deepseekResult: QuizResult, topic: string): Promise<QuizResult> {
-  console.log("[SOMA Pipeline] Step 3: Final syllabus audit...");
-
-  const systemPrompt = `You are a curriculum alignment specialist. Review mathematics quizzes for syllabus compliance and pedagogical quality. Return the audited quiz as a JSON object with a "questions" array matching this schema: ${JSON.stringify(jsonSchema)}
-
-CRITICAL FORMATTING RULES:
-- You MUST format all math using standard LaTeX enclosed in $ for inline and $$ for block math.
-- Format all programming code using standard markdown code blocks with the language specified (e.g. \`\`\`python).
-- Use markdown formatting (bold, lists, etc.) where appropriate for clarity.`;
-
-  const userPrompt = `Review this mathematics quiz on "${topic}" for syllabus compliance and pedagogical quality.
-
-For each question:
-1. Ensure it aligns with standard mathematics curricula
-2. Verify the explanation is clear and educational
-3. Check that difficulty progression makes sense
-4. Ensure LaTeX formatting uses $ for inline math and $$ for block math (NOT \\( \\) or \\[ \\])
-5. Confirm marks allocation is fair
-
-Input quiz:
-${JSON.stringify(deepseekResult)}`;
-
-  const { data } = await generateWithFallback(systemPrompt, userPrompt, jsonSchema);
-  const parsed = QuizResultSchema.parse(JSON.parse(data));
-  console.log(`[SOMA Pipeline] Step 3 complete: ${parsed.questions.length} questions finalized`);
-  return parsed;
+export async function fetchPaperContext(paperCode: string): Promise<string> {
+  const query = encodeURIComponent(`${paperCode} past paper mark scheme pdf`);
+  const html = await fetch(`https://duckduckgo.com/html/?q=${query}`).then((r) => r.text());
+  return `Web search snippets for ${paperCode}:\n${html.slice(0, 6000)}`;
 }
 
-export async function generateAuditedQuiz(topic: string): Promise<QuizResult> {
-  console.log(`[SOMA Pipeline] Starting multi-agent pipeline for topic: "${topic}"`);
+export async function generateAuditedQuiz(input: SomaGenerationContext | string): Promise<QuizResult> {
+  const context: SomaGenerationContext = typeof input === "string"
+    ? { topic: input, subject: "Mathematics", syllabus: "IEB", level: "Grade 6-12" }
+    : input;
 
-  const generated = await step1Generate(topic);
-  const audited = await step2Audit(generated, topic);
-  const finalized = await step3SyllabusAudit(audited, topic);
+  const makerPrompt = `You are Claude (Maker), an expert mathematics assessment designer. Generate MCQ quiz JSON for ${context.subject}. Use syllabus ${context.syllabus} and level ${context.level}. Include explanation for each question describing why correct answer is right and why distractors are wrong.`;
+  const checkerPrompt = `You are Gemini (Checker). Audit the Maker JSON for mathematical accuracy, formatting, and syllabus-level alignment (${context.syllabus}/${context.level}).`;
+  const finalizerPrompt = `Perform final curriculum compliance and syllabus audit. Return strictly valid JSON only.`;
 
-  console.log("[SOMA Pipeline] Pipeline complete!");
-  return finalized;
+  const { data: maker } = await generateWithFallback(makerPrompt, `Topic: ${context.topic}\n${context.copilotPrompt || ""}\n${context.supportingDocText || ""}`, jsonSchema);
+  const { data: checker } = await generateWithFallback(checkerPrompt, `Topic: ${context.topic}\nInput JSON:\n${maker}`, jsonSchema);
+  const { data: final } = await generateWithFallback(finalizerPrompt, `Topic: ${context.topic}\nInput JSON:\n${checker}`, jsonSchema);
+  return extractJson(final);
 }
