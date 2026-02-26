@@ -235,9 +235,12 @@ export default function SomaQuizReview() {
                   })}
                 </div>
 
-                {q.explanation && (
-                  <div className="mt-4 bg-violet-500/5 border border-violet-500/20 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-violet-400 mb-1 uppercase tracking-wider">Explanation</p>
+                {!isCorrect && studentAnswer && q.explanation && (
+                  <div className="mt-4 p-4 rounded-r-xl bg-red-500/10 border-l-4 border-red-500" data-testid={`review-explanation-${idx + 1}`}>
+                    <p className="text-xs font-semibold text-red-400 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Why this was wrong
+                    </p>
                     <div className="text-sm text-slate-300 leading-relaxed">
                       <MarkdownRenderer content={q.explanation} />
                     </div>

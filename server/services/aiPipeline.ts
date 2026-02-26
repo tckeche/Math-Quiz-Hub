@@ -47,7 +47,7 @@ export async function generateAuditedQuiz(input: SomaGenerationContext | string)
     ? { topic: input, subject: "Mathematics", syllabus: "IEB", level: "Grade 6-12" }
     : input;
 
-  const makerPrompt = `You are Claude (Maker), an expert mathematics assessment designer. Generate MCQ quiz JSON for ${context.subject}. Use syllabus ${context.syllabus} and level ${context.level}. Include explanation for each question describing why correct answer is right and why distractors are wrong.`;
+  const makerPrompt = `You are Claude (Maker), an expert mathematics assessment designer. Generate MCQ quiz JSON for ${context.subject}. Use syllabus ${context.syllabus} and level ${context.level}. For each question, the "explanation" field MUST be exactly 1–2 sentences: briefly state why the correct answer is right, AND explicitly point out the mathematical or logical error that leads to each incorrect distractor.`;
   const checkerPrompt = `You are Gemini (Checker). Audit the Maker JSON for mathematical accuracy, formatting, and syllabus-level alignment (${context.syllabus}/${context.level}).`;
   const finalizerPrompt = `Perform final curriculum compliance and syllabus audit. Return strictly valid JSON only.`;
 
