@@ -93,11 +93,13 @@ describe("questionUploadSchema", () => {
     expect(result.success).toBe(true); // valid empty array
   });
 
-  it("allows questions with fewer than 2 options (structured/essay types)", () => {
+  it("requires exactly 4 options for strict MCQ generation", () => {
     const oneOption = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A"] }]);
-    expect(oneOption.success).toBe(true);
+    expect(oneOption.success).toBe(false);
     const noOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: [] }]);
-    expect(noOptions.success).toBe(true);
+    expect(noOptions.success).toBe(false);
+    const fourOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A", "B", "C", "D"] }]);
+    expect(fourOptions.success).toBe(true);
   });
 
   it("rejects missing prompt_text", () => {

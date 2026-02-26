@@ -9,7 +9,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import {
   LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
-  Loader2, AlertTriangle, Filter, ChevronDown, Sparkles,
+  Loader2, AlertTriangle, Sparkles,
   Eye, FileText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +39,7 @@ interface SubmissionWithQuiz {
 }
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
-const SECTION_LABEL = "text-sm font-semibold tracking-wider text-slate-400 uppercase";
+const SECTION_LABEL = "text-slate-400 text-xs font-semibold tracking-wider uppercase";
 
 function DonutCard({ subject, percentage, color }: { subject: string; percentage: number; color: string }) {
   const data = [
@@ -110,7 +110,6 @@ export default function StudentDashboard() {
   const [, setLocation] = useLocation();
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
   const [levelFilter, setLevelFilter] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
   const [showAllAvailable, setShowAllAvailable] = useState(false);
   const [showAllCompleted, setShowAllCompleted] = useState(false);
   const [analysisPopup, setAnalysisPopup] = useState<{ title: string; html: string } | null>(null);
@@ -451,23 +450,12 @@ export default function StudentDashboard() {
 
             <div className="grid md:grid-cols-2 gap-6">
               <section className={CARD_CLASS}>
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl font-bold tracking-wide text-slate-200" data-testid="text-section-available">
-                    Available Quizzes
-                  </h2>
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-violet-400 transition-colors"
-                    data-testid="button-toggle-filters"
-                  >
-                    <Filter className="w-3.5 h-3.5" />
-                    Filters
-                    <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? "rotate-180" : ""}`} />
-                  </button>
-                </div>
+                <h2 className="text-3xl font-bold tracking-wide text-slate-200" data-testid="text-section-available">
+                  Available Quizzes
+                </h2>
 
-                {showFilters && (
-                  <div className="flex gap-2 mb-4 flex-wrap">
+                <div className="mt-4 mb-2 overflow-x-auto pb-2" data-testid="filter-bar">
+                  <div className="flex items-center gap-2 min-w-max">
                     <select
                       value={subjectFilter}
                       onChange={(e) => setSubjectFilter(e.target.value)}
@@ -477,19 +465,17 @@ export default function StudentDashboard() {
                       <option value="all">All Subjects</option>
                       {allSubjects.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    {allLevels.length > 0 && (
-                      <select
-                        value={levelFilter}
-                        onChange={(e) => setLevelFilter(e.target.value)}
-                        className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
-                        data-testid="select-level-filter"
-                      >
-                        <option value="all">All Levels</option>
-                        {allLevels.map((l) => <option key={l} value={l}>{l}</option>)}
-                      </select>
-                    )}
+                    <select
+                      value={levelFilter}
+                      onChange={(e) => setLevelFilter(e.target.value)}
+                      className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                      data-testid="select-level-filter"
+                    >
+                      <option value="all">All Levels</option>
+                      {allLevels.map((l) => <option key={l} value={l}>{l}</option>)}
+                    </select>
                   </div>
-                )}
+                </div>
 
                 <div className="flex flex-col gap-6 mt-6 mb-10">
                   {filteredQuizzes.length === 0 ? (
@@ -565,7 +551,7 @@ export default function StudentDashboard() {
               </section>
 
               <section className={CARD_CLASS}>
-                <h2 className="text-xl font-bold tracking-wide text-slate-200 mb-5" data-testid="text-section-completed">
+                <h2 className="text-3xl font-bold tracking-wide text-slate-200 mb-5" data-testid="text-section-completed">
                   Completed Quizzes
                 </h2>
                 <div className="flex flex-col gap-6 mt-6 mb-10">
@@ -580,6 +566,7 @@ export default function StudentDashboard() {
                         const sc = getSubjectColor(item.subject);
                         const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
                         const isPending = item.status === "pending";
+                        const isFailed = item.status === "failed";
                         const somaHasAnalysis = item.type === "soma" && !!item.feedbackHtml && !isPending;
                         const regularHasCachedAnalysis = item.type === "regular" && !!getCachedAnalysis(item.quizId, "regular");
                         const hasAiAnalysis = somaHasAnalysis || regularHasCachedAnalysis;
@@ -601,6 +588,11 @@ export default function StudentDashboard() {
                                       <Loader2 className="w-3 h-3 animate-spin" />
                                       AI Analyzing...
                                     </span>
+                                  ) : isFailed ? (
+                                    <span className="flex items-center gap-1 text-[10px] text-red-400" data-testid={`status-failed-${item.id}`}>
+                                      <AlertTriangle className="w-3 h-3" />
+                                      Analysis Failed
+                                    </span>
                                   ) : (
                                     <span className="flex items-center gap-1 text-[10px] text-emerald-400" data-testid={`status-completed-${item.id}`}>
                                       <CheckCircle2 className="w-3 h-3" />
@@ -611,10 +603,12 @@ export default function StudentDashboard() {
                                   <button
                                     className={`p-0.5 rounded transition-colors ${
                                       isLoadingThis
-                                        ? "text-amber-400 animate-pulse cursor-wait"
-                                        : hasAiAnalysis
-                                          ? "text-emerald-400 hover:text-emerald-300 cursor-pointer"
-                                          : "text-amber-500 hover:text-amber-400 cursor-pointer"
+                                        ? "text-amber-400 animate-spin cursor-wait"
+                                        : isFailed
+                                          ? "text-red-500 hover:text-red-400 cursor-pointer"
+                                          : hasAiAnalysis
+                                            ? "text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                                            : "text-amber-500 animate-pulse hover:text-amber-400 cursor-pointer"
                                     }`}
                                     title={isLoadingThis ? "Generating AI analysis..." : hasAiAnalysis ? "View AI analysis" : "Generate AI analysis"}
                                     data-testid={`icon-ai-status-${item.type}-${item.id}`}
@@ -655,8 +649,8 @@ export default function StudentDashboard() {
                                 </div>
                                 <div className="flex items-center gap-2 mt-1.5 justify-end">
                                   {/* Eye icon to review quiz answers */}
-                                  {item.type === "regular" && (
-                                    <Link href={`/quiz/${item.quizId}`}>
+                                  {(
+                                    <Link href={item.type === "soma" ? `/soma/review/${item.id}` : `/quiz/${item.quizId}`}>
                                       <button
                                         className="text-cyan-400 hover:text-cyan-300 transition-colors p-0.5"
                                         title="Review answers"
@@ -701,15 +695,6 @@ export default function StudentDashboard() {
                         </button>
                       )}
                     </>
-                  )}
-                  {completedItems.length > 5 && (
-                    <button
-                      onClick={() => setShowAllCompleted(!showAllCompleted)}
-                      className="w-full text-center text-xs text-violet-400 hover:text-violet-300 transition-colors py-2 mt-1"
-                      data-testid="button-toggle-completed"
-                    >
-                      {showAllCompleted ? "Show Less" : `Show More (${completedItems.length - 5} more)`}
-                    </button>
                   )}
                 </div>
               </section>
