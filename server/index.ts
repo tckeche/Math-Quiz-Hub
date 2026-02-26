@@ -21,6 +21,7 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+app.set("trust proxy", 1);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -81,6 +82,22 @@ httpServer.listen(
 
 (async () => {
   try {
+    const { db } = await import("./db");
+    if (db) {
+      const { sql } = await import("drizzle-orm");
+      const migrations = [
+        `ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false`,
+        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false`,
+        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS syllabus text DEFAULT 'IEB'`,
+        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS level text DEFAULT 'Grade 6-12'`,
+        `ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS subject text`,
+      ];
+      for (const m of migrations) {
+        try { await db.execute(sql.raw(m)); } catch {}
+      }
+      log("schema migrations applied", "bootstrap");
+    }
+
     const { seedDatabase } = await import("./seed");
     try {
       await seedDatabase();
