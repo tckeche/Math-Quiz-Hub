@@ -56,11 +56,13 @@ export type Submission = typeof submissions.$inferSelect;
 export type InsertSubmission = z.infer<typeof insertSubmissionSchema>;
 
 export const questionUploadSchema = z.array(z.object({
-  prompt_text: z.string(),
+  prompt_text: z.string().min(1),
   image_url: z.string().nullable().optional(),
-  options: z.array(z.string()).length(4),
-  correct_answer: z.string(),
+  options: z.array(z.string().min(1)).length(4),
+  correct_answer: z.string().min(1),
   marks_worth: z.number().int().positive().default(1),
+}).refine((q) => q.options.includes(q.correct_answer), {
+  message: "correct_answer must match one of the options",
 }));
 
 export type QuestionUpload = z.infer<typeof questionUploadSchema>;

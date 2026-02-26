@@ -77,8 +77,13 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - **Soma Quiz Engine**: Student-facing quiz UI at `/soma/quiz/:id` with glassmorphism cards, LaTeX rendering, option selection, navigation dots, skip/next, and summary view. Answers stored in React state only (no submission endpoint yet). Supports preview mode via props (previewMode, previewTitle, previewQuestions, onExitPreview).
 - **Admin Quiz Preview**: Builder page has "Preview Quiz" button that opens full-screen overlay rendering SomaQuizEngine with current saved+draft questions. Amber banner "Admin Preview Mode — Scores will not be saved." persists across question view and summary. Exit Preview button closes overlay.
 
+### Copilot Draft Normalization
+- The copilot response handler normalizes AI output to match `questionUploadSchema`: converts object options `{A: ..., B: ...}` to sorted arrays, maps field name variants (`question`/`stem` → `prompt_text`), converts letter answers ("B") to full option text, and validates `correct_answer ∈ options` before returning drafts.
+- `questionUploadSchema` enforces: exactly 4 non-empty string options, non-empty `prompt_text` and `correct_answer`, `correct_answer` must match one of the options (`.refine()`).
+- Auto-migration on startup: `server/index.ts` runs `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for `is_archived`, `syllabus`, `level`, `subject` to keep Supabase DB in sync with Drizzle schema (since `drizzle.config.ts` uses `DATABASE_URL` which points to Replit DB, not Supabase).
+
 ### Soma Pipeline Tables
 - `soma_users` - id (uuid, maps to Supabase auth UID), email, display_name, created_at
-- `soma_quizzes` - id, title, topic, curriculum_context, status (draft/published), created_at
-- `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation, marks
+- `soma_quizzes` - id, title, topic, syllabus (default 'IEB'), level (default 'Grade 6-12'), subject, curriculum_context, status (draft/published), is_archived (default false), created_at
+- `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation (NOT NULL), marks
 - `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status (default: 'pending'), ai_feedback_html, answers_json (jsonb, student's submitted answers), created_at

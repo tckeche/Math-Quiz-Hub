@@ -706,8 +706,32 @@ ${await parsePdfTextFromBuffer(fs.readFileSync(filePath))}`;
 ${await fetchPaperContext(paperCode)}`;
       }
 
+      const copilotSystemPrompt = `You are SOMA Copilot, an expert MCQ assessment generator for the MCEC platform.
+
+CRITICAL: You MUST generate questions as a JSON array with this EXACT schema:
+\`\`\`json
+[
+  {
+    "prompt_text": "The full question text with LaTeX like \\\\(x^2\\\\) if needed",
+    "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+    "correct_answer": "The full text of the correct option (must exactly match one of the options)",
+    "marks_worth": 2,
+    "explanation": "Brief explanation of why the correct answer is right"
+  }
+]
+\`\`\`
+
+RULES:
+- "options" MUST be an array of exactly 4 strings. NEVER use an object like {A: ..., B: ...}.
+- "correct_answer" MUST be the full text of the correct option, NOT a letter like "A" or "B".
+- "prompt_text" is the question text. Do NOT use "question" or "stem" as the key name.
+- Every question MUST have all 5 fields: prompt_text, options, correct_answer, marks_worth, explanation.
+- Generate ONLY multiple-choice questions. NEVER generate open-ended, essay, or free-response questions.
+- Include 1 correct answer and 3 calculated distractors based on common student errors.
+- You may include a brief plain-text discussion before the JSON block.`;
+
       const { data, metadata } = await generateWithFallback(
-        "You are SOMA copilot. Generate MCQ drafts with exactly 4 options each and include concise explanations in plain text response before JSON.",
+        copilotSystemPrompt,
         `${text}
 
 Supporting context:
@@ -715,7 +739,41 @@ ${supportingText || "No extra context."}`,
       );
 
       const rawDrafts = extractJsonArray(data) || [];
-      const drafts = rawDrafts.filter((d: any) => Array.isArray(d.options) && d.options.length === 4);
+      const drafts = rawDrafts.map((d: any) => {
+        let opts = d.options;
+        if (opts && !Array.isArray(opts) && typeof opts === "object") {
+          const keys = Object.keys(opts);
+          const isLetterKeyed = keys.every((k) => /^[A-Z]$/i.test(k));
+          if (isLetterKeyed) {
+            opts = keys.sort().map((k) => opts[k]);
+          } else {
+            opts = Object.values(opts);
+          }
+        }
+        if (!Array.isArray(opts) || opts.length < 4) return null;
+        opts = opts.map(String).slice(0, 4);
+
+        const promptText = d.prompt_text || d.promptText || d.question || d.stem || "";
+        if (!promptText) return null;
+
+        let correctAnswer = d.correct_answer || d.correctAnswer || d.answer || "";
+        if (typeof correctAnswer === "string" && correctAnswer.length <= 2) {
+          const letterIndex = correctAnswer.toUpperCase().charCodeAt(0) - 65;
+          if (letterIndex >= 0 && letterIndex < opts.length) {
+            correctAnswer = opts[letterIndex];
+          }
+        }
+        correctAnswer = String(correctAnswer);
+        if (!correctAnswer || !opts.includes(correctAnswer)) return null;
+
+        return {
+          prompt_text: String(promptText),
+          options: opts,
+          correct_answer: correctAnswer,
+          marks_worth: Number(d.marks_worth || d.marksWorth || d.marks || 1) || 1,
+          explanation: String(d.explanation || ""),
+        };
+      }).filter(Boolean);
       res.json({ reply: data, drafts, metadata, needsClarification: false });
     } catch (err: any) {
       res.status(500).json({ message: `Copilot failed: ${err.message}` });
