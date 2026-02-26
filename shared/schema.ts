@@ -57,7 +57,7 @@ export type InsertSubmission = z.infer<typeof insertSubmissionSchema>;
 export const questionUploadSchema = z.array(z.object({
   prompt_text: z.string(),
   image_url: z.string().nullable().optional(),
-  options: z.array(z.string()).min(0),
+  options: z.array(z.string()).length(4),
   correct_answer: z.string(),
   marks_worth: z.number().int().positive().default(1),
 }));

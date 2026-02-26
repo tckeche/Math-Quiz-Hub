@@ -31,6 +31,7 @@ function Router() {
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
       <Route path="/quiz/:id">{(params) => <ProtectedRoute component={QuizPage} params={params} />}</Route>
       <Route path="/soma/quiz/:id">{(params) => <ProtectedRoute component={SomaQuizEngine} params={params} />}</Route>
+      <Route path="/soma/review/:reportId">{(params) => <ProtectedRoute component={SomaQuizReview} params={params} />}</Route>
       <Route path="/soma/chat">{() => <ProtectedRoute component={SomaChatPage} />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={StudentDashboard} />}</Route>
       <Route component={NotFound} />

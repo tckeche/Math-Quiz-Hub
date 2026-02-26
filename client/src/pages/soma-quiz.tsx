@@ -173,8 +173,8 @@ function SummaryView({
                   key={q.id}
                   className={`flex items-center gap-3 rounded-lg p-3 border transition-all ${
                     isAnswered
-                      ? "bg-cyan-500/5 border-cyan-400/30 shadow-[0_0_10px_rgba(34,211,238,0.15)]"
-                      : "bg-slate-800/40 border-slate-700/40 grayscale opacity-60"
+                      ? "bg-blue-500/10 border-blue-500/40 ring-2 ring-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                      : "bg-slate-800/40 border-slate-700/40 opacity-50 grayscale"
                   }`}
                 >
                   <span className={`text-xs font-mono w-6 text-right ${isAnswered ? "text-cyan-400" : "text-slate-600"}`}>{idx + 1}</span>
