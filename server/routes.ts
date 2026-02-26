@@ -140,6 +140,11 @@ function extractJsonArray(text: string): any[] | null {
   }
 }
 
+/** Ensure every draft question has exactly 4 options; drop any that don't */
+function enforce4Options(drafts: any[]): any[] {
+  return drafts.filter((q) => Array.isArray(q.options) && q.options.length === 4);
+}
+
 async function runBackgroundGrading(
   reportId: number,
   questions: { id: number; stem: string; options: string[]; correctAnswer: string; marks: number }[],
@@ -396,7 +401,9 @@ ${JSON.stringify(breakdown, null, 2)}`;
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     const qs = await storage.getQuestionsByQuizId(quizId);
-    const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
+    // Filter out legacy questions that don't have exactly 4 MCQ options
+    const valid = qs.filter((q) => Array.isArray(q.options) && q.options.length === 4);
+    const sanitized = valid.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
   });
 
@@ -524,7 +531,9 @@ ${JSON.stringify(breakdown, null, 2)}`;
 
   app.get("/api/admin/quizzes/:id/questions", async (req, res) => {
     const questions = await storage.getQuestionsByQuizId(parseInt(req.params.id));
-    res.json(questions);
+    // Filter out legacy questions that don't have exactly 4 MCQ options
+    const valid = questions.filter((q) => Array.isArray(q.options) && q.options.length === 4);
+    res.json(valid);
   });
 
   app.post("/api/admin/quizzes/:id/questions", async (req, res) => {
@@ -719,7 +728,7 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
         `Convert this structured question data into a JSON object with a "questions" array matching this schema:\n{ "questions": [{ "prompt_text": string, "options": [string, string, string, string], "correct_answer": string, "marks_worth": number }] }\n\nRules:\n- Every LaTeX backslash must be double-escaped (\\\\frac not \\frac)\n- The correct_answer must exactly match one of the options\n- marks_worth must be a positive integer\n- The JSON must be valid for JSON.parse()\n- Return ONLY the raw JSON object\n\nInput:\n${formattedText}`,
         stage4Schema
       );
-      const questions = extractJsonArray(gptOutput);
+      const questions = enforce4Options(extractJsonArray(gptOutput) || []);
       if (!questions || questions.length === 0) {
         sendEvent("error", { message: "AI could not produce valid JSON. Raw output logged to server." });
         console.error("AI JSON validation raw output:", gptOutput);
@@ -789,7 +798,7 @@ Respond conversationally first, then include a strict JSON array of draft questi
           ]);
           const data = result.response.text();
           const durationMs = Date.now() - start;
-          const drafts = extractJsonArray(data) || [];
+          const drafts = enforce4Options(extractJsonArray(data) || []);
           res.json({ reply: data, drafts, metadata: { provider: "google", model: "gemini-2.5-flash", durationMs } });
           return;
         } catch (geminiErr: any) {
@@ -799,7 +808,7 @@ Respond conversationally first, then include a strict JSON array of draft questi
       }
 
       const { data, metadata } = await generateWithFallback(systemPrompt, String(message));
-      const drafts = extractJsonArray(data) || [];
+      const drafts = enforce4Options(extractJsonArray(data) || []);
       res.json({ reply: data, drafts, metadata });
     } catch (err: any) {
       res.status(500).json({ message: `Copilot failed: ${err.message}` });
@@ -973,7 +982,9 @@ Sections to include:
       if (isNaN(id)) return res.status(400).json({ message: "Invalid quiz ID" });
 
       const allQuestions = await storage.getSomaQuestionsByQuizId(id);
-      const sanitized = allQuestions.map(({ correctAnswer, explanation, ...rest }) => rest);
+      // Filter out legacy questions that don't have exactly 4 MCQ options
+      const valid = allQuestions.filter((q) => Array.isArray(q.options) && q.options.length === 4);
+      const sanitized = valid.map(({ correctAnswer, explanation, ...rest }) => rest);
       res.json(sanitized);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1047,7 +1058,8 @@ Sections to include:
       const report = await storage.getSomaReportById(reportId);
       if (!report) return res.status(404).json({ message: "Report not found" });
 
-      const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
+      const allQuestions = await storage.getSomaQuestionsByQuizId(report.quizId);
+      const questions = allQuestions.filter((q) => Array.isArray(q.options) && q.options.length === 4);
 
       res.json({
         report,
