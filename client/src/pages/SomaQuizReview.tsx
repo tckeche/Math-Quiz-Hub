@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ interface ReviewData {
 }
 
 export default function SomaQuizReview() {
+  const reportRef = useRef<HTMLDivElement>(null);
   const params = useParams<{ reportId: string }>();
   const reportId = parseInt(params.reportId || "0");
 
@@ -106,9 +107,21 @@ export default function SomaQuizReview() {
   const { report, questions } = data;
   const percentage = totalMarks > 0 ? Math.round((report.score / totalMarks) * 100) : 0;
 
+  const downloadPdf = async () => {
+    if (!reportRef.current) return;
+    const html2pdf = (await import("html2pdf.js")).default;
+    await html2pdf().set({
+      margin: 10,
+      filename: `${report.quiz.title.replace(/\s+/g, "-")}-report.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    }).from(reportRef.current).save();
+  };
+
   return (
     <div className="min-h-screen bg-background px-4 py-8">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto" ref={reportRef}>
         <div className="flex items-center justify-between mb-6">
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" data-testid="button-review-back">
@@ -119,6 +132,9 @@ export default function SomaQuizReview() {
           <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30" data-testid="badge-review-mode">
             Review Mode
           </Badge>
+          <Button className="glow-button" size="sm" onClick={downloadPdf} data-testid="button-download-report">
+            Download Report
+          </Button>
         </div>
 
         <div className="glass-card p-8 mb-6">

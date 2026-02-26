@@ -296,7 +296,7 @@ class MemoryStorage implements IStorage {
   private somaQuestionId = 1;
 
   async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const created: Quiz = { id: this.quizId++, createdAt: new Date(), syllabus: null, level: null, subject: null, ...quiz };
+    const created: Quiz = { id: this.quizId++, createdAt: new Date(), syllabus: null, level: null, subject: null, isArchived: false, ...quiz };
     this.quizzes.push(created);
     return created;
   }
@@ -394,7 +394,18 @@ class MemoryStorage implements IStorage {
   }
 
   async createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz> {
-    const created: SomaQuiz = { id: this.somaQuizId++, createdAt: new Date(), ...quiz, curriculumContext: quiz.curriculumContext ?? null, status: quiz.status ?? "draft" };
+    const created: SomaQuiz = {
+      id: this.somaQuizId++,
+      createdAt: new Date(),
+      title: quiz.title,
+      topic: quiz.topic,
+      syllabus: quiz.syllabus ?? "IEB",
+      level: quiz.level ?? "Grade 6-12",
+      subject: quiz.subject ?? null,
+      curriculumContext: quiz.curriculumContext ?? null,
+      status: quiz.status ?? "draft",
+      isArchived: quiz.isArchived ?? false,
+    };
     this.somaQuizzesList.push(created);
     return created;
   }
@@ -407,7 +418,7 @@ class MemoryStorage implements IStorage {
       id: this.somaQuestionId++,
       ...q,
       options: Array.isArray(q.options) ? [...(q.options as string[])] : [],
-      explanation: q.explanation ?? null,
+      explanation: q.explanation,
       marks: q.marks ?? 1,
     }));
     this.somaQuestionsList.push(...created);

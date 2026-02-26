@@ -1,9 +1,9 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema, insertSomaUserSchema } from "@shared/schema";
+import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema, insertSomaUserSchema, quizzes, questions, submissions } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
@@ -11,7 +11,7 @@ import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { generateAuditedQuiz } from "./services/aiPipeline";
+import { fetchPaperContext, generateAuditedQuiz, parsePdfTextFromBuffer } from "./services/aiPipeline";
 import { generateWithFallback } from "./services/aiOrchestrator";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
@@ -381,8 +381,8 @@ ${JSON.stringify(breakdown, null, 2)}`;
   });
 
   app.get("/api/quizzes", async (_req, res) => {
-    const quizzes = await storage.getQuizzes();
-    res.json(quizzes);
+    const allQuizzes = await storage.getQuizzes();
+    res.json(allQuizzes.filter((q) => !q.isArchived));
   });
 
   app.get("/api/quizzes/:id", async (req, res) => {
@@ -473,8 +473,23 @@ ${JSON.stringify(breakdown, null, 2)}`;
   });
 
   app.get("/api/admin/quizzes", async (_req, res) => {
-    const quizzes = await storage.getQuizzes();
-    res.json(quizzes);
+    const allQuizzes = await storage.getQuizzes();
+    const withSnapshots = await Promise.all(allQuizzes.map(async (quiz) => {
+      const [quizQuestions, quizSubmissions] = await Promise.all([
+        storage.getQuestionsByQuizId(quiz.id),
+        storage.getSubmissionsByQuizId(quiz.id),
+      ]);
+      return {
+        ...quiz,
+        snapshot: {
+          totalQuestions: quizQuestions.length,
+          totalSubmissions: quizSubmissions.length,
+          subject: quiz.subject || "General",
+          level: quiz.level || "Unspecified",
+        },
+      };
+    }));
+    res.json(withSnapshots);
   });
 
   app.get("/api/admin/quizzes/:id", async (req, res) => {
@@ -501,7 +516,7 @@ ${JSON.stringify(breakdown, null, 2)}`;
   });
 
   app.put("/api/admin/quizzes/:id", requireAdmin, async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     const existing = await storage.getQuiz(id);
     if (!existing) return res.status(404).json({ message: "Quiz not found" });
 
@@ -521,6 +536,41 @@ ${JSON.stringify(breakdown, null, 2)}`;
   app.delete("/api/admin/quizzes/:id", async (req, res) => {
     await storage.deleteQuiz(parseInt(req.params.id));
     res.json({ success: true });
+  });
+
+  app.post("/api/admin/quizzes/bulk-action", async (req, res) => {
+    try {
+      const bodySchema = z.object({
+        quizIds: z.array(z.number().int().positive()).min(1),
+        action: z.enum(["archive", "hard_delete", "extend_24h", "mark_open", "mark_overdue"]),
+      });
+      const parsed = bodySchema.parse(req.body);
+      if (!db) {
+        return res.status(500).json({ message: "Database unavailable for bulk actions" });
+      }
+
+      if (parsed.action === "archive") {
+        await db.update(quizzes).set({ isArchived: true }).where(inArray(quizzes.id, parsed.quizIds));
+      } else if (parsed.action === "hard_delete") {
+        await db.delete(submissions).where(inArray(submissions.quizId, parsed.quizIds));
+        await db.delete(questions).where(inArray(questions.quizId, parsed.quizIds));
+        await db.delete(quizzes).where(inArray(quizzes.id, parsed.quizIds));
+      } else if (parsed.action === "extend_24h") {
+        await db.update(quizzes)
+          .set({ dueDate: sql`${quizzes.dueDate} + interval '24 hour'` as any })
+          .where(inArray(quizzes.id, parsed.quizIds));
+      } else if (parsed.action === "mark_open") {
+        const future = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7);
+        await db.update(quizzes).set({ dueDate: future }).where(inArray(quizzes.id, parsed.quizIds));
+      } else {
+        const now = new Date();
+        await db.update(quizzes).set({ dueDate: new Date(now.getTime() - 1000 * 60 * 5) }).where(inArray(quizzes.id, parsed.quizIds));
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Bulk action failed" });
+    }
   });
 
   app.get("/api/admin/quizzes/:id/questions", async (req, res) => {
@@ -614,131 +664,8 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
     res.json({ success: true });
   });
 
-  app.post("/api/generate-questions", requireAdmin, pdfUpload.single("pdf"), async (req, res) => {
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-
-    req.setTimeout(120_000);
-    res.setTimeout(120_000);
-
-    const sendEvent = (event: string, data: any) => {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    };
-
-    const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 10_000);
-    let clientDisconnected = false;
-    req.on("close", () => {
-      clientDisconnected = true;
-      clearInterval(heartbeat);
-    });
-
-    try {
-      if (!req.file) {
-        sendEvent("error", { message: "No PDF file uploaded" });
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-
-      const base64Pdf = req.file.buffer.toString("base64");
-
-      // --- STAGE 1: Gemini extracts raw text from PDF ---
-      sendEvent("stage", { stage: 1, label: "Gemini is reading the PDF..." });
-      const geminiModel = getGeminiModel();
-      const geminiResult = await geminiModel.generateContent([
-        { text: "Extract all multiple-choice mathematics questions, options, and text from this PDF document. Output only the raw extracted text, preserving all mathematical notation exactly as written." },
-        { inlineData: { mimeType: "application/pdf", data: base64Pdf } },
-      ]);
-      const extractedText = geminiResult.response.text();
-      if (!extractedText || extractedText.trim().length < 20) {
-        sendEvent("error", { message: "Gemini could not extract meaningful text from the PDF" });
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-      sendEvent("stage_done", { stage: 1 });
-      // Emit extracted text so the client can feed it to the copilot as context
-      sendEvent("extracted_text", { text: extractedText });
-      if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
-
-      // --- STAGE 2: AI solves the mathematics (waterfall fallback) ---
-      sendEvent("stage", { stage: 2, label: "AI is solving the mathematics..." });
-      const { data: solvedText } = await generateWithFallback(
-        `You are an elite mathematician. For EACH multiple-choice question extracted from a past mathematics exam paper:\n1. Show the step-by-step mathematical working.\n2. Identify the strictly correct option letter and its full text.\n3. Assign appropriate marks (1-5) based on difficulty.`,
-        `Extracted text:\n${extractedText}`
-      );
-      if (!solvedText || solvedText.trim().length < 20) {
-        sendEvent("error", { message: "AI did not return valid solutions" });
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-      sendEvent("stage_done", { stage: 2 });
-      if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
-
-      // --- STAGE 3: AI formats into LaTeX (waterfall fallback) ---
-      sendEvent("stage", { stage: 3, label: "AI is formatting the LaTeX..." });
-      const { data: formattedText } = await generateWithFallback(
-        `You restructure mathematical working into multiple-choice questions. Format ALL mathematical formulas, numbers, and equations into strict LaTeX syntax. You MUST double-escape all backslashes (e.g., \\\\frac, \\\\sqrt, \\\\times) because the output will be embedded inside a JSON string.\n\nFor each question output:\n- prompt_text: The question text with double-escaped LaTeX\n- options: Array of option strings with double-escaped LaTeX\n- correct_answer: The full text of the correct option with double-escaped LaTeX\n- marks_worth: Integer marks value\n\nOutput a structured list, one question per block. Do NOT output JSON yet — just clearly structured text with the four fields per question.`,
-        `Math data:\n${solvedText}`
-      );
-      if (!formattedText || formattedText.trim().length < 20) {
-        sendEvent("error", { message: "AI did not return formatted content" });
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-      sendEvent("stage_done", { stage: 3 });
-      if (clientDisconnected) { clearInterval(heartbeat); res.end(); return; }
-
-      // --- STAGE 4: AI validates into strict JSON (waterfall fallback) ---
-      sendEvent("stage", { stage: 4, label: "AI is validating the database schema..." });
-      const stage4Schema = {
-        type: "object",
-        properties: {
-          questions: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                prompt_text: { type: "string" },
-                options: { type: "array", items: { type: "string" } },
-                correct_answer: { type: "string" },
-                marks_worth: { type: "integer" },
-              },
-              required: ["prompt_text", "options", "correct_answer", "marks_worth"],
-            },
-          },
-        },
-        required: ["questions"],
-      };
-      const { data: gptOutput } = await generateWithFallback(
-        "You are a backend JSON inspector. Your ONLY job is to convert the input into a perfectly valid JSON object with a 'questions' array. Return ONLY valid JSON — no markdown, no code fences, no explanation.",
-        `Convert this structured question data into a JSON object with a "questions" array matching this schema:\n{ "questions": [{ "prompt_text": string, "options": [string, string, string, string], "correct_answer": string, "marks_worth": number }] }\n\nRules:\n- Every LaTeX backslash must be double-escaped (\\\\frac not \\frac)\n- The correct_answer must exactly match one of the options\n- marks_worth must be a positive integer\n- The JSON must be valid for JSON.parse()\n- Return ONLY the raw JSON object\n\nInput:\n${formattedText}`,
-        stage4Schema
-      );
-      const questions = extractJsonArray(gptOutput);
-      if (!questions || questions.length === 0) {
-        sendEvent("error", { message: "AI could not produce valid JSON. Raw output logged to server." });
-        console.error("AI JSON validation raw output:", gptOutput);
-        clearInterval(heartbeat);
-        res.end();
-        return;
-      }
-      sendEvent("stage_done", { stage: 4 });
-
-      sendEvent("result", { questions });
-      clearInterval(heartbeat);
-      res.end();
-    } catch (err: any) {
-      console.error("AI pipeline error:", err);
-      sendEvent("error", { message: `AI pipeline failed: ${err.message}` });
-      clearInterval(heartbeat);
-      res.end();
-    }
+  app.post("/api/generate-questions", requireAdmin, (_req, res) => {
+    res.status(410).json({ message: "Generate from PDF is now available only through Copilot supporting documents." });
   });
 
   app.post("/api/admin/copilot-chat", async (req, res) => {
@@ -746,70 +673,50 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
       const { message, documentIds } = req.body;
       if (!message) return res.status(400).json({ message: "message is required" });
 
-      const systemPrompt = `You are a curriculum assistant for teachers across ALL subjects (Mathematics, Physics, Chemistry, Biology, Economics, Business Studies, Computer Science, English Language, English Literature, Geography, History, etc.). You generate assessment questions aligned with Cambridge International Education (CIE) syllabi — including IGCSE, AS Level, and A Level.
+      const text = String(message);
+      const missing: string[] = [];
+      if (!/subject\s*:/i.test(text)) missing.push("Subject");
+      if (!/level\s*:/i.test(text)) missing.push("Level");
+      if (!/syllabus\s*:/i.test(text)) missing.push("Syllabus");
+      const hasImplicitTopic = /about\s+\w+/i.test(text);
+      if (missing.length > 0 && !hasImplicitTopic) {
+        return res.json({
+          reply: `Before I generate, please provide: ${missing.join(", ")}.`,
+          drafts: [],
+          metadata: { provider: "clarification", model: "copilot-guard", durationMs: 0 },
+          needsClarification: true,
+        });
+      }
 
-CRITICAL RULE — MCQ ONLY:
-- Every question you generate MUST be a multiple-choice question (MCQ).
-- Every question MUST have exactly 4 options in the "options" array. NEVER leave options empty.
-- There must be exactly 1 correct answer and 3 plausible distractors.
-- Distractors must be based on common student misconceptions, partial knowledge, or typical exam errors.
-- NEVER generate open-ended, essay, short-answer, or free-response questions. This platform ONLY supports MCQs.
-- Even for subjects like Geography, History, English — convert the assessment into MCQ format with 4 distinct options.
-- The "correct_answer" value MUST exactly match one of the 4 strings in the "options" array.
-
-QUESTION STYLE GUIDELINES:
-- Structure question stems using CIE command words where appropriate: Identify, State, Which of the following, Select, Determine.
-- For quantitative subjects, model questions after CIE past paper MCQ formats with realistic values and proper units.
-- Allocate marks realistically (1-2 marks for recall, 2-3 for application, 3-5 for higher-order thinking).
-
-FORMATTING RULES:
-- Wrap ALL mathematical expressions in LaTeX delimiters: \\( ... \\) for inline, \\[ ... \\] for display.
-- Use proper LaTeX for fractions (\\frac{}{}), powers (^{}), subscripts (_{}), units (\\text{m/s}^{2}), Greek letters (\\alpha, \\beta, \\theta), etc.
-- NEVER output bare LaTeX commands without delimiters.
-- For non-math subjects, use clean plain text with proper formatting.
-
-Respond conversationally first, then include a strict JSON array of draft questions using this schema: [{ "prompt_text": string, "options": ["option A", "option B", "option C", "option D"], "correct_answer": string, "marks_worth": number, "image_url": null }]. The "options" array MUST always contain exactly 4 strings.`;
-
-      // If PDFs were uploaded as supporting docs, send them directly to Gemini
-      // as multimodal input so it can see the original formatting, tables, diagrams
+      let supportingText = "";
       const pdfFileIds = Array.isArray(documentIds) ? documentIds : [];
       const docsDir = path.resolve(process.cwd(), "supporting-docs");
-      const pdfParts: { inlineData: { mimeType: string; data: string } }[] = [];
       for (const fileId of pdfFileIds) {
-        // Validate filename to prevent directory traversal
         if (typeof fileId !== "string" || fileId.includes("..") || fileId.includes("/")) continue;
         const filePath = path.join(docsDir, fileId);
         if (fs.existsSync(filePath)) {
-          const buffer = fs.readFileSync(filePath);
-          pdfParts.push({ inlineData: { mimeType: "application/pdf", data: buffer.toString("base64") } });
+          supportingText += `
+${await parsePdfTextFromBuffer(fs.readFileSync(filePath))}`;
         }
       }
 
-      if (pdfParts.length > 0) {
-        // Use Gemini directly for multimodal PDF + text input
-        try {
-          const geminiModel = getGeminiModel();
-          const start = Date.now();
-          const result = await geminiModel.generateContent([
-            { text: systemPrompt + "\n\nThe teacher has uploaded supporting documents (past papers, syllabi, textbook excerpts) as PDFs attached below. Use these documents to inform your question generation — match the style, difficulty, topic coverage, and format of the uploaded materials. When the teacher asks you to generate questions based on the uploaded documents, refer directly to their content.\n\nTeacher's message: " + String(message) },
-            ...pdfParts,
-          ]);
-          const data = result.response.text();
-          const durationMs = Date.now() - start;
-          const rawDrafts = extractJsonArray(data) || [];
-          const drafts = rawDrafts.filter((d: any) => Array.isArray(d.options) && d.options.length >= 4);
-          res.json({ reply: data, drafts, metadata: { provider: "google", model: "gemini-2.5-flash", durationMs } });
-          return;
-        } catch (geminiErr: any) {
-          console.error("Gemini multimodal failed, falling back to text-only:", geminiErr.message);
-          // Fall through to text-only generateWithFallback below
-        }
+      const paperCode = text.match(/\b\d{4}\/v\d\/\d{4}\b/i)?.[0];
+      if (paperCode) {
+        supportingText += `
+${await fetchPaperContext(paperCode)}`;
       }
 
-      const { data, metadata } = await generateWithFallback(systemPrompt, String(message));
+      const { data, metadata } = await generateWithFallback(
+        "You are SOMA copilot. Generate MCQ drafts with exactly 4 options each and include concise explanations in plain text response before JSON.",
+        `${text}
+
+Supporting context:
+${supportingText || "No extra context."}`,
+      );
+
       const rawDrafts = extractJsonArray(data) || [];
-      const drafts = rawDrafts.filter((d: any) => Array.isArray(d.options) && d.options.length >= 4);
-      res.json({ reply: data, drafts, metadata });
+      const drafts = rawDrafts.filter((d: any) => Array.isArray(d.options) && d.options.length === 4);
+      res.json({ reply: data, drafts, metadata, needsClarification: false });
     } catch (err: any) {
       res.status(500).json({ message: `Copilot failed: ${err.message}` });
     }
@@ -907,6 +814,9 @@ Sections to include:
   const somaGenerateSchema = z.object({
     topic: z.string().min(1, "topic is required"),
     title: z.string().optional(),
+    subject: z.string().min(1).default("Mathematics"),
+    syllabus: z.string().min(1).default("IEB"),
+    level: z.string().min(1).default("Grade 6-12"),
     curriculumContext: z.string().optional(),
   });
 
@@ -917,16 +827,26 @@ Sections to include:
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
 
-      const { topic, title, curriculumContext } = parsed.data;
+      const { topic, title, curriculumContext, subject, syllabus, level } = parsed.data;
       const quizTitle = title || `${topic} Quiz`;
 
-      const result = await generateAuditedQuiz(topic);
+      const result = await generateAuditedQuiz({
+        topic,
+        subject,
+        syllabus,
+        level,
+        copilotPrompt: curriculumContext,
+      });
 
       const quiz = await storage.createSomaQuiz({
         title: quizTitle,
         topic,
+        subject,
+        syllabus,
+        level,
         curriculumContext: curriculumContext || null,
         status: "draft",
+        isArchived: false,
       });
 
       const insertedQuestions = await storage.createSomaQuestions(
@@ -935,7 +855,7 @@ Sections to include:
           stem: q.stem,
           options: q.options,
           correctAnswer: q.correct_answer,
-          explanation: q.explanation || null,
+          explanation: q.explanation,
           marks: q.marks,
         }))
       );
@@ -944,7 +864,7 @@ Sections to include:
         quiz,
         questions: insertedQuestions,
         pipeline: {
-          stages: ["Claude 3.5 Sonnet → Generation", "DeepSeek R1 → Content Audit", "Gemini 2.5 Flash → Syllabus Audit"],
+          stages: ["Claude Sonnet (Maker)", "Gemini 2.5 Flash (Checker)"],
           totalQuestions: insertedQuestions.length,
         },
       });
@@ -957,7 +877,7 @@ Sections to include:
   app.get("/api/soma/quizzes", async (_req, res) => {
     try {
       const allQuizzes = await storage.getSomaQuizzes();
-      res.json(allQuizzes);
+      res.json(allQuizzes.filter((q) => !q.isArchived));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
