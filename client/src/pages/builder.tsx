@@ -440,16 +440,16 @@ export default function BuilderPage() {
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto px-4 py-4 grid grid-cols-12 gap-4">
+      <main className="max-w-[1600px] mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* LEFT COLUMN — Main Workspace (9 cols) */}
-        <div className="col-span-12 lg:col-span-9 space-y-4">
+        <div className="lg:col-span-3 space-y-4">
           {/* Compact Settings Row */}
           <div className="glass-card p-4">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="w-4 h-4 text-violet-400" />
               <h2 className="font-semibold text-slate-100 text-sm">Quiz Parameters</h2>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
               <div className="col-span-2 md:col-span-1 space-y-1">
                 <Label className="text-slate-400 text-xs">Title</Label>
                 <Input
@@ -460,8 +460,8 @@ export default function BuilderPage() {
                   data-testid="input-quiz-title"
                 />
               </div>
-              <div className="space-y-1">
-                <Label className="text-slate-400 text-xs">Syllabus</Label>
+              <div className="space-y-1 md:col-span-2">
+                <Label className="text-slate-400 text-xs uppercase">Syllabus</Label>
                 <Input
                   value={syllabus}
                   onChange={(e) => setSyllabus(e.target.value)}
@@ -471,7 +471,7 @@ export default function BuilderPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-slate-400 text-xs">Level</Label>
+                <Label className="text-slate-400 text-xs uppercase">Level</Label>
                 <select
                   className="w-full glass-input px-2.5 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm"
                   value={level}
@@ -484,8 +484,8 @@ export default function BuilderPage() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-slate-400 text-xs">Subject</Label>
+              <div className="space-y-1 md:col-span-2">
+                <Label className="text-slate-400 text-xs uppercase">Subject</Label>
                 <Input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
@@ -780,7 +780,7 @@ export default function BuilderPage() {
         </div>
 
         {/* RIGHT COLUMN — Copilot Chat (3 cols) */}
-        <div className="col-span-12 lg:col-span-3">
+        <div className="lg:col-span-1">
           <div className="glass-card flex flex-col overflow-hidden sticky top-16 z-10" style={{ height: "calc(100vh - 90px)" }}>
             <div className="px-3 py-2.5 border-b border-white/5 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-violet-400" />

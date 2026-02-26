@@ -140,6 +140,11 @@
 
   body {
     @apply font-sans antialiased text-foreground;
+    background-image: url('/wallpaper.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
   }
 
   .min-h-screen.bg-background {
@@ -155,7 +160,8 @@
     content: "";
     position: fixed;
     inset: 0;
-    background: hsla(222, 47%, 7%, 0.82);
+    background: hsla(222, 47%, 7%, 0.80);
+    mix-blend-mode: multiply;
     pointer-events: none;
     z-index: 0;
   }
@@ -176,7 +182,7 @@
 
 @layer components {
   .glass-card {
-    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+    @apply bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl;
   }
 
   .gradient-text {
