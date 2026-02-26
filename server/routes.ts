@@ -401,9 +401,7 @@ ${JSON.stringify(breakdown, null, 2)}`;
     const quiz = await storage.getQuiz(quizId);
     if (!quiz) return res.status(404).json({ message: "Quiz not found" });
     const qs = await storage.getQuestionsByQuizId(quizId);
-    // Filter out legacy questions that don't have exactly 4 MCQ options
-    const valid = qs.filter((q) => Array.isArray(q.options) && q.options.length === 4);
-    const sanitized = valid.map(({ correctAnswer, ...rest }) => rest);
+    const sanitized = qs.map(({ correctAnswer, ...rest }) => rest);
     res.json(sanitized);
   });
 
@@ -531,9 +529,7 @@ ${JSON.stringify(breakdown, null, 2)}`;
 
   app.get("/api/admin/quizzes/:id/questions", async (req, res) => {
     const questions = await storage.getQuestionsByQuizId(parseInt(req.params.id));
-    // Filter out legacy questions that don't have exactly 4 MCQ options
-    const valid = questions.filter((q) => Array.isArray(q.options) && q.options.length === 4);
-    res.json(valid);
+    res.json(questions);
   });
 
   app.post("/api/admin/quizzes/:id/questions", async (req, res) => {
@@ -982,9 +978,7 @@ Sections to include:
       if (isNaN(id)) return res.status(400).json({ message: "Invalid quiz ID" });
 
       const allQuestions = await storage.getSomaQuestionsByQuizId(id);
-      // Filter out legacy questions that don't have exactly 4 MCQ options
-      const valid = allQuestions.filter((q) => Array.isArray(q.options) && q.options.length === 4);
-      const sanitized = valid.map(({ correctAnswer, explanation, ...rest }) => rest);
+      const sanitized = allQuestions.map(({ correctAnswer, explanation, ...rest }) => rest);
       res.json(sanitized);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1058,8 +1052,7 @@ Sections to include:
       const report = await storage.getSomaReportById(reportId);
       if (!report) return res.status(404).json({ message: "Report not found" });
 
-      const allQuestions = await storage.getSomaQuestionsByQuizId(report.quizId);
-      const questions = allQuestions.filter((q) => Array.isArray(q.options) && q.options.length === 4);
+      const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
 
       res.json({
         report,
