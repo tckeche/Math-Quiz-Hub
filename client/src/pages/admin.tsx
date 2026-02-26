@@ -99,11 +99,11 @@ function CreateQuizForm({ onClose }: { onClose: () => void }) {
       apiRequest("POST", "/api/admin/quizzes", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
-      toast({ title: "Quiz created successfully" });
+      toast({ title: "Assessment created successfully" });
       onClose();
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to create quiz", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to create assessment", description: err.message, variant: "destructive" });
     },
   });
 
@@ -115,7 +115,7 @@ function CreateQuizForm({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="glass-card p-6">
-      <h3 className="text-lg font-semibold text-slate-100 mb-4">Create New Quiz</h3>
+      <h3 className="text-lg font-semibold text-slate-100 mb-4">Create New Assessment</h3>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="title" className="text-slate-300">Title</Label>
@@ -134,7 +134,7 @@ function CreateQuizForm({ onClose }: { onClose: () => void }) {
         <div className="flex gap-2 justify-end">
           <Button type="button" className="glow-button-outline" onClick={onClose} data-testid="button-cancel-quiz">Cancel</Button>
           <Button type="submit" className="glow-button" disabled={createMutation.isPending} data-testid="button-save-quiz">
-            {createMutation.isPending ? "Creating..." : "Create Quiz"}
+            {createMutation.isPending ? "Creating..." : "Create Assessment"}
           </Button>
         </div>
       </form>
@@ -225,7 +225,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
       apiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", quizId, "questions"] });
-      toast({ title: "Questions saved to quiz" });
+      toast({ title: "Questions saved to assessment" });
       setGeneratedQuestions(null);
       onDone();
     },
@@ -347,7 +347,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
             </Button>
             <Button className="glow-button" size="sm" onClick={handlePublish} disabled={saveMutation.isPending || generatedQuestions.length === 0} data-testid="button-publish-generated">
               <Save className="w-4 h-4 mr-1" />
-              {saveMutation.isPending ? "Saving..." : "Save & Publish Quiz"}
+              {saveMutation.isPending ? "Saving..." : "Save & Publish Assessment"}
             </Button>
           </div>
         </div>
@@ -703,7 +703,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
               size="sm"
               className="bg-red-500/10 border border-red-500/30 text-red-400"
               onClick={() => {
-                if (confirm("Delete all submitted tests for this quiz? This cannot be undone.")) {
+                if (confirm("Delete all submitted tests for this assessment? This cannot be undone.")) {
                   clearSubmissionsMutation.mutate();
                 }
               }}
@@ -893,7 +893,7 @@ export default function AdminPage() {
             <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-10 w-auto object-contain" />
             <div>
               <h1 className="text-xl font-bold gradient-text" data-testid="text-admin-title">Admin Dashboard</h1>
-              <p className="text-xs text-slate-400">Manage quizzes and view results</p>
+              <p className="text-xs text-slate-400">Manage assessments and view results</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -911,16 +911,16 @@ export default function AdminPage() {
         ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold text-slate-100">Quizzes</h2>
+              <h2 className="text-lg font-semibold text-slate-100">Assessments</h2>
               <Button size="sm" className="glow-button" onClick={() => navigate("/admin/builder")} data-testid="button-create-quiz">
                 <Plus className="w-4 h-4 mr-1" />
-                New Quiz
+                New Assessment
               </Button>
             </div>
 
             {quizzesError ? (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 p-4">
-                Failed to load quizzes. Please refresh and try again.
+                Failed to load assessments. Please refresh and try again.
               </div>
             ) : isLoading ? (
               <div className="space-y-3">
@@ -929,8 +929,8 @@ export default function AdminPage() {
             ) : !quizzes || quizzes.length === 0 ? (
               <div className="text-center py-16">
                 <BookOpen className="w-12 h-12 mx-auto text-slate-600 mb-3" />
-                <h3 className="text-lg font-medium text-slate-400">No quizzes yet</h3>
-                <p className="text-sm text-slate-500 mt-1">Create your first quiz to get started.</p>
+                <h3 className="text-lg font-medium text-slate-400">No assessments yet</h3>
+                <p className="text-sm text-slate-500 mt-1">Create your first assessment to get started.</p>
               </div>
             ) : (
               <div className="grid gap-3">

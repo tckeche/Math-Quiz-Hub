@@ -219,7 +219,7 @@ export default function BuilderPage() {
       setMetaDirty(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
-      toast({ title: "Quiz details updated" });
+      toast({ title: "Assessment details updated" });
     },
     onError: (err: Error) => toast({ title: "Failed to update", description: err.message, variant: "destructive" }),
   });
@@ -357,8 +357,14 @@ export default function BuilderPage() {
               data-testid="button-preview-quiz"
             >
               <Eye className="w-4 h-4 md:mr-1.5" />
-              <span className="hidden md:inline">Preview Quiz</span>
+              <span className="hidden md:inline">Preview</span>
             </Button>
+            <Link href="/admin">
+              <Button className="border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:border-red-500/30 transition-all min-h-[44px] md:min-h-0" size="sm" data-testid="button-exit-builder">
+                <X className="w-4 h-4 md:mr-1" />
+                <span className="hidden md:inline">Exit</span>
+              </Button>
+            </Link>
           </div>
         </div>
       </header>
@@ -373,7 +379,7 @@ export default function BuilderPage() {
           <div className="glass-card p-4 md:p-5">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="w-4 h-4 text-violet-400" />
-              <h2 className="font-semibold text-slate-100 text-sm">Quiz Parameters</h2>
+              <h2 className="font-semibold text-slate-100 text-sm">Assessment Parameters</h2>
               {activeQuizId && <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] ml-auto">Live &middot; ID {activeQuizId}</Badge>}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -525,7 +531,7 @@ export default function BuilderPage() {
               {chat.length === 0 && (
                 <div className="text-center pt-8 space-y-2">
                   <Sparkles className="w-8 h-8 mx-auto text-violet-400/40" />
-                  <p className="text-sm text-slate-400">Ask the AI to generate quiz questions.</p>
+                  <p className="text-sm text-slate-400">Ask the AI to generate assessment questions.</p>
                   <p className="text-xs text-slate-500">Questions are auto-saved to the database.</p>
                   <p className="text-xs text-slate-600 italic">"Generate 5 IGCSE quadratics MCQs"</p>
                 </div>
@@ -705,7 +711,7 @@ export default function BuilderPage() {
               <PartyPopper className="w-8 h-8 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-100 mb-1" data-testid="text-success-title">Quiz Created Successfully!</h2>
+              <h2 className="text-xl font-bold text-slate-100 mb-1" data-testid="text-success-title">Assessment Created Successfully!</h2>
               <p className="text-sm text-slate-400">
                 {lastSavedCount} question{lastSavedCount !== 1 ? "s" : ""} generated, audited, and saved to the database.
               </p>
@@ -717,7 +723,7 @@ export default function BuilderPage() {
                 data-testid="button-success-preview"
               >
                 <Eye className="w-4 h-4 mr-2" />
-                Preview Quiz
+                Preview Assessment
               </Button>
               <Link href="/admin">
                 <Button className="w-full glow-button-outline min-h-[48px]" data-testid="button-success-dashboard">
@@ -735,7 +741,7 @@ export default function BuilderPage() {
         <div className="fixed inset-0 z-50 bg-background overflow-auto" data-testid="modal-preview">
           <SomaQuizEngine
             previewMode={true}
-            previewTitle={title || "Untitled Quiz"}
+            previewTitle={title || "Untitled Assessment"}
             previewQuestions={previewQuestions}
             onExitPreview={() => setShowPreview(false)}
           />
