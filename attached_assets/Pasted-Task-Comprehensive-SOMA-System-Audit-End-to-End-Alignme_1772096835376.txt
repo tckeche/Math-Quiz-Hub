@@ -1,0 +1,63 @@
+Task: Comprehensive SOMA System Audit & End-to-End Alignment Check
+
+Role: You are the Lead Architect and QA Engineer for SOMA (an Enterprise AI Learning Management System for Cambridge/IB curriculums).
+
+Objective: Read through our existing codebase and verify that every feature strictly adheres to our core business logic. If you find any discrepancies, bugs, or missing implementations based on the rules below, you must fix them immediately and output a list of what you changed.
+
+Review and Enforce the Following Golden Rules:
+
+1. The AI Generation Pipeline (Admin Side)
+
+File Targets: server/services/somaPipeline.ts, server/services/aiOrchestrator.ts, Admin Quiz API routes.
+
+Rule: The AI must NEVER generate open-ended questions.
+
+Check: Verify the Zod schema strictly enforces options: z.array(z.string()).length(4). Verify the Anthropic system prompt explicitly commands the generation of exactly 1 correct answer and 3 calculated distractors based on common student errors (math mistakes, unit errors, etc.).
+
+Check: Verify the Orchestrator fallback chain correctly defaults to claude-sonnet-4-6 first.
+
+2. Authentication & Session Persistence
+
+File Targets: StudentAuth.tsx, <ProtectedRoute> wrapper, API sync routes.
+
+Rule: Students must never be kicked out randomly or asked for their name after logging in.
+
+Check: Ensure the <ProtectedRoute> waits for supabase.auth.getSession() to fully resolve (using an isLoading state) before redirecting.
+
+Check: Ensure SomaQuizEngine.tsx automatically pulls the student_id from the Supabase session and does not have manual name inputs.
+
+3. The Student Dashboard UI & Logic
+
+File Targets: StudentDashboard.tsx, Recharts implementation.
+
+Rule: The dashboard must be a high-contrast, liquid-glass mission control.
+
+Check: Verify the "Available Quizzes" feed strictly limits to 4 items max, pushes overdue quizzes to the bottom, and completely hides quizzes the student has already submitted.
+
+Check: Verify the CSS spacing is uniform (gap-6, p-6) across both quiz lists to prevent a cramped UI.
+
+Check: Verify the Recharts Donuts use distinct neon colors mapped dynamically to the subject string. The percentage text inside the donut must be appropriately sized (e.g., text-xl or text-2xl, not massive).
+
+4. Quiz Taking & Review Formatting
+
+File Targets: SomaQuizEngine.tsx, SomaQuizReview.tsx.
+
+Rule: Math and Code must render perfectly.
+
+Check: Ensure <ReactMarkdown> with remarkMath and rehypeKatex is wrapping the question stems and explanations.
+
+Check: Ensure the pre-submit review screen highlights answered questions with a neon blue glow and unanswered questions in muted grayscale.
+
+Check: Ensure the Completed Quiz Review mode highlights the correct answer in green, and the student's wrong answer in a glowing red.
+
+5. Async AI Grading & The Global Tutor
+
+File Targets: server/routes.ts (submission and global tutor endpoints).
+
+Rule: Background tasks must not crash silently, and the Global Tutor must be holistic.
+
+Check: Verify the /api/soma/submit route returns a 200 OK instantly, and runs the AI grading in a strict try/catch block. If the AI fails, it MUST update the DB SomaReports.status to 'failed'.
+
+Check: Verify the /api/soma/global-tutor endpoint fetches BOTH the student's past feedback (from SomaReports) AND the list of upcoming quizzes they haven't taken yet (from SomaQuizzes). The prompt must explicitly synthesize past weaknesses and tell the student what untested topics they need to study next.
+
+Execution: Do not ask for permission to fix things. If you spot a violation of these 5 rules in the codebase, rewrite the code to enforce the rule, then provide a bulleted summary of the exact fixes you applied.

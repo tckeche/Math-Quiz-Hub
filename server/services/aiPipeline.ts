@@ -31,7 +31,8 @@ CRITICAL FORMATTING RULES:
   const userPrompt = `Generate a quiz of 5 high-quality multiple-choice questions on the topic: "${topic}".
 
 Requirements:
-- Each question must have exactly 4 options (A, B, C, D format in the text but just the answer values in the array)
+- Each question MUST be multiple-choice with exactly 4 options. NEVER generate open-ended or free-response questions.
+- There must be exactly 1 correct answer and 3 carefully calculated distractors. Distractors must be based on common student errors (e.g., sign errors, unit conversion mistakes, forgetting to apply a rule, off-by-one errors, partial solutions).
 - Include LaTeX notation where appropriate using $ for inline math and $$ for block math
 - Provide clear, educational explanations
 - Vary difficulty levels across questions

@@ -14,7 +14,8 @@ import {
   AlertCircle, Loader2, CheckCircle2, Circle, BookOpen, X, Award
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
-import { renderLatex } from '@/lib/render-latex';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
+import type { Session } from '@supabase/supabase-js';
 
 export type StudentQuestion = {
   id: number;

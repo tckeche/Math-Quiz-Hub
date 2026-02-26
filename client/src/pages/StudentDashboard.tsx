@@ -363,7 +363,7 @@ export default function StudentDashboard() {
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
   const isLoading = quizzesLoading || somaLoading || reportsLoading || subsLoading;
 
-  const visibleAvailable = showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 5);
+  const visibleAvailable = showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 4);
   const visibleCompleted = showAllCompleted ? completedItems : completedItems.slice(0, 5);
 
   return (
@@ -550,25 +550,16 @@ export default function StudentDashboard() {
                           </Link>
                         );
                       })}
-                      {filteredQuizzes.length > 5 && (
+                      {filteredQuizzes.length > 4 && (
                         <button
                           onClick={() => setShowAllAvailable(!showAllAvailable)}
                           className="w-full text-center py-2.5 text-xs font-medium text-violet-400 hover:text-violet-300 border border-slate-700/50 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 transition-all"
                           data-testid="button-show-more-available"
                         >
-                          {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 5} more)`}
+                          {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 4} more)`}
                         </button>
                       )}
                     </>
-                  )}
-                  {filteredQuizzes.length > 4 && (
-                    <button
-                      onClick={() => setShowAllAvailable(!showAllAvailable)}
-                      className="w-full text-center text-xs text-violet-400 hover:text-violet-300 transition-colors py-2 mt-1"
-                      data-testid="button-toggle-available"
-                    >
-                      {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 4} more)`}
-                    </button>
                   )}
                 </div>
               </section>
