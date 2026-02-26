@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { getSubjectColor } from "@/lib/subjectColors";
+import DOMPurify from "dompurify";
 import type { Quiz, SomaQuiz } from "@shared/schema";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
@@ -112,6 +113,50 @@ export default function StudentDashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [showAllAvailable, setShowAllAvailable] = useState(false);
   const [showAllCompleted, setShowAllCompleted] = useState(false);
+  const [analysisPopup, setAnalysisPopup] = useState<{ title: string; html: string } | null>(null);
+  const [loadingAnalysisId, setLoadingAnalysisId] = useState<string | null>(null);
+
+  // Get cached analysis from localStorage
+  const getCachedAnalysis = useCallback((quizId: number, type: string): string | null => {
+    try { return localStorage.getItem(`ai_analysis_${type}_${quizId}`); } catch { return null; }
+  }, []);
+
+  // Fetch AI analysis for a regular quiz submission
+  const fetchAnalysis = useCallback(async (item: { quizId: number; title: string; type: string }) => {
+    const cacheKey = `ai_analysis_${item.type}_${item.quizId}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      setAnalysisPopup({ title: item.title, html: cached });
+      return;
+    }
+
+    const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
+    const parts = displayName.split(" ");
+    const firstName = parts[0] || "Student";
+    const lastName = parts.slice(1).join(" ") || "User";
+
+    setLoadingAnalysisId(`${item.type}-${item.quizId}`);
+    try {
+      const res = await fetch("/api/student/analyze-quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quizId: item.quizId, firstName, lastName }),
+      });
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok || !contentType.includes("application/json")) {
+        throw new Error("Analysis not available");
+      }
+      const data = await res.json();
+      if (data.analysis) {
+        localStorage.setItem(cacheKey, data.analysis);
+        setAnalysisPopup({ title: item.title, html: data.analysis });
+      }
+    } catch {
+      // Could not generate analysis — will remain orange
+    } finally {
+      setLoadingAnalysisId(null);
+    }
+  }, [session]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -544,7 +589,10 @@ export default function StudentDashboard() {
                         const sc = getSubjectColor(item.subject);
                         const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
                         const isPending = item.status === "pending";
-                        const hasAiAnalysis = item.type === "soma" ? (!!item.feedbackHtml && !isPending) : false;
+                        const somaHasAnalysis = item.type === "soma" && !!item.feedbackHtml && !isPending;
+                        const regularHasCachedAnalysis = item.type === "regular" && !!getCachedAnalysis(item.quizId, "regular");
+                        const hasAiAnalysis = somaHasAnalysis || regularHasCachedAnalysis;
+                        const isLoadingThis = loadingAnalysisId === `${item.type}-${item.quizId}`;
                         return (
                           <div
                             key={`${item.type}-${item.id}`}
@@ -568,12 +616,33 @@ export default function StudentDashboard() {
                                       Graded
                                     </span>
                                   )}
-                                  {/* AI analysis document icon */}
-                                  <FileText
-                                    className={`w-3.5 h-3.5 ${hasAiAnalysis ? "text-emerald-400" : "text-amber-500"}`}
-                                    title={hasAiAnalysis ? "AI analysis complete" : "AI analysis pending"}
+                                  {/* AI analysis document icon — clickable */}
+                                  <button
+                                    className={`p-0.5 rounded transition-colors ${
+                                      isLoadingThis
+                                        ? "text-amber-400 animate-pulse cursor-wait"
+                                        : hasAiAnalysis
+                                          ? "text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                                          : "text-amber-500 hover:text-amber-400 cursor-pointer"
+                                    }`}
+                                    title={isLoadingThis ? "Generating AI analysis..." : hasAiAnalysis ? "View AI analysis" : "Generate AI analysis"}
                                     data-testid={`icon-ai-status-${item.type}-${item.id}`}
-                                  />
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isLoadingThis) return;
+                                      if (somaHasAnalysis && item.feedbackHtml) {
+                                        setAnalysisPopup({ title: item.title, html: item.feedbackHtml });
+                                      } else {
+                                        fetchAnalysis({ quizId: item.quizId, title: item.title, type: item.type });
+                                      }
+                                    }}
+                                  >
+                                    {isLoadingThis ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <FileText className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
                                 </div>
                                 <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.type}-${item.id}`}>
                                   {item.title}
@@ -669,6 +738,31 @@ export default function StudentDashboard() {
           </>
         )}
       </main>
+
+      {/* AI Analysis Popup Overlay */}
+      {analysisPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setAnalysisPopup(null)}
+        >
+          <div
+            className="bg-white text-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-8 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setAnalysisPopup(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold"
+            >
+              &times;
+            </button>
+            <h2 className="text-lg font-bold text-gray-800 mb-4 pr-8">{analysisPopup.title} — AI Analysis</h2>
+            <div
+              className="prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysisPopup.html) }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

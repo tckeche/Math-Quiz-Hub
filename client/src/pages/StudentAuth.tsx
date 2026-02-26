@@ -53,9 +53,20 @@ export default function StudentAuth() {
 
       setLocation("/dashboard");
     } catch (err: any) {
+      const msg = err?.message || "";
+      let friendly = "Something went wrong. Please try again.";
+      if (msg.includes("Invalid login credentials")) {
+        friendly = "Incorrect email or password. Please try again.";
+      } else if (msg.includes("Email not confirmed")) {
+        friendly = "Please check your email and verify your account first.";
+      } else if (msg.includes("User not found")) {
+        friendly = "No account found with that email address.";
+      } else if (msg) {
+        friendly = msg;
+      }
       toast({
         title: "Login failed",
-        description: err.message || "Invalid email or password.",
+        description: friendly,
         variant: "destructive",
       });
     } finally {

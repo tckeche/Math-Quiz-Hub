@@ -65,6 +65,7 @@ export default function BuilderPage() {
 
   const [showPreview, setShowPreview] = useState(false);
   const [supportingDocs, setSupportingDocs] = useState<{ name: string; type: string; processing: boolean }[]>([]);
+  const [docContext, setDocContext] = useState<{ name: string; type: string; fileId: string }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -111,7 +112,12 @@ export default function BuilderPage() {
         syllabus && `Syllabus: ${syllabus}`,
       ].filter(Boolean).join(", ");
       const enrichedMessage = context ? `[${context}]\n\n${message}` : message;
-      const res = await apiRequest("POST", "/api/admin/copilot-chat", { message: enrichedMessage });
+      // Pass uploaded PDF file IDs so the copilot sends actual PDFs to Gemini
+      const docIds = docContext.map((d) => d.fileId);
+      const res = await apiRequest("POST", "/api/admin/copilot-chat", {
+        message: enrichedMessage,
+        documentIds: docIds.length > 0 ? docIds : undefined,
+      });
       return res.json();
     },
     onSuccess: (data, message) => {
@@ -291,10 +297,29 @@ export default function BuilderPage() {
     const docEntry = { name: file.name, type: docType, processing: true };
     setSupportingDocs((prev) => [...prev, docEntry]);
     try {
+      // Upload the PDF to the server so the copilot can reference the original file
+      const uploadForm = new FormData();
+      uploadForm.append("pdf", file);
+      const uploadRes = await fetch("/api/admin/upload-supporting-doc", {
+        method: "POST",
+        body: uploadForm,
+        credentials: "include",
+      });
+      let fileId: string | null = null;
+      if (uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        fileId = uploadData.id;
+      }
+
+      // Also run the pipeline to extract questions
       await startPipeline(file);
       setSupportingDocs((prev) =>
         prev.map((d) => (d.name === file.name && d.type === docType ? { ...d, processing: false } : d))
       );
+      // Store the file reference so the copilot can send the actual PDF to Gemini
+      if (fileId) {
+        setDocContext((prev) => [...prev, { name: file.name, type: docType, fileId }]);
+      }
     } catch {
       setSupportingDocs((prev) => prev.filter((d) => !(d.name === file.name && d.type === docType)));
     }
@@ -570,7 +595,11 @@ export default function BuilderPage() {
                     )}
                     <button
                       className="text-slate-500 hover:text-red-400 shrink-0"
-                      onClick={() => setSupportingDocs((prev) => prev.filter((_, j) => j !== i))}
+                      onClick={() => {
+                        const removed = supportingDocs[i];
+                        setSupportingDocs((prev) => prev.filter((_, j) => j !== i));
+                        setDocContext((prev) => prev.filter((d) => !(d.name === removed.name && d.type === removed.type)));
+                      }}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -763,6 +792,12 @@ export default function BuilderPage() {
                   <Sparkles className="w-6 h-6 mx-auto text-violet-400/50" />
                   <p className="text-xs text-slate-500">Ask the AI to generate quiz questions.</p>
                   <p className="text-[10px] text-slate-600 leading-relaxed">"Generate 5 IGCSE differentiation MCQs"</p>
+                </div>
+              )}
+              {docContext.length > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400">
+                  <FileText className="w-3 h-3 shrink-0" />
+                  {docContext.length} document{docContext.length > 1 ? "s" : ""} loaded as context
                 </div>
               )}
               {chat.map((m, i) => (

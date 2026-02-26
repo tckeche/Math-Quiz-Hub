@@ -199,17 +199,31 @@ function ResultsView({
   } | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
 
+  const { toast } = useToast();
   const handleReview = async () => {
-    if (!quizId || !studentFirstName || !studentLastName) return;
+    if (!quizId || !studentFirstName || !studentLastName) {
+      toast({ title: "Unable to load review", description: "Missing student information. Please try refreshing the page.", variant: "destructive" });
+      return;
+    }
     setReviewLoading(true);
     try {
       const res = await fetch(`/api/student/quiz-review?quizId=${quizId}&firstName=${encodeURIComponent(studentFirstName)}&lastName=${encodeURIComponent(studentLastName)}`);
-      if (!res.ok) throw new Error("Could not load review data");
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Server returned an unexpected response. Please try again.");
+      }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || "Could not load review data");
+      }
       const data = await res.json();
+      if (!data.questions || !data.submission?.answersBreakdown) {
+        throw new Error("Review data is incomplete. The quiz may not have been graded yet.");
+      }
       setReviewData(data);
       setReviewing(true);
-    } catch {
-      // silently fail
+    } catch (err: any) {
+      toast({ title: "Review failed", description: err.message || "Could not load review data. Please try again.", variant: "destructive" });
     } finally {
       setReviewLoading(false);
     }
