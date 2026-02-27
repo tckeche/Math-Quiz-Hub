@@ -105,14 +105,8 @@ export default function StudentDashboard() {
   const [analysisPopup, setAnalysisPopup] = useState<{ title: string; html: string } | null>(null);
   const [loadingAnalysisId, setLoadingAnalysisId] = useState<string | null>(null);
 
-  // Get cached analysis from localStorage
-  const getCachedAnalysis = useCallback((quizId: number, type: string): string | null => {
-    try { return localStorage.getItem(`ai_analysis_${type}_${quizId}`); } catch { return null; }
-  }, []);
-
-  // Fetch AI analysis for a regular quiz submission
-  const fetchAnalysis = useCallback(async (item: { quizId: number; title: string; type: string }) => {
-    const cacheKey = `ai_analysis_${item.type}_${item.quizId}`;
+  const fetchAnalysis = useCallback(async (item: { quizId: number; title: string }) => {
+    const cacheKey = `ai_analysis_soma_${item.quizId}`;
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
       setAnalysisPopup({ title: item.title, html: cached });
@@ -124,7 +118,7 @@ export default function StudentDashboard() {
     const firstName = parts[0] || "Student";
     const lastName = parts.slice(1).join(" ") || "User";
 
-    setLoadingAnalysisId(`${item.type}-${item.quizId}`);
+    setLoadingAnalysisId(`soma-${item.quizId}`);
     try {
       const res = await fetch("/api/student/analyze-quiz", {
         method: "POST",
@@ -141,7 +135,6 @@ export default function StudentDashboard() {
         setAnalysisPopup({ title: item.title, html: data.analysis });
       }
     } catch {
-      // Could not generate analysis — will remain orange
     } finally {
       setLoadingAnalysisId(null);
     }
@@ -466,9 +459,9 @@ export default function StudentDashboard() {
                         const isLoadingThis = loadingAnalysisId === `soma-${item.quizId}`;
                         return (
                           <div
-                            key={`${item.type}-${item.id}`}
+                            key={item.id}
                             className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 transition-all duration-300"
-                            data-testid={`card-completed-${item.type}-${item.id}`}
+                            data-testid={`card-completed-${item.id}`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className={`w-10 h-10 rounded-xl ${sc.bg} border ${sc.border} flex items-center justify-center shrink-0`}>
@@ -507,14 +500,14 @@ export default function StudentDashboard() {
                                             : "text-amber-500 animate-pulse hover:text-amber-400 cursor-pointer"
                                     }`}
                                     title={isLoadingThis ? "Your Report is being generated..." : hasAiAnalysis ? "View AI analysis" : "Generate AI analysis"}
-                                    data-testid={`icon-ai-status-${item.type}-${item.id}`}
+                                    data-testid={`icon-ai-status-${item.id}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (isLoadingThis) return;
-                                      if (somaHasAnalysis && item.feedbackHtml) {
+                                      if (hasAiAnalysis && item.feedbackHtml) {
                                         setAnalysisPopup({ title: item.title, html: item.feedbackHtml });
                                       } else {
-                                        fetchAnalysis({ quizId: item.quizId, title: item.title, type: item.type });
+                                        fetchAnalysis({ quizId: item.quizId, title: item.title });
                                       }
                                     }}
                                   >
