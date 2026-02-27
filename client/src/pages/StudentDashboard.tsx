@@ -518,7 +518,7 @@ export default function StudentDashboard() {
                                     )}
                                   </button>
                                 </div>
-                                <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.type}-${item.id}`}>
+                                <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.id}`}>
                                   {item.title}
                                 </h3>
                                 <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
@@ -529,7 +529,7 @@ export default function StudentDashboard() {
                                 <div
                                   className="text-2xl font-bold"
                                   style={{ color: pct >= 70 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#f43f5e", textShadow: `0 0 12px ${pct >= 70 ? "#10b98130" : pct >= 50 ? "#f59e0b30" : "#f43f5e30"}` }}
-                                  data-testid={`text-score-${item.type}-${item.id}`}
+                                  data-testid={`text-score-${item.id}`}
                                 >
                                   {pct}%
                                 </div>
@@ -539,11 +539,11 @@ export default function StudentDashboard() {
                                 <div className="flex items-center gap-2 mt-1.5 justify-end">
                                   {/* Eye icon to review quiz answers */}
                                   {(
-                                    <Link href={item.type === "soma" ? `/soma/review/${item.id}` : `/quiz/${item.quizId}`}>
+                                    <Link href={`/soma/review/${item.id}`}>
                                       <button
                                         className="text-cyan-400 hover:text-cyan-300 transition-colors p-0.5"
                                         title="Review answers"
-                                        data-testid={`button-review-quiz-${item.type}-${item.id}`}
+                                        data-testid={`button-review-quiz-${item.id}`}
                                       >
                                         <Eye className="w-4 h-4" />
                                       </button>
@@ -563,7 +563,7 @@ export default function StudentDashboard() {
                                         }
                                       }}
                                       className="text-[10px] text-violet-400 hover:text-violet-300 block transition-colors"
-                                      data-testid={`button-view-report-${item.type}-${item.id}`}
+                                      data-testid={`button-view-report-${item.id}`}
                                     >
                                       View Report →
                                     </button>
