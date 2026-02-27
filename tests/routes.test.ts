@@ -134,7 +134,7 @@ describe("POST /api/admin/login", () => {
   it("returns 401 with wrong password", async () => {
     const res = await request.post("/api/admin/login").send({ password: "wrongpassword" });
     expect(res.status).toBe(401);
-    expect(res.body.message).toMatch(/incorrect password/i);
+    expect(res.body.error.message).toMatch(/invalid admin credentials/i);
   });
 
   it("returns 401 with empty password", async () => {
@@ -511,7 +511,7 @@ describe("POST /api/submissions", () => {
       startTime: Date.now() + 60000, // 1 minute in future
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/invalid start time/i);
+    expect(res.body.error.message).toMatch(/invalid start time/i);
   });
 
   it("rejects submission with startTime exceeding time limit", async () => {
@@ -522,7 +522,7 @@ describe("POST /api/submissions", () => {
       startTime: Date.now() - (61 * 60 * 1000), // 61 minutes ago (limit is 60)
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/time limit/i);
+    expect(res.body.error.message).toMatch(/time limit/i);
   });
 
   it("returns 400 when studentId missing", async () => {
@@ -923,7 +923,7 @@ describe("POST /api/auth/sync", () => {
       email: "noid@example.com",
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/missing/i);
+    expect(res.body.error.message).toMatch(/missing/i);
   });
 
   it("returns 400 when email is missing", async () => {
@@ -931,7 +931,7 @@ describe("POST /api/auth/sync", () => {
       id: "550e8400-e29b-41d4-a716-446655440004",
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/missing/i);
+    expect(res.body.error.message).toMatch(/missing/i);
   });
 });
 
@@ -940,7 +940,7 @@ describe("GET /api/student/reports", () => {
   it("returns 400 when studentId is missing", async () => {
     const res = await request.get("/api/student/reports");
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/studentId required/i);
+    expect(res.body.error.message).toMatch(/studentId required/i);
   });
 
   it("returns empty array for unknown studentId", async () => {
@@ -954,7 +954,7 @@ describe("GET /api/student/submissions", () => {
   it("returns 400 when studentId is missing", async () => {
     const res = await request.get("/api/student/submissions");
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/studentId required/i);
+    expect(res.body.error.message).toMatch(/studentId required/i);
   });
 
   it("returns empty array for unknown studentId", async () => {
@@ -1306,7 +1306,7 @@ describe("Security: Additional hardening", () => {
       startTime: Infinity,
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/startTime/i);
+    expect(res.body.error.message).toMatch(/startTime/i);
   });
 
   it("submission with NaN startTime is rejected", async () => {

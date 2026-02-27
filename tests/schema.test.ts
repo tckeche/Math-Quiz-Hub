@@ -98,7 +98,7 @@ describe("questionUploadSchema", () => {
     expect(oneOption.success).toBe(false);
     const noOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: [] }]);
     expect(noOptions.success).toBe(false);
-    const fourOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A", "B", "C", "D"] }]);
+    const fourOptions = questionUploadSchema.safeParse([{ ...validQuestion, options: ["A", "B", "C", "D"], correct_answer: "A" }]);
     expect(fourOptions.success).toBe(true);
   });
 

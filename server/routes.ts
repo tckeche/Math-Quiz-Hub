@@ -481,7 +481,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/tutor/students/:studentId/comments", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const { studentId } = req.params;
+      const studentId = String(req.params.studentId);
       const adopted = await storage.getAdoptedStudents(tutorId);
       if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
       const comments = await storage.getTutorComments(tutorId, studentId);
@@ -494,7 +494,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/tutor/students/:studentId/comments", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const { studentId } = req.params;
+      const studentId = String(req.params.studentId);
       const adopted = await storage.getAdoptedStudents(tutorId);
       if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
       const { comment } = req.body;
@@ -509,7 +509,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/tutor/students/:studentId/performance", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const { studentId } = req.params;
+      const studentId = String(req.params.studentId);
       const adopted = await storage.getAdoptedStudents(tutorId);
       if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
       const [reports, submissions] = await Promise.all([
@@ -591,7 +591,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/super-admin/users/:userId", requireSuperAdmin, async (req, res) => {
     try {
-      const { userId } = req.params;
+      const userId = String(req.params.userId);
       const user = await storage.getSomaUserById(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
       if (user.role === "super_admin") return res.status(403).json({ message: "Cannot delete super admin" });
@@ -613,7 +613,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/super-admin/quizzes/:quizId", requireSuperAdmin, async (req, res) => {
     try {
-      const quizId = parseInt(req.params.quizId);
+      const quizId = parseInt(String(req.params.quizId));
       if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
       await storage.deleteSomaQuiz(quizId);
       res.json({ message: "Quiz deleted" });
