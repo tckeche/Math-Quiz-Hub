@@ -229,17 +229,22 @@ class DatabaseStorage implements IStorage {
   }
 
   async getAvailableStudents(tutorId: string): Promise<SomaUser[]> {
+    // Step 1: Fetch ALL adopted student IDs for this tutor
     const adopted = await this.getAdoptedStudents(tutorId);
     const adoptedIds = new Set(adopted.map((s) => s.id));
+
+    // Step 2: Fetch ALL users where role = 'student' OR role IS NULL
     const allStudents = await this.database.select().from(somaUsers)
       .where(
-        and(
-          or(eq(somaUsers.role, "student"), isNull(somaUsers.role)),
-          ne(somaUsers.id, tutorId),
-        )
+        or(eq(somaUsers.role, "student"), isNull(somaUsers.role))
       );
-    if (adoptedIds.size === 0) return allStudents;
-    return allStudents.filter((s) => !adoptedIds.has(s.id));
+
+    // Step 3: Filter in plain JS — this cannot fail regardless of adoptedIds size
+    const available = allStudents.filter(
+      (s) => s.id !== tutorId && !adoptedIds.has(s.id)
+    );
+
+    return available;
   }
 
   async createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]> {
@@ -518,8 +523,16 @@ class MemoryStorage implements IStorage {
   }
 
   async getAvailableStudents(tutorId: string): Promise<SomaUser[]> {
+    // Step 1: Fetch ALL adopted student IDs for this tutor
     const adoptedIds = new Set(this.tutorStudentsList.filter((ts) => ts.tutorId === tutorId).map((ts) => ts.studentId));
-    return this.somaUsersList.filter((u) => u.role === "student" && u.id !== tutorId && !adoptedIds.has(u.id));
+
+    // Step 2: Get all users where role = 'student' OR role IS NULL
+    const allStudents = this.somaUsersList.filter(
+      (u) => u.role === "student" || u.role === null
+    );
+
+    // Step 3: Filter in plain JS — this cannot fail
+    return allStudents.filter((s) => s.id !== tutorId && !adoptedIds.has(s.id));
   }
 
   async createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]> {

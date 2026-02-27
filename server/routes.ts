@@ -612,6 +612,218 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ─── Tutor Quiz Builder Routes (replaces /api/admin/* for tutors) ──
+
+  // Session check for tutor auth
+  app.get("/api/tutor/session", requireTutor, async (_req, res) => {
+    res.json({ authenticated: true });
+  });
+
+  // Create a new quiz (sets authorId = tutorId)
+  app.post("/api/tutor/quizzes", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const { title, syllabus, level, subject, topic } = req.body;
+      if (!title) return res.status(400).json({ message: "title is required" });
+      const quiz = await storage.createSomaQuiz({
+        title,
+        topic: topic || title,
+        syllabus: syllabus || "IEB",
+        level: level || "Grade 6-12",
+        subject: subject || null,
+        authorId: tutorId,
+        status: "draft",
+      });
+      res.json(quiz);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to create quiz" });
+    }
+  });
+
+  // Get a specific quiz with its questions
+  app.get("/api/tutor/quizzes/:quizId/detail", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      const questions = await storage.getSomaQuestionsByQuizId(quiz.id);
+      res.json({ ...quiz, questions });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch quiz" });
+    }
+  });
+
+  // Update quiz metadata
+  app.put("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      const existing = await storage.getSomaQuiz(quizId);
+      if (!existing) return res.status(404).json({ message: "Quiz not found" });
+
+      const { title, syllabus, level, subject } = req.body;
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (syllabus !== undefined) updates.syllabus = syllabus || null;
+      if (level !== undefined) updates.level = level || null;
+      if (subject !== undefined) updates.subject = subject || null;
+
+      const updated = await storage.updateSomaQuiz(quizId, updates);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to update quiz" });
+    }
+  });
+
+  // Add questions to a quiz
+  app.post("/api/tutor/quizzes/:quizId/questions", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+
+      const { questions } = req.body;
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return res.status(400).json({ message: "questions array required" });
+      }
+      const mapped = questions.map((q: any) => ({
+        quizId,
+        stem: q.prompt_text || q.stem || "",
+        options: Array.isArray(q.options) ? [...q.options] : [],
+        correctAnswer: q.correct_answer || q.correctAnswer || "",
+        explanation: q.explanation || "",
+        marks: q.marks_worth || q.marks || 1,
+      }));
+      const saved = await storage.createSomaQuestions(mapped);
+      res.json(saved);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to add questions" });
+    }
+  });
+
+  // Delete a question
+  app.delete("/api/tutor/questions/:questionId", requireTutor, async (req, res) => {
+    try {
+      await storage.deleteSomaQuestion(parseInt(String(req.params.questionId)));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete question" });
+    }
+  });
+
+  // Copilot chat for tutor quiz builder
+  app.post("/api/tutor/copilot-chat", requireTutor, async (req, res) => {
+    try {
+      const { message, documentIds } = req.body;
+      if (!message) return res.status(400).json({ message: "message is required" });
+
+      const text = String(message);
+      const missing: string[] = [];
+      if (!/subject\s*:/i.test(text)) missing.push("Subject");
+      if (!/level\s*:/i.test(text)) missing.push("Level");
+      if (!/syllabus\s*:/i.test(text)) missing.push("Syllabus");
+      const hasImplicitTopic = /about\s+\w+/i.test(text);
+      if (missing.length > 0 && !hasImplicitTopic) {
+        return res.json({
+          reply: `Before I generate, please provide: ${missing.join(", ")}.`,
+          drafts: [],
+          metadata: { provider: "clarification", model: "copilot-guard", durationMs: 0 },
+          needsClarification: true,
+        });
+      }
+
+      let supportingText = "";
+      const pdfFileIds = Array.isArray(documentIds) ? documentIds : [];
+      const docsDir = path.resolve(process.cwd(), "supporting-docs");
+      for (const fileId of pdfFileIds) {
+        if (typeof fileId !== "string" || fileId.includes("..") || fileId.includes("/")) continue;
+        const filePath = path.join(docsDir, fileId);
+        if (fs.existsSync(filePath)) {
+          supportingText += `\n${await parsePdfTextFromBuffer(fs.readFileSync(filePath))}`;
+        }
+      }
+
+      const paperCode = text.match(/\b\d{4}\/v\d\/\d{4}\b/i)?.[0];
+      if (paperCode) {
+        supportingText += `\n${await fetchPaperContext(paperCode)}`;
+      }
+
+      const copilotSystemPrompt = `You are SOMA Copilot, an expert MCQ assessment generator for the MCEC platform.
+
+CRITICAL: You MUST generate questions as a JSON array with this EXACT schema:
+\`\`\`json
+[
+  {
+    "prompt_text": "The full question text with LaTeX like \\\\(x^2\\\\) if needed",
+    "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+    "correct_answer": "The full text of the correct option (must exactly match one of the options)",
+    "marks_worth": 2,
+    "explanation": "Brief explanation of why the correct answer is right"
+  }
+]
+\`\`\`
+
+RULES:
+- "options" MUST be an array of exactly 4 strings. NEVER use an object like {A: ..., B: ...}.
+- "correct_answer" MUST be the full text of the correct option, NOT a letter like "A" or "B".
+- "prompt_text" is the question text. Do NOT use "question" or "stem" as the key name.
+- Every question MUST have all 5 fields: prompt_text, options, correct_answer, marks_worth, explanation.
+- Generate ONLY multiple-choice questions. NEVER generate open-ended, essay, or free-response questions.
+- Include 1 correct answer and 3 calculated distractors based on common student errors.
+- You may include a brief plain-text discussion before the JSON block.`;
+
+      const { data, metadata } = await generateWithFallback(
+        copilotSystemPrompt,
+        `${text}\n\nSupporting context:\n${supportingText || "No extra context."}`,
+      );
+
+      const rawDrafts = extractJsonArray(data) || [];
+      const drafts = rawDrafts.map((d: any) => {
+        let opts = d.options;
+        if (opts && !Array.isArray(opts) && typeof opts === "object") {
+          const keys = Object.keys(opts);
+          const isLetterKeyed = keys.every((k) => /^[A-Z]$/i.test(k));
+          if (isLetterKeyed) {
+            opts = keys.sort().map((k) => opts[k]);
+          } else {
+            opts = Object.values(opts);
+          }
+        }
+        if (!Array.isArray(opts) || opts.length < 4) return null;
+        opts = opts.map(String).slice(0, 4);
+
+        const promptText = d.prompt_text || d.promptText || d.question || d.stem || "";
+        if (!promptText) return null;
+
+        let correctAnswer = d.correct_answer || d.correctAnswer || d.answer || "";
+        if (typeof correctAnswer === "string" && correctAnswer.length <= 2) {
+          const letterIndex = correctAnswer.toUpperCase().charCodeAt(0) - 65;
+          if (letterIndex >= 0 && letterIndex < opts.length) {
+            correctAnswer = opts[letterIndex];
+          }
+        }
+        correctAnswer = String(correctAnswer);
+        if (!correctAnswer || !opts.includes(correctAnswer)) return null;
+
+        return {
+          prompt_text: String(promptText),
+          options: opts,
+          correct_answer: correctAnswer,
+          marks_worth: Number(d.marks_worth || d.marksWorth || d.marks || 1) || 1,
+          explanation: String(d.explanation || ""),
+        };
+      }).filter(Boolean);
+      res.json({ reply: data, drafts, metadata, needsClarification: false });
+    } catch (err: any) {
+      res.status(500).json({ message: `Copilot failed: ${err.message}` });
+    }
+  });
+
+  // Upload supporting document for tutor quiz builder
+  app.post("/api/tutor/upload-doc", requireTutor, supportingDocUpload.single("pdf"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No PDF uploaded" });
+    res.json({ id: req.file.filename, originalName: req.file.originalname });
+  });
+
   // ─── Super Admin Routes ──────────────────────────────────────────
 
   app.get("/api/super-admin/users", requireSuperAdmin, async (_req, res) => {

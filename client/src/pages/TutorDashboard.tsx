@@ -188,7 +188,7 @@ export default function TutorDashboard() {
             <h2 className="text-2xl font-bold text-slate-100">Dashboard</h2>
             <p className="text-sm text-slate-400 mt-1">Cohort overview and recent activity</p>
           </div>
-          <Link href="/admin/builder">
+          <Link href="/tutor/assessments/new">
             <span
               className="glow-button flex items-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold cursor-pointer"
               data-testid="button-create-assessment"

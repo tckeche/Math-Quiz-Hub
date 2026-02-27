@@ -61,12 +61,12 @@ export default function Landing() {
           </button>
         </Link>
 
-        <Link href="/admin">
+        <Link href="/login">
           <span
             className="text-xs text-slate-500 hover:text-violet-400 mt-6 tracking-widest uppercase transition-colors block mx-auto cursor-pointer"
             data-testid="link-admin-access"
           >
-            Admin Access
+            Tutor Access
           </span>
         </Link>
       </div>

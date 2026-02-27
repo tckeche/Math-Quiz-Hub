@@ -77,12 +77,14 @@ export default function BuilderPage() {
   const tutorUserId = supaSession?.user?.id;
   const supaAccessToken = supaSession?.access_token;
   const isTutorAuth = !!tutorUserId;
-  const backLink = isTutorAuth ? "/tutor/assessments" : "/admin";
+  const backLink = "/tutor/assessments";
 
   const authHeaders = useCallback((): Record<string, string> => {
-    if (supaAccessToken) return { "Authorization": `Bearer ${supaAccessToken}` };
-    return {};
-  }, [supaAccessToken]);
+    const headers: Record<string, string> = {};
+    if (supaAccessToken) headers["Authorization"] = `Bearer ${supaAccessToken}`;
+    if (tutorUserId) headers["x-tutor-id"] = tutorUserId;
+    return headers;
+  }, [supaAccessToken, tutorUserId]);
 
   const authFetch = useCallback(async (url: string, opts: RequestInit = {}): Promise<Response> => {
     const headers = { ...authHeaders(), ...(opts.headers || {}) };
@@ -111,21 +113,21 @@ export default function BuilderPage() {
     return res;
   }, [authHeaders]);
 
-  const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
-    queryKey: ["/api/admin/session", tutorUserId],
+  const { data: tutorSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
+    queryKey: ["/api/tutor/session", tutorUserId],
     queryFn: async () => {
-      const res = await authFetch("/api/admin/session");
+      const res = await authFetch("/api/tutor/session");
       return res.json();
     },
-    enabled: !supaLoading,
+    enabled: !supaLoading && !!tutorUserId,
   });
 
-  const authenticated = adminSession?.authenticated === true;
+  const authenticated = tutorSession?.authenticated === true;
 
   const { data: quizData, isLoading: quizLoading } = useQuery<SomaQuiz & { questions: SomaQuestion[] }>({
-    queryKey: ["/api/admin/quizzes", activeQuizId],
+    queryKey: ["/api/tutor/quizzes", activeQuizId],
     queryFn: async () => {
-      const res = await authFetch(`/api/admin/quizzes/${activeQuizId}`);
+      const res = await authFetch(`/api/tutor/quizzes/${activeQuizId}/detail`);
       if (!res.ok) throw new Error("Failed to load quiz");
       return res.json();
     },
@@ -160,7 +162,7 @@ export default function BuilderPage() {
   const ensureQuizExists = async (): Promise<number> => {
     if (activeQuizId) return activeQuizId;
     if (!title.trim()) throw new Error("Please fill in a quiz title before generating questions.");
-    const quizRes = await authApiRequest("POST", "/api/admin/quizzes", {
+    const quizRes = await authApiRequest("POST", "/api/tutor/quizzes", {
       title: title.trim(),
       topic: title.trim(),
       syllabus: syllabus || "IEB",
@@ -200,7 +202,7 @@ export default function BuilderPage() {
       const docIds = docContext.map((d) => d.fileId);
 
       animatePipeline(2);
-      const res = await authApiRequest("POST", "/api/admin/copilot-chat", {
+      const res = await authApiRequest("POST", "/api/tutor/copilot-chat", {
         message: enrichedMessage,
         documentIds: docIds.length > 0 ? docIds : undefined,
       });
@@ -216,12 +218,12 @@ export default function BuilderPage() {
         const quizId = await ensureQuizExists();
 
         animatePipeline(4);
-        await authApiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions: data.drafts });
+        await authApiRequest("POST", `/api/tutor/quizzes/${quizId}/questions`, { questions: data.drafts });
 
-        await queryClient.refetchQueries({ queryKey: ["/api/admin/quizzes", quizId] });
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/tutor/quizzes", quizId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
 
-        const refetched = queryClient.getQueryData<SomaQuiz & { questions: SomaQuestion[] }>(["/api/admin/quizzes", quizId]);
+        const refetched = queryClient.getQueryData<SomaQuiz & { questions: SomaQuestion[] }>(["/api/tutor/quizzes", quizId]);
         if (refetched?.questions) {
           setSavedQuestions(refetched.questions);
         }
@@ -251,7 +253,7 @@ export default function BuilderPage() {
     mutationFn: async () => {
       if (!activeQuizId) throw new Error("No quiz to update");
       if (!title.trim()) throw new Error("Title is required");
-      await authApiRequest("PUT", `/api/admin/quizzes/${activeQuizId}`, {
+      await authApiRequest("PUT", `/api/tutor/quizzes/${activeQuizId}`, {
         title: title.trim(),
         syllabus: syllabus || null,
         level: level || null,
@@ -260,8 +262,8 @@ export default function BuilderPage() {
     },
     onSuccess: () => {
       setMetaDirty(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", activeQuizId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
       toast({ title: "Assessment details updated" });
     },
     onError: (err: Error) => toast({ title: "Failed to update", description: err.message, variant: "destructive" }),
@@ -269,10 +271,10 @@ export default function BuilderPage() {
 
   const deleteQuestionMutation = useMutation({
     mutationFn: async (questionId: number) =>
-      authApiRequest("DELETE", `/api/admin/questions/${questionId}`),
+      authApiRequest("DELETE", `/api/tutor/questions/${questionId}`),
     onSuccess: (_data, questionId) => {
       setSavedQuestions((prev) => prev.filter((q) => q.id !== questionId));
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", activeQuizId] });
       toast({ title: "Question deleted" });
     },
     onError: (err: Error) => toast({ title: "Failed to delete question", description: err.message, variant: "destructive" }),
@@ -284,7 +286,7 @@ export default function BuilderPage() {
     try {
       const uploadForm = new FormData();
       uploadForm.append("pdf", file);
-      const uploadRes = await authFetch("/api/admin/upload-supporting-doc", {
+      const uploadRes = await authFetch("/api/tutor/upload-doc", {
         method: "POST",
         body: uploadForm,
       });
@@ -335,7 +337,7 @@ export default function BuilderPage() {
     );
   }
 
-  if (sessionError && !isTutorAuth) {
+  if (sessionError) {
     return <div className="min-h-screen bg-background p-4 md:p-6 text-red-400">Failed to verify session.</div>;
   }
 
@@ -401,7 +403,7 @@ export default function BuilderPage() {
               <Eye className="w-4 h-4 md:mr-1.5" />
               <span className="hidden md:inline">Preview</span>
             </Button>
-            <Link href="/admin">
+            <Link href="/tutor/assessments">
               <Button className="border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:border-red-500/30 transition-all min-h-[44px] md:min-h-0" size="sm" data-testid="button-exit-builder">
                 <X className="w-4 h-4 md:mr-1" />
                 <span className="hidden md:inline">Exit</span>
@@ -737,10 +739,10 @@ export default function BuilderPage() {
                 <Eye className="w-4 h-4 mr-2" />
                 Preview Assessment
               </Button>
-              <Link href="/admin">
+              <Link href="/tutor/assessments">
                 <Button className="w-full glow-button-outline min-h-[48px]" data-testid="button-success-dashboard">
                   <LayoutDashboard className="w-4 h-4 mr-2" />
-                  Back to Dashboard
+                  Back to Assessments
                 </Button>
               </Link>
             </div>
