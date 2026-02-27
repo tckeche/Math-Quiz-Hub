@@ -4,7 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 
-import AdminPage from "@/pages/admin";
 import QuizPage from "@/pages/quiz";
 import BuilderPage from "@/pages/builder";
 import AnalyticsPage from "@/pages/analytics";
@@ -22,6 +21,7 @@ import SomaChatPage from "@/pages/soma-chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import RoleRouter from "@/components/RoleRouter";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { Redirect } from "wouter";
 
 function Router() {
   return (
@@ -34,10 +34,11 @@ function Router() {
       <Route path="/tutor/students/:id">{(params) => <ProtectedRoute component={TutorStudentDetail} params={params} />}</Route>
       <Route path="/tutor/students">{() => <ProtectedRoute component={TutorStudents} />}</Route>
       <Route path="/tutor/assessments">{() => <ProtectedRoute component={TutorAssessments} />}</Route>
-      <Route path="/admin" component={AdminPage} />
       <Route path="/admin/builder/:id" component={BuilderPage} />
       <Route path="/admin/builder" component={BuilderPage} />
       <Route path="/admin/analytics/:id" component={AnalyticsPage} />
+      <Route path="/admin/:rest*">{() => <Redirect to="/login" />}</Route>
+      <Route path="/admin">{() => <Redirect to="/login" />}</Route>
       <Route path="/quiz/:id">{(params) => <ProtectedRoute component={QuizPage} params={params} />}</Route>
       <Route path="/soma/quiz/:id">{(params) => <ProtectedRoute component={SomaQuizEngine} params={params} />}</Route>
       <Route path="/soma/review/:reportId">{(params) => <ProtectedRoute component={SomaQuizReview} params={params} />}</Route>

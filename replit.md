@@ -63,6 +63,9 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 
 ### Key Features
 - **RBAC (Role-Based Access Control)**: Three roles — `student`, `tutor`, `super_admin`. Automated domain-based assignment on auth sync: `admin.soma@melaniacalvin.com` → super_admin, `*@melaniacalvin.com` → tutor, all others → student. `requireTutor` middleware allows tutor+super_admin. `requireSuperAdmin` middleware strictly requires super_admin. Role-based redirect after login (student→/dashboard, tutor→/tutor, super_admin→/super-admin).
+- **Admin Route Deprecation**: `/admin` redirects to `/login`. Builder (`/admin/builder`) and analytics (`/admin/analytics/:id`) routes remain accessible. All auth flows through `/login`.
+- **Password Reset**: Login page includes "Forgot password?" flow using `supabase.auth.resetPasswordForEmail()`.
+- **Auto-sync on /api/auth/me**: If user exists in Supabase but not in soma_users, the `/api/auth/me` endpoint auto-creates the record with the correct role based on email domain.
 - Admin password: Stored in ADMIN_PASSWORD env var; JWT sessions via JWT_SECRET env var
 - LaTeX rendering via react-katex (InlineMath/BlockMath)
 - Anti-cheat timer persisted in localStorage

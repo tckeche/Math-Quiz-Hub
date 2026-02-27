@@ -179,7 +179,7 @@ export default function TutorStudents() {
             data-testid="button-adopt-students"
           >
             <UserPlus className="w-4 h-4" />
-            Adopt Students
+            Add Students
           </button>
         </div>
 
@@ -205,7 +205,7 @@ export default function TutorStudents() {
           <div className={`${CARD_CLASS} text-center py-12`}>
             <Users className="w-12 h-12 mx-auto text-slate-600 mb-4" />
             <p className="text-sm text-slate-400">{searchQuery ? "No matching students found" : "No students adopted yet"}</p>
-            {!searchQuery && <p className="text-xs text-slate-500 mt-1">Click "Adopt Students" to add students to your cohort</p>}
+            {!searchQuery && <p className="text-xs text-slate-500 mt-1">Click "Add Students" to add students to your cohort</p>}
           </div>
         ) : (
           <div className="grid gap-3">
@@ -252,13 +252,13 @@ export default function TutorStudents() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowAdoptModal(false)}>
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-5">
-              <h3 className="text-lg font-bold text-slate-200">Adopt Students</h3>
+              <h3 className="text-lg font-bold text-slate-200">Add Students</h3>
               <button onClick={() => setShowAdoptModal(false)} className="text-slate-400 hover:text-slate-300 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
             {availableStudents.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-8">No students available for adoption</p>
+              <p className="text-sm text-slate-400 text-center py-8">No students available to add</p>
             ) : (
               <>
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto">
@@ -294,7 +294,7 @@ export default function TutorStudents() {
                   {adoptMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin mx-auto" />
                   ) : (
-                    `Adopt ${selectedStudentIds.size} Student${selectedStudentIds.size !== 1 ? "s" : ""}`
+                    `Add ${selectedStudentIds.size} Student${selectedStudentIds.size !== 1 ? "s" : ""}`
                   )}
                 </button>
               </>

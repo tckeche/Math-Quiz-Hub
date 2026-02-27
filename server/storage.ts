@@ -15,7 +15,7 @@ import {
   tutorStudents, quizAssignments, tutorComments,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ne, notInArray, inArray } from "drizzle-orm";
+import { eq, and, ne, notInArray, inArray, or, isNull, sql, count, avg, sum } from "drizzle-orm";
 
 function sanitizeName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
@@ -91,6 +91,13 @@ export interface IStorage {
   // Tutor comments
   addTutorComment(comment: InsertTutorComment): Promise<TutorComment>;
   getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]>;
+
+  getDashboardStatsForTutor(tutorId: string): Promise<{
+    totalStudents: number;
+    totalQuizzes: number;
+    cohortAverages: { subject: string; average: number; count: number }[];
+    recentSubmissions: { studentName: string; score: number; quizTitle: string; subject: string | null; createdAt: string }[];
+  }>;
 
   // Super Admin
   getAllSomaUsers(): Promise<SomaUser[]>;
@@ -395,13 +402,14 @@ class DatabaseStorage implements IStorage {
       .from(tutorStudents)
       .where(eq(tutorStudents.tutorId, tutorId));
     const adoptedIds = adopted.map((a) => a.studentId);
+    const roleFilter = or(eq(somaUsers.role, "student"), isNull(somaUsers.role));
     if (adoptedIds.length === 0) {
       return this.database.select().from(somaUsers)
-        .where(and(eq(somaUsers.role, "student"), ne(somaUsers.id, tutorId)));
+        .where(and(roleFilter, ne(somaUsers.id, tutorId)));
     }
     return this.database.select().from(somaUsers)
       .where(and(
-        eq(somaUsers.role, "student"),
+        roleFilter,
         ne(somaUsers.id, tutorId),
         notInArray(somaUsers.id, adoptedIds),
       ));
@@ -452,6 +460,70 @@ class DatabaseStorage implements IStorage {
     return this.database.select().from(tutorComments)
       .where(and(eq(tutorComments.tutorId, tutorId), eq(tutorComments.studentId, studentId)))
       .orderBy(tutorComments.createdAt);
+  }
+
+  async getDashboardStatsForTutor(tutorId: string) {
+    const adoptedStudentRows = await this.database
+      .select({ studentId: tutorStudents.studentId })
+      .from(tutorStudents)
+      .where(eq(tutorStudents.tutorId, tutorId));
+    const adoptedIds = adoptedStudentRows.map((r) => r.studentId);
+    const totalStudents = adoptedIds.length;
+
+    if (totalStudents === 0) {
+      const tutorQuizzes = await this.database.select({ id: somaQuizzes.id }).from(somaQuizzes);
+      return { totalStudents: 0, totalQuizzes: tutorQuizzes.length, cohortAverages: [], recentSubmissions: [] };
+    }
+
+    const [quizCountResult, subjectAvgRows, recentRows] = await Promise.all([
+      this.database.select({ cnt: sql<number>`count(*)::int` }).from(somaQuizzes),
+
+      this.database
+        .select({
+          subject: sql<string>`coalesce(${somaQuizzes.subject}, 'General')`,
+          totalScore: sql<number>`coalesce(sum(${somaReports.score}), 0)::int`,
+          totalMax: sql<number>`coalesce(sum((select coalesce(sum(${somaQuestions.marks}), 0) from ${somaQuestions} where ${somaQuestions.quizId} = ${somaReports.quizId})), 0)::int`,
+          cnt: sql<number>`count(*)::int`,
+        })
+        .from(somaReports)
+        .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+        .where(inArray(somaReports.studentId, adoptedIds))
+        .groupBy(sql`coalesce(${somaQuizzes.subject}, 'General')`),
+
+      this.database
+        .select({
+          studentName: somaReports.studentName,
+          score: somaReports.score,
+          quizTitle: somaQuizzes.title,
+          subject: somaQuizzes.subject,
+          createdAt: somaReports.createdAt,
+          maxScore: sql<number>`(select coalesce(sum(${somaQuestions.marks}), 0) from ${somaQuestions} where ${somaQuestions.quizId} = ${somaReports.quizId})::int`,
+        })
+        .from(somaReports)
+        .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+        .where(inArray(somaReports.studentId, adoptedIds))
+        .orderBy(sql`${somaReports.createdAt} desc`)
+        .limit(10),
+    ]);
+
+    const cohortAverages = subjectAvgRows
+      .filter((r) => r.totalMax > 0)
+      .map((r) => ({ subject: r.subject, average: Math.round((r.totalScore / r.totalMax) * 100), count: r.cnt }));
+
+    const recentSubmissions = recentRows.map((r) => ({
+      studentName: r.studentName,
+      score: r.maxScore > 0 ? Math.round((r.score / r.maxScore) * 100) : 0,
+      quizTitle: r.quizTitle,
+      subject: r.subject,
+      createdAt: r.createdAt.toISOString(),
+    }));
+
+    return {
+      totalStudents,
+      totalQuizzes: quizCountResult[0]?.cnt ?? 0,
+      cohortAverages,
+      recentSubmissions,
+    };
   }
 
   async getAllSomaUsers(): Promise<SomaUser[]> {
@@ -778,6 +850,11 @@ class MemoryStorage implements IStorage {
   }
   async getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]> {
     return this.tutorCommentsList.filter((c) => c.tutorId === tutorId && c.studentId === studentId);
+  }
+
+  async getDashboardStatsForTutor(tutorId: string) {
+    const adoptedIds = this.tutorStudentsList.filter((ts) => ts.tutorId === tutorId).map((ts) => ts.studentId);
+    return { totalStudents: adoptedIds.length, totalQuizzes: 0, cohortAverages: [], recentSubmissions: [] };
   }
 
   async getAllSomaUsers(): Promise<SomaUser[]> {
