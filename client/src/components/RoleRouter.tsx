@@ -30,7 +30,8 @@ export default function RoleRouter({ studentComponent: StudentComp, tutorCompone
 
   useEffect(() => {
     if (!session?.user?.id) return;
-    fetch(`/api/auth/me?userId=${session.user.id}`)
+    const email = encodeURIComponent(session.user.email || "");
+    fetch(`/api/auth/me?userId=${session.user.id}&email=${email}`)
       .then((res) => res.json())
       .then((data) => {
         setRole(data.role || "student");

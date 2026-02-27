@@ -383,6 +383,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Missing id or email" });
       }
       const role = determinRole(email);
+      console.log(`[auth-sync] email=${email} domain=${email.split("@")[1]} role=${role}`);
       const parsed = insertSomaUserSchema.parse({
         id,
         email,
@@ -401,8 +402,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/auth/me", async (req, res) => {
     try {
       const userId = req.query.userId as string;
+      const email = req.query.email as string;
       if (!userId) return res.status(400).json({ message: "userId required" });
-      const user = await storage.getSomaUserById(userId);
+      let user = await storage.getSomaUserById(userId);
+      if (!user && email) {
+        const role = determinRole(email);
+        console.log(`[auth-me] auto-sync for missing user: email=${email} role=${role}`);
+        const parsed = insertSomaUserSchema.parse({
+          id: userId,
+          email,
+          displayName: email.split("@")[0],
+          role,
+        });
+        user = await storage.upsertSomaUser(parsed);
+      }
       if (!user) return res.status(404).json({ message: "User not found" });
       res.json({ id: user.id, email: user.email, displayName: user.displayName, role: user.role });
     } catch (err: any) {

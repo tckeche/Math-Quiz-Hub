@@ -53,7 +53,8 @@ export default function SuperAdminDashboard() {
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`/api/auth/me?userId=${userId}`)
+    const email = encodeURIComponent(session?.user?.email || "");
+    fetch(`/api/auth/me?userId=${userId}&email=${email}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.role !== "super_admin") {
