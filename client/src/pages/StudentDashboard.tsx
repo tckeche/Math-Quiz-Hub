@@ -204,41 +204,15 @@ export default function StudentDashboard() {
   }, [subjectStats]);
 
   const availableQuizzes = useMemo(() => {
-    const regularAvailable = (quizzes || [])
-      .filter((q) => !completedQuizIds.has(q.id))
-      .map((q) => ({
-        id: q.id,
-        title: q.title,
-        subject: q.subject || "General",
-        level: q.level || "",
-        dueDate: q.dueDate,
-        timeLimitMinutes: q.timeLimitMinutes,
-        type: "regular" as const,
-      }));
-
-    const somaAvailable = (somaQuizzes || [])
+    return (somaQuizzes || [])
       .filter((q) => q.status === "published" && !completedSomaQuizIds.has(q.id))
       .map((q) => ({
         id: q.id,
         title: q.title,
-        subject: q.topic || "General",
-        level: "",
-        dueDate: null as any,
-        timeLimitMinutes: null,
-        type: "soma" as const,
+        subject: q.topic || q.subject || "General",
+        level: q.level || "",
       }));
-
-    const currentTime = new Date();
-    return [...regularAvailable, ...somaAvailable].sort((a, b) => {
-      const aOverdue = a.dueDate ? new Date(a.dueDate) < currentTime : false;
-      const bOverdue = b.dueDate ? new Date(b.dueDate) < currentTime : false;
-      if (aOverdue !== bOverdue) return aOverdue ? 1 : -1;
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    });
-  }, [quizzes, somaQuizzes, completedQuizIds, completedSomaQuizIds]);
+  }, [somaQuizzes, completedSomaQuizIds]);
 
   const allSubjects = useMemo(() => {
     const set = new Set<string>();
@@ -261,51 +235,18 @@ export default function StudentDashboard() {
   }, [availableQuizzes, subjectFilter, levelFilter]);
 
   const completedItems = useMemo(() => {
-    const items: {
-      id: number;
-      quizId: number;
-      title: string;
-      subject: string;
-      score: number;
-      maxScore: number;
-      status: string;
-      feedbackHtml: string | null;
-      date: string;
-      type: "regular" | "soma";
-    }[] = [];
-
-    submissions.forEach((s) => {
-      items.push({
-        id: s.id,
-        quizId: s.quizId,
-        title: s.quiz.title,
-        subject: s.quiz.subject || "General",
-        score: s.totalScore,
-        maxScore: s.maxPossibleScore,
-        status: "completed",
-        feedbackHtml: null,
-        date: s.submittedAt,
-        type: "regular",
-      });
-    });
-
-    reports.forEach((r) => {
-      items.push({
-        id: r.id,
-        quizId: r.quizId,
-        title: r.quiz.title,
-        subject: r.quiz.topic || "General",
-        score: r.score,
-        maxScore: 100,
-        status: r.status,
-        feedbackHtml: r.aiFeedbackHtml,
-        date: r.createdAt,
-        type: "soma",
-      });
-    });
-
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [submissions, reports]);
+    return reports.map((r) => ({
+      id: r.id,
+      quizId: r.quizId,
+      title: r.quiz.title,
+      subject: r.quiz.topic || r.quiz.subject || "General",
+      score: r.score,
+      maxScore: 100,
+      status: r.status,
+      feedbackHtml: r.aiFeedbackHtml,
+      date: r.createdAt,
+    })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [reports]);
 
   const retryMutation = useMutation({
     mutationFn: async (reportId: number) => {
@@ -326,7 +267,7 @@ export default function StudentDashboard() {
   const now = new Date();
   const avatarRingColor = bestSubject ? getSubjectColor(bestSubject.subject).hex : "#8B5CF6";
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
-  const isLoading = quizzesLoading || somaLoading || reportsLoading || subsLoading;
+  const isLoading = somaLoading || reportsLoading;
 
   const visibleAvailable = showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 4);
   const visibleCompleted = showAllCompleted ? completedItems : completedItems.slice(0, 5);
@@ -453,17 +394,16 @@ export default function StudentDashboard() {
                   ) : (
                     <>
                       {visibleAvailable.map((q) => {
-                        const isOverdue = q.dueDate && new Date(q.dueDate) < now;
                         const sc = getSubjectColor(q.subject);
                         const SubjectIcon = getSubjectIcon(q.subject);
                         return (
                           <Link
-                            key={`${q.type}-${q.id}`}
-                            href={q.type === "soma" ? `/soma/quiz/${q.id}` : `/quiz/${q.id}`}
+                            key={q.id}
+                            href={`/soma/quiz/${q.id}`}
                           >
                             <div
                               className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
-                              data-testid={`card-available-quiz-${q.type}-${q.id}`}
+                              data-testid={`card-available-quiz-${q.id}`}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className={`w-10 h-10 rounded-xl ${sc.bg} border ${sc.border} flex items-center justify-center shrink-0`}>
@@ -479,27 +419,10 @@ export default function StudentDashboard() {
                                         {q.level}
                                       </span>
                                     )}
-                                    {isOverdue && (
-                                      <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]" data-testid={`badge-overdue-${q.id}`}>
-                                        <AlertTriangle className="w-3 h-3 mr-1" />
-                                        Overdue
-                                      </Badge>
-                                    )}
                                   </div>
-                                  <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.type}-${q.id}`}>
+                                  <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.id}`}>
                                     {q.title}
                                   </h3>
-                                  <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
-                                    {q.dueDate && (
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        Due {format(new Date(q.dueDate), "MMM d, yyyy")}
-                                      </span>
-                                    )}
-                                    {q.timeLimitMinutes && (
-                                      <span>{q.timeLimitMinutes} min</span>
-                                    )}
-                                  </div>
                                 </div>
                                 <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-violet-400 transition-colors mt-1 flex-shrink-0" />
                               </div>
@@ -539,10 +462,8 @@ export default function StudentDashboard() {
                         const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
                         const isPending = item.status === "pending";
                         const isFailed = item.status === "failed";
-                        const somaHasAnalysis = item.type === "soma" && !!item.feedbackHtml && !isPending;
-                        const regularHasCachedAnalysis = item.type === "regular" && !!getCachedAnalysis(item.quizId, "regular");
-                        const hasAiAnalysis = somaHasAnalysis || regularHasCachedAnalysis;
-                        const isLoadingThis = loadingAnalysisId === `${item.type}-${item.quizId}`;
+                        const hasAiAnalysis = !!item.feedbackHtml && !isPending;
+                        const isLoadingThis = loadingAnalysisId === `soma-${item.quizId}`;
                         return (
                           <div
                             key={`${item.type}-${item.id}`}
