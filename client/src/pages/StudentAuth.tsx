@@ -88,7 +88,7 @@ export default function StudentAuth() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -100,15 +100,32 @@ export default function StudentAuth() {
 
       if (error) throw error;
 
-      toast({
-        title: "Account created",
-        description: "Please check your email to verify your account.",
-      });
-      switchMode("login");
+      if (data.session) {
+        await apiRequest("POST", "/api/auth/sync", {
+          id: data.user!.id,
+          email: data.user!.email,
+          user_metadata: data.user!.user_metadata,
+        });
+        toast({ title: "Welcome!", description: "Your account has been created." });
+        setLocation("/dashboard");
+      } else {
+        toast({
+          title: "Account created",
+          description: "Please check your email to verify your account, then log in.",
+        });
+        switchMode("login");
+      }
     } catch (err: any) {
+      const msg = err?.message || "";
+      let friendly = "Could not create account.";
+      if (msg.includes("already registered") || msg.includes("already been registered")) {
+        friendly = "An account with this email already exists. Try logging in instead.";
+      } else if (msg) {
+        friendly = msg;
+      }
       toast({
         title: "Sign up failed",
-        description: err.message || "Could not create account.",
+        description: friendly,
         variant: "destructive",
       });
     } finally {

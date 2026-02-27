@@ -82,7 +82,24 @@ httpServer.listen(
 
 (async () => {
   try {
-    log("Skipping runtime ALTER TABLE statements. Use `npm run db:migrate` before startup.", "bootstrap");
+    {
+      const { pool: pgPool } = await import("./db");
+      const client = pgPool ? await pgPool.connect() : null;
+      if (client) {
+        try {
+          await client.query(`ALTER TABLE soma_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'student'`);
+          await client.query(`ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS author_id UUID REFERENCES soma_users(id) ON DELETE SET NULL`);
+          await client.query(`ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false`);
+          await client.query(`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false`);
+          await client.query(`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS syllabus TEXT`);
+          await client.query(`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS level TEXT`);
+          await client.query(`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS subject TEXT`);
+          log("schema migrations applied", "bootstrap");
+        } finally {
+          client.release();
+        }
+      }
+    }
 
     const { seedDatabase } = await import("./seed");
     try {

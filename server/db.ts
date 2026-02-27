@@ -20,7 +20,7 @@ function stripSslMode(url: string): string {
 const useSsl = rawConnectionString ? shouldUseSsl(rawConnectionString) : false;
 const connectionString = rawConnectionString && useSsl ? stripSslMode(rawConnectionString) : rawConnectionString;
 
-const pool = connectionString
+export const pool = connectionString
   ? new pg.Pool({
       connectionString,
       ssl: useSsl ? { rejectUnauthorized: false } : undefined,
