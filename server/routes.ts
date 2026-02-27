@@ -130,24 +130,19 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const supaToken = authHeader.slice(7);
-    const secret = getSupabaseJwtSecret();
-    if (secret) {
-      try {
-        const decoded = jwt.verify(supaToken, secret) as { sub?: string };
-        const userId = decoded.sub;
-        if (userId) {
-          return storage.getSomaUserById(userId).then((user) => {
-            if (user && (user.role === "tutor" || user.role === "super_admin")) {
-              (req as any).tutorId = userId;
-              (req as any).tutorUser = user;
-              (req as any).authUser = { id: user.id, email: user.email, role: user.role };
-              return next();
-            }
-            return res.status(401).json({ message: "Unauthorized" });
-          }).catch(() => res.status(401).json({ message: "Unauthorized" }));
+    return verifySupabaseToken(supaToken).then((decoded) => {
+      if (!decoded) return res.status(401).json({ message: "Unauthorized" });
+      const userId = decoded.sub;
+      return storage.getSomaUserById(userId).then((user) => {
+        if (user && (user.role === "tutor" || user.role === "super_admin")) {
+          (req as any).tutorId = userId;
+          (req as any).tutorUser = user;
+          (req as any).authUser = { id: user.id, email: user.email, role: user.role };
+          return next();
         }
-      } catch {}
-    }
+        return res.status(401).json({ message: "Unauthorized" });
+      }).catch(() => res.status(401).json({ message: "Unauthorized" }));
+    }).catch(() => res.status(401).json({ message: "Unauthorized" }));
   }
   return res.status(401).json({ message: "Unauthorized" });
 }
@@ -206,6 +201,30 @@ function getSupabaseJwtSecret(): string {
   return process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET || "";
 }
 
+async function verifySupabaseToken(token: string): Promise<{ sub: string; email?: string } | null> {
+  const secret = getSupabaseJwtSecret();
+  if (secret) {
+    try {
+      const decoded = jwt.verify(token, secret) as { sub?: string; email?: string };
+      if (decoded.sub) return { sub: decoded.sub, email: decoded.email };
+    } catch {}
+  }
+
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) return null;
+
+  try {
+    const resp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: process.env.VITE_SUPABASE_ANON_KEY || "" },
+    });
+    if (!resp.ok) return null;
+    const user = await resp.json();
+    if (user?.id) return { sub: user.id, email: user.email };
+  } catch {}
+
+  return null;
+}
+
 function requireSupabaseAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -213,18 +232,13 @@ function requireSupabaseAuth(req: Request, res: Response, next: NextFunction) {
   }
 
   const token = authHeader.slice(7);
-  const secret = getSupabaseJwtSecret();
-  if (!secret) {
-    return res.status(500).json({ message: "Server authentication not configured" });
-  }
 
-  try {
-    const decoded = jwt.verify(token, secret) as { sub?: string; email?: string; role?: string };
-    const userId = decoded.sub;
-    if (!userId) {
-      return res.status(401).json({ message: "Invalid token: missing user ID" });
+  verifySupabaseToken(token).then((decoded) => {
+    if (!decoded) {
+      return res.status(401).json({ message: "Invalid or expired token" });
     }
 
+    const userId = decoded.sub;
     storage.getSomaUserById(userId).then((user) => {
       if (!user) {
         return res.status(401).json({ message: "User not found" });
@@ -234,9 +248,9 @@ function requireSupabaseAuth(req: Request, res: Response, next: NextFunction) {
     }).catch(() => {
       res.status(500).json({ message: "Failed to verify user identity" });
     });
-  } catch {
-    return res.status(401).json({ message: "Invalid or expired token" });
-  }
+  }).catch(() => {
+    res.status(401).json({ message: "Invalid or expired token" });
+  });
 }
 
 const loginLimiter = rateLimit({
@@ -967,18 +981,15 @@ RULES:
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const supaToken = authHeader.slice(7);
-      const secret = getSupabaseJwtSecret();
-      if (secret) {
-        try {
-          const decoded = jwt.verify(supaToken, secret) as { sub?: string };
-          if (decoded.sub) {
-            const user = await storage.getSomaUserById(decoded.sub);
-            if (user && (user.role === "tutor" || user.role === "super_admin")) {
-              return res.json({ authenticated: true });
-            }
+      try {
+        const decoded = await verifySupabaseToken(supaToken);
+        if (decoded?.sub) {
+          const user = await storage.getSomaUserById(decoded.sub);
+          if (user && (user.role === "tutor" || user.role === "super_admin")) {
+            return res.json({ authenticated: true });
           }
-        } catch {}
-      }
+        }
+      } catch {}
     }
     res.json({ authenticated: false });
   });

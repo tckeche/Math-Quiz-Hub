@@ -6,7 +6,7 @@ A full-stack educational assessment platform (SOMA). Students take interactive M
 ## Tech Stack
 - **Frontend:** React (Vite), Tailwind CSS, Shadcn UI, react-katex for LaTeX rendering, DOMPurify for XSS protection, @supabase/supabase-js for auth
 - **Backend:** Node.js, Express, @google/generative-ai (Gemini), @anthropic-ai/sdk (Claude), openai (GPT-4o & DeepSeek), multer for file uploads
-- **Database:** PostgreSQL (Supabase) with Drizzle ORM
+- **Database:** PostgreSQL with Drizzle ORM (auto-failover: tries SUPABASE_URL → SUPABASE_DB_URL → DATABASE_URL)
 - **Auth:** Supabase Auth (client initialized in `client/src/lib/supabase.ts` using VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY)
 - **Routing:** wouter
 
@@ -23,7 +23,7 @@ A full-stack educational assessment platform (SOMA). Students take interactive M
 
 ### Key Files
 - `shared/schema.ts` - Drizzle schema definitions and Zod validation schemas (soma tables only)
-- `server/db.ts` - Database connection
+- `server/db.ts` - Database connection with auto-failover (tries Supabase PostgreSQL first, falls back to Replit Helium DB)
 - `server/storage.ts` - Storage layer (DatabaseStorage + MemoryStorage implementing IStorage)
 - `server/routes.ts` - All API routes including AI endpoints
 - `server/seed.ts` - Database seeding with sample soma quizzes

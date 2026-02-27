@@ -83,6 +83,10 @@ httpServer.listen(
 (async () => {
   try {
     {
+      const { connectDb } = await import("./db");
+      await connectDb();
+      const { initStorage } = await import("./storage");
+      initStorage();
       const { pool: pgPool } = await import("./db");
       const client = pgPool ? await pgPool.connect() : null;
       if (client) {

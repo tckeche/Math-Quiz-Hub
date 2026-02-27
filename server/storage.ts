@@ -626,4 +626,17 @@ class MemoryStorage implements IStorage {
   }
 }
 
-export const storage: IStorage = db ? new DatabaseStorage(db) : new MemoryStorage();
+let _storage: IStorage | null = null;
+
+export function initStorage() {
+  _storage = db ? new DatabaseStorage(db) : new MemoryStorage();
+}
+
+export const storage: IStorage = new Proxy({} as IStorage, {
+  get(_target, prop, receiver) {
+    if (!_storage) {
+      _storage = db ? new DatabaseStorage(db) : new MemoryStorage();
+    }
+    return Reflect.get(_storage, prop, receiver);
+  },
+});
