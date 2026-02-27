@@ -1,11 +1,8 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { insertSomaQuizSchema, insertSomaUserSchema, somaUsers, quizAssignments, somaQuizzes, somaQuestions } from "@shared/schema";
-import { db } from "./db";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { insertSomaUserSchema } from "@shared/schema";
 import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -55,14 +52,6 @@ const supportingDocUpload = multer({
   }),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit for supporting docs
 });
-
-function getGeminiModel() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-}
-
 
 const ADMIN_COOKIE_NAME = "admin_session";
 
@@ -561,6 +550,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Unassign a student from a quiz
+  app.delete("/api/tutor/quizzes/:quizId/unassign/:studentId", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const studentId = String(req.params.studentId);
+
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) {
+        return res.status(403).json({ message: "Student is not in your cohort" });
+      }
+
+      await storage.deleteQuizAssignment(quizId, studentId);
+      return res.json({ success: true, message: "Student unassigned" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to unassign student" });
+    }
+  });
+
   // Get assignments for a specific quiz
   app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
     try {
@@ -674,7 +687,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         level: level || "Grade 6-12",
         subject: subject || null,
         authorId: tutorId,
-        status: "draft",
+        status: "published",
       });
       res.json(quiz);
     } catch (err: any) {
@@ -1048,251 +1061,6 @@ RULES:
 
   app.use("/api/admin", requireAdmin);
 
-  // Upload supporting documents (PDFs) — stored on disk so copilot can reference them
-  app.post("/api/admin/upload-supporting-doc", supportingDocUpload.single("pdf"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No PDF uploaded" });
-    res.json({ id: req.file.filename, originalName: req.file.originalname });
-  });
-
-
-  app.get("/api/admin/quizzes", async (_req, res) => {
-    try {
-      const allQuizzes = await storage.getSomaQuizzes();
-      const withSnapshots = await Promise.all(allQuizzes.map(async (quiz) => {
-        const quizQuestions = await storage.getSomaQuestionsByQuizId(quiz.id);
-        return {
-          ...quiz,
-          snapshot: {
-            totalQuestions: quizQuestions.length,
-            totalSubmissions: 0,
-            subject: quiz.subject || "General",
-            level: quiz.level || "Unspecified",
-          },
-        };
-      }));
-      return res.json(withSnapshots);
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
-    }
-  });
-
-  app.get("/api/admin/quizzes/:id", async (req, res) => {
-    try {
-      const quiz = await storage.getSomaQuiz(parseInt(req.params.id));
-      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-      const questions = await storage.getSomaQuestionsByQuizId(quiz.id);
-      return res.json({ ...quiz, questions });
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to fetch quiz" });
-    }
-  });
-
-  app.post("/api/admin/quizzes", async (req, res) => {
-    try {
-      const { title, syllabus, level, subject, topic } = req.body;
-      if (!title) {
-        return res.status(400).json({ message: "title is required" });
-      }
-      const quiz = await storage.createSomaQuiz({
-        title,
-        topic: topic || title,
-        syllabus: syllabus || "IEB",
-        level: level || "Grade 6-12",
-        subject: subject || null,
-        status: "draft",
-      });
-      return res.json(quiz);
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to create quiz" });
-    }
-  });
-
-  app.put("/api/admin/quizzes/:id", requireAdmin, async (req, res) => {
-    try {
-      const id = parseInt(String(req.params.id));
-      const existing = await storage.getSomaQuiz(id);
-      if (!existing) return res.status(404).json({ message: "Quiz not found" });
-
-      const { title, syllabus, level, subject } = req.body;
-      const updates: any = {};
-      if (title !== undefined) updates.title = title;
-      if (syllabus !== undefined) updates.syllabus = syllabus || null;
-      if (level !== undefined) updates.level = level || null;
-      if (subject !== undefined) updates.subject = subject || null;
-
-      const updated = await storage.updateSomaQuiz(id, updates);
-      return res.json(updated);
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to update quiz" });
-    }
-  });
-
-  app.delete("/api/admin/quizzes/:id", async (req, res) => {
-    try {
-      await storage.deleteSomaQuiz(parseInt(req.params.id));
-      return res.json({ success: true });
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to delete quiz" });
-    }
-  });
-
-  app.get("/api/admin/quizzes/:id/questions", async (req, res) => {
-    try {
-      const questions = await storage.getSomaQuestionsByQuizId(parseInt(req.params.id));
-      return res.json(questions);
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to fetch questions" });
-    }
-  });
-
-  app.post("/api/admin/quizzes/:id/questions", async (req, res) => {
-    try {
-      const quizId = parseInt(req.params.id);
-      const quiz = await storage.getSomaQuiz(quizId);
-      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-
-      const { questions: rawQuestions } = req.body;
-      if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
-        return res.status(400).json({ message: "questions array is required" });
-      }
-
-      const toInsert = rawQuestions.map((q: any) => ({
-        quizId,
-        stem: q.prompt_text || q.stem || "",
-        options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
-        correctAnswer: q.correct_answer || q.correctAnswer || "",
-        explanation: q.explanation || "",
-        marks: Number(q.marks_worth || q.marks || 1) || 1,
-      }));
-
-      const created = await storage.createSomaQuestions(toInsert);
-      return res.json(created);
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to add questions" });
-    }
-  });
-
-  app.delete("/api/admin/questions/:id", async (req, res) => {
-    try {
-      await storage.deleteSomaQuestion(parseInt(req.params.id));
-      return res.json({ success: true });
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to delete question" });
-    }
-  });
-
-  app.post("/api/admin/copilot-chat", async (req, res) => {
-    try {
-      const { message, documentIds } = req.body;
-      if (!message) return res.status(400).json({ message: "message is required" });
-
-      const text = String(message);
-      const missing: string[] = [];
-      if (!/subject\s*:/i.test(text)) missing.push("Subject");
-      if (!/level\s*:/i.test(text)) missing.push("Level");
-      if (!/syllabus\s*:/i.test(text)) missing.push("Syllabus");
-      const hasImplicitTopic = /about\s+\w+/i.test(text);
-      if (missing.length > 0 && !hasImplicitTopic) {
-        return res.json({
-          reply: `Before I generate, please provide: ${missing.join(", ")}.`,
-          drafts: [],
-          metadata: { provider: "clarification", model: "copilot-guard", durationMs: 0 },
-          needsClarification: true,
-        });
-      }
-
-      let supportingText = "";
-      const pdfFileIds = Array.isArray(documentIds) ? documentIds : [];
-      const docsDir = path.resolve(process.cwd(), "supporting-docs");
-      for (const fileId of pdfFileIds) {
-        if (typeof fileId !== "string" || fileId.includes("..") || fileId.includes("/")) continue;
-        const filePath = path.join(docsDir, fileId);
-        if (fs.existsSync(filePath)) {
-          supportingText += `
-${await parsePdfTextFromBuffer(fs.readFileSync(filePath))}`;
-        }
-      }
-
-      const paperCode = text.match(/\b\d{4}\/v\d\/\d{4}\b/i)?.[0];
-      if (paperCode) {
-        supportingText += `
-${await fetchPaperContext(paperCode)}`;
-      }
-
-      const copilotSystemPrompt = `You are SOMA Copilot, an expert MCQ assessment generator for the MCEC platform.
-
-CRITICAL: You MUST generate questions as a JSON array with this EXACT schema:
-\`\`\`json
-[
-  {
-    "prompt_text": "The full question text with LaTeX like \\\\(x^2\\\\) if needed",
-    "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
-    "correct_answer": "The full text of the correct option (must exactly match one of the options)",
-    "marks_worth": 2,
-    "explanation": "Brief explanation of why the correct answer is right"
-  }
-]
-\`\`\`
-
-RULES:
-- "options" MUST be an array of exactly 4 strings. NEVER use an object like {A: ..., B: ...}.
-- "correct_answer" MUST be the full text of the correct option, NOT a letter like "A" or "B".
-- "prompt_text" is the question text. Do NOT use "question" or "stem" as the key name.
-- Every question MUST have all 5 fields: prompt_text, options, correct_answer, marks_worth, explanation.
-- Generate ONLY multiple-choice questions. NEVER generate open-ended, essay, or free-response questions.
-- Include 1 correct answer and 3 calculated distractors based on common student errors.
-- You may include a brief plain-text discussion before the JSON block.`;
-
-      const { data, metadata } = await generateWithFallback(
-        copilotSystemPrompt,
-        `${text}
-
-Supporting context:
-${supportingText || "No extra context."}`,
-      );
-
-      const rawDrafts = extractJsonArray(data) || [];
-      const drafts = rawDrafts.map((d: any) => {
-        let opts = d.options;
-        if (opts && !Array.isArray(opts) && typeof opts === "object") {
-          const keys = Object.keys(opts);
-          const isLetterKeyed = keys.every((k) => /^[A-Z]$/i.test(k));
-          if (isLetterKeyed) {
-            opts = keys.sort().map((k) => opts[k]);
-          } else {
-            opts = Object.values(opts);
-          }
-        }
-        if (!Array.isArray(opts) || opts.length < 4) return null;
-        opts = opts.map(String).slice(0, 4);
-
-        const promptText = d.prompt_text || d.promptText || d.question || d.stem || "";
-        if (!promptText) return null;
-
-        let correctAnswer = d.correct_answer || d.correctAnswer || d.answer || "";
-        if (typeof correctAnswer === "string" && correctAnswer.length <= 2) {
-          const letterIndex = correctAnswer.toUpperCase().charCodeAt(0) - 65;
-          if (letterIndex >= 0 && letterIndex < opts.length) {
-            correctAnswer = opts[letterIndex];
-          }
-        }
-        correctAnswer = String(correctAnswer);
-        if (!correctAnswer || !opts.includes(correctAnswer)) return null;
-
-        return {
-          prompt_text: String(promptText),
-          options: opts,
-          correct_answer: correctAnswer,
-          marks_worth: Number(d.marks_worth || d.marksWorth || d.marks || 1) || 1,
-          explanation: String(d.explanation || ""),
-        };
-      }).filter(Boolean);
-      res.json({ reply: data, drafts, metadata, needsClarification: false });
-    } catch (err: any) {
-      res.status(500).json({ message: `Copilot failed: ${err.message}` });
-    }
-  });
-
 
   app.post("/api/upload-image", requireAdmin, (req, res) => {
     upload.single("image")(req, res, (err: any) => {
@@ -1342,7 +1110,7 @@ ${supportingText || "No extra context."}`,
         syllabus,
         level,
         curriculumContext: curriculumContext || null,
-        status: "draft",
+        status: "published",
         isArchived: false,
       });
 

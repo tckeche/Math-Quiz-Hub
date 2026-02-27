@@ -7,7 +7,7 @@ import type { SomaQuiz, SomaReport, SomaQuestion } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, X, ChevronDown, ChevronUp,
   Loader2, Check, LayoutDashboard, Clock, Award, Timer,
-  FileText, Eye, UserPlus,
+  FileText, Eye, UserPlus, UserMinus,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import DOMPurify from "dompurify";
@@ -24,6 +24,16 @@ interface QuizReportsData {
   reports: (SomaReport & { quiz: SomaQuiz })[];
   questions: SomaQuestion[];
   maxScore: number;
+}
+
+interface QuizAssignmentWithStudent {
+  id: number;
+  quizId: number;
+  studentId: string;
+  status: string;
+  dueDate: string | null;
+  createdAt: string;
+  student: SomaUser;
 }
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
@@ -319,6 +329,36 @@ export default function TutorAssessments() {
       setShowAssignModal(null);
       setSelectedStudentIds(new Set());
       setDueDate("");
+      if (expandedQuiz) {
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", expandedQuiz, "assignments"] });
+      }
+    },
+  });
+
+  const { data: quizAssignments = [], isLoading: assignmentsLoading } = useQuery<QuizAssignmentWithStudent[]>({
+    queryKey: ["/api/tutor/quizzes", expandedQuiz, "assignments"],
+    queryFn: async () => {
+      const res = await fetch(`/api/tutor/quizzes/${expandedQuiz}/assignments`, { headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!expandedQuiz && !!userId,
+  });
+
+  const unassignMutation = useMutation({
+    mutationFn: async ({ quizId, studentId }: { quizId: number; studentId: string }) => {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}/unassign/${studentId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to unassign");
+      return res.json();
+    },
+    onSuccess: () => {
+      if (expandedQuiz) {
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", expandedQuiz, "assignments"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", expandedQuiz, "reports"] });
+      }
     },
   });
 
@@ -466,7 +506,69 @@ export default function TutorAssessments() {
                   </div>
 
                   {isExpanded && (
-                    <div className="border-t border-slate-800/60 px-5 py-4">
+                    <div className="border-t border-slate-800/60 px-5 py-4 space-y-5">
+                      {/* Assigned Students Section */}
+                      {(() => {
+                        const currentAssignments = expandedQuiz === quiz.id ? quizAssignments : [];
+                        const pendingAssignments = currentAssignments.filter(a => a.status === "pending");
+                        if (assignmentsLoading) return null;
+                        if (pendingAssignments.length === 0) return null;
+                        return (
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                                <Users className="w-4 h-4 text-violet-400" />
+                                Assigned Students
+                              </h4>
+                              <span className="text-xs text-slate-400">
+                                {pendingAssignments.length} pending
+                              </span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {pendingAssignments.map(assignment => (
+                                <div
+                                  key={assignment.id}
+                                  className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg bg-slate-800/40 border border-slate-700/40"
+                                  data-testid={`assignment-row-${assignment.id}`}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center shrink-0">
+                                      <span className="text-[10px] font-bold text-violet-300">
+                                        {(assignment.student.displayName || assignment.student.email || "?")
+                                          .split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
+                                      </span>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm text-slate-200 truncate">{assignment.student.displayName || "Student"}</p>
+                                      <p className="text-[11px] text-slate-400 truncate">{assignment.student.email}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {assignment.dueDate && (
+                                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                        <Clock className="w-3 h-3" />
+                                        Due {formatDate(assignment.dueDate)}
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => unassignMutation.mutate({ quizId: quiz.id, studentId: assignment.studentId })}
+                                      disabled={unassignMutation.isPending}
+                                      className="flex items-center gap-1 px-2 py-1.5 min-h-[32px] rounded-lg text-[11px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                                      title="Unassign student"
+                                      data-testid={`button-unassign-${assignment.studentId}`}
+                                    >
+                                      <UserMinus className="w-3 h-3" />
+                                      Revoke
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Student Submissions Section */}
                       {reportsLoading ? (
                         <div className="flex justify-center py-8">
                           <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />

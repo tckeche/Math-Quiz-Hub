@@ -58,6 +58,7 @@ export interface IStorage {
   getQuizAssignmentsForStudent(studentId: string): Promise<(QuizAssignment & { quiz: SomaQuiz })[]>;
   getQuizAssignmentsForQuiz(quizId: number): Promise<(QuizAssignment & { student: SomaUser })[]>;
   updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void>;
+  deleteQuizAssignment(quizId: number, studentId: string): Promise<void>;
 
   getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]>;
 
@@ -288,6 +289,11 @@ class DatabaseStorage implements IStorage {
       .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
   }
 
+  async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    await this.database.delete(quizAssignments)
+      .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+  }
+
   async getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]> {
     return this.database.select().from(somaQuizzes)
       .where(eq(somaQuizzes.authorId, authorId))
@@ -453,7 +459,7 @@ class MemoryStorage implements IStorage {
       subject: quiz.subject ?? null,
       curriculumContext: quiz.curriculumContext ?? null,
       authorId: quiz.authorId ?? null,
-      status: quiz.status ?? "draft",
+      status: quiz.status ?? "published",
       isArchived: quiz.isArchived ?? false,
     };
     this.somaQuizzesList.push(created);
@@ -634,6 +640,12 @@ class MemoryStorage implements IStorage {
   async updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void> {
     const qa = this.quizAssignmentsList.find((a) => a.quizId === quizId && a.studentId === studentId);
     if (qa) qa.status = status;
+  }
+
+  async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    this.quizAssignmentsList = this.quizAssignmentsList.filter(
+      (a) => !(a.quizId === quizId && a.studentId === studentId)
+    );
   }
 
   async getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]> {
