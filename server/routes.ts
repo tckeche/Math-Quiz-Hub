@@ -541,6 +541,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!quiz || quiz.isArchived) {
         return res.status(404).json({ message: "Quiz not found" });
       }
+
+      // Auto-publish draft quizzes when a tutor explicitly assigns them
+      if (quiz.status === "draft") {
+        await storage.updateSomaQuiz(quizId, { status: "published" });
+        console.log(`[Assign] Auto-published quiz ${quizId} (was draft)`);
+      }
+
       const adopted = await storage.getAdoptedStudents(tutorId);
       const adoptedIds = new Set(adopted.map((s) => s.id));
       const validIds = studentIds.filter((id: string) => adoptedIds.has(id));
@@ -948,23 +955,35 @@ RULES:
       const studentId = (req as any).authUser.id;
       const allQuizzes = await storage.getSomaQuizzes();
       const assignments = await storage.getQuizAssignmentsForStudent(studentId);
+
+      console.log(`[Available] Fetching for Student: ${studentId}, Found Assignments: ${assignments.length}`);
+
       const assignmentMap = new Map<number, any>();
       for (const a of assignments) {
         if (a.status === "pending") {
           assignmentMap.set(a.quizId, a);
         }
       }
-      const available = allQuizzes
-        .filter(q => !q.isArchived && q.status === "published" && assignmentMap.has(q.id))
+
+      const pendingCount = assignmentMap.size;
+      const publishedQuizzes = allQuizzes.filter(q => !q.isArchived && q.status === "published");
+
+      console.log(`[Available] Student ${studentId}: ${assignments.length} total assignments, ${pendingCount} pending, ${publishedQuizzes.length} published quizzes, ${allQuizzes.length} total quizzes`);
+
+      const available = publishedQuizzes
+        .filter(q => assignmentMap.has(q.id))
         .map(q => ({
           ...q,
           isAssigned: true,
           assignmentStatus: "pending",
           dueDate: assignmentMap.get(q.id)?.dueDate || null,
         }));
-      res.json(available);
+
+      console.log(`[Available] Returning ${available.length} available quizzes for student ${studentId}`);
+
+      return res.json(available);
     } catch (err: any) {
-      res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });
+      return res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });
     }
   });
 
@@ -1037,97 +1056,129 @@ RULES:
 
 
   app.get("/api/admin/quizzes", async (_req, res) => {
-    const allQuizzes = await storage.getSomaQuizzes();
-    const withSnapshots = await Promise.all(allQuizzes.map(async (quiz) => {
-      const quizQuestions = await storage.getSomaQuestionsByQuizId(quiz.id);
-      return {
-        ...quiz,
-        snapshot: {
-          totalQuestions: quizQuestions.length,
-          totalSubmissions: 0,
-          subject: quiz.subject || "General",
-          level: quiz.level || "Unspecified",
-        },
-      };
-    }));
-    res.json(withSnapshots);
+    try {
+      const allQuizzes = await storage.getSomaQuizzes();
+      const withSnapshots = await Promise.all(allQuizzes.map(async (quiz) => {
+        const quizQuestions = await storage.getSomaQuestionsByQuizId(quiz.id);
+        return {
+          ...quiz,
+          snapshot: {
+            totalQuestions: quizQuestions.length,
+            totalSubmissions: 0,
+            subject: quiz.subject || "General",
+            level: quiz.level || "Unspecified",
+          },
+        };
+      }));
+      return res.json(withSnapshots);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
+    }
   });
 
   app.get("/api/admin/quizzes/:id", async (req, res) => {
-    const quiz = await storage.getSomaQuiz(parseInt(req.params.id));
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    const questions = await storage.getSomaQuestionsByQuizId(quiz.id);
-    res.json({ ...quiz, questions });
+    try {
+      const quiz = await storage.getSomaQuiz(parseInt(req.params.id));
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      const questions = await storage.getSomaQuestionsByQuizId(quiz.id);
+      return res.json({ ...quiz, questions });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to fetch quiz" });
+    }
   });
 
   app.post("/api/admin/quizzes", async (req, res) => {
-    const { title, syllabus, level, subject, topic } = req.body;
-    if (!title) {
-      return res.status(400).json({ message: "title is required" });
+    try {
+      const { title, syllabus, level, subject, topic } = req.body;
+      if (!title) {
+        return res.status(400).json({ message: "title is required" });
+      }
+      const quiz = await storage.createSomaQuiz({
+        title,
+        topic: topic || title,
+        syllabus: syllabus || "IEB",
+        level: level || "Grade 6-12",
+        subject: subject || null,
+        status: "draft",
+      });
+      return res.json(quiz);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to create quiz" });
     }
-    const quiz = await storage.createSomaQuiz({
-      title,
-      topic: topic || title,
-      syllabus: syllabus || "IEB",
-      level: level || "Grade 6-12",
-      subject: subject || null,
-      status: "draft",
-    });
-    res.json(quiz);
   });
 
   app.put("/api/admin/quizzes/:id", requireAdmin, async (req, res) => {
-    const id = parseInt(String(req.params.id));
-    const existing = await storage.getSomaQuiz(id);
-    if (!existing) return res.status(404).json({ message: "Quiz not found" });
+    try {
+      const id = parseInt(String(req.params.id));
+      const existing = await storage.getSomaQuiz(id);
+      if (!existing) return res.status(404).json({ message: "Quiz not found" });
 
-    const { title, syllabus, level, subject } = req.body;
-    const updates: any = {};
-    if (title !== undefined) updates.title = title;
-    if (syllabus !== undefined) updates.syllabus = syllabus || null;
-    if (level !== undefined) updates.level = level || null;
-    if (subject !== undefined) updates.subject = subject || null;
+      const { title, syllabus, level, subject } = req.body;
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (syllabus !== undefined) updates.syllabus = syllabus || null;
+      if (level !== undefined) updates.level = level || null;
+      if (subject !== undefined) updates.subject = subject || null;
 
-    const updated = await storage.updateSomaQuiz(id, updates);
-    res.json(updated);
+      const updated = await storage.updateSomaQuiz(id, updates);
+      return res.json(updated);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to update quiz" });
+    }
   });
 
   app.delete("/api/admin/quizzes/:id", async (req, res) => {
-    await storage.deleteSomaQuiz(parseInt(req.params.id));
-    res.json({ success: true });
+    try {
+      await storage.deleteSomaQuiz(parseInt(req.params.id));
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to delete quiz" });
+    }
   });
 
   app.get("/api/admin/quizzes/:id/questions", async (req, res) => {
-    const questions = await storage.getSomaQuestionsByQuizId(parseInt(req.params.id));
-    res.json(questions);
+    try {
+      const questions = await storage.getSomaQuestionsByQuizId(parseInt(req.params.id));
+      return res.json(questions);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to fetch questions" });
+    }
   });
 
   app.post("/api/admin/quizzes/:id/questions", async (req, res) => {
-    const quizId = parseInt(req.params.id);
-    const quiz = await storage.getSomaQuiz(quizId);
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+    try {
+      const quizId = parseInt(req.params.id);
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
 
-    const { questions: rawQuestions } = req.body;
-    if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
-      return res.status(400).json({ message: "questions array is required" });
+      const { questions: rawQuestions } = req.body;
+      if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
+        return res.status(400).json({ message: "questions array is required" });
+      }
+
+      const toInsert = rawQuestions.map((q: any) => ({
+        quizId,
+        stem: q.prompt_text || q.stem || "",
+        options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
+        correctAnswer: q.correct_answer || q.correctAnswer || "",
+        explanation: q.explanation || "",
+        marks: Number(q.marks_worth || q.marks || 1) || 1,
+      }));
+
+      const created = await storage.createSomaQuestions(toInsert);
+      return res.json(created);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to add questions" });
     }
-
-    const toInsert = rawQuestions.map((q: any) => ({
-      quizId,
-      stem: q.prompt_text || q.stem || "",
-      options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
-      correctAnswer: q.correct_answer || q.correctAnswer || "",
-      explanation: q.explanation || "",
-      marks: Number(q.marks_worth || q.marks || 1) || 1,
-    }));
-
-    const created = await storage.createSomaQuestions(toInsert);
-    res.json(created);
   });
 
   app.delete("/api/admin/questions/:id", async (req, res) => {
-    await storage.deleteSomaQuestion(parseInt(req.params.id));
-    res.json({ success: true });
+    try {
+      await storage.deleteSomaQuestion(parseInt(req.params.id));
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to delete question" });
+    }
   });
 
   app.post("/api/admin/copilot-chat", async (req, res) => {
