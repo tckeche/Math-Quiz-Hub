@@ -543,12 +543,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Quiz not found" });
       }
 
-      // Auto-publish draft quizzes when a tutor explicitly assigns them
-      if (quiz.status === "draft") {
-        await storage.updateSomaQuiz(quizId, { status: "published" });
-        console.log(`[Assign] Auto-published quiz ${quizId} (was draft)`);
-      }
-
       const adopted = await storage.getAdoptedStudents(tutorId);
       const adoptedIds = new Set(adopted.map((s) => s.id));
       const validIds = studentIds.filter((id: string) => adoptedIds.has(id));
@@ -710,7 +704,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         level: level || "Grade 6-12",
         subject: subject || null,
         authorId: tutorId,
-        status: "draft",
+        status: "published",
       });
       res.json(quiz);
     } catch (err: any) {
@@ -1135,7 +1129,7 @@ RULES:
         syllabus: syllabus || "IEB",
         level: level || "Grade 6-12",
         subject: subject || null,
-        status: "draft",
+        status: "published",
       });
       return res.json(quiz);
     } catch (err: any) {
@@ -1378,7 +1372,7 @@ ${supportingText || "No extra context."}`,
         syllabus,
         level,
         curriculumContext: curriculumContext || null,
-        status: "draft",
+        status: "published",
         isArchived: false,
       });
 

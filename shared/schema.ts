@@ -20,7 +20,7 @@ export const somaQuizzes = pgTable("soma_quizzes", {
   subject: text("subject"),
   curriculumContext: text("curriculum_context"),
   authorId: uuid("author_id").references(() => somaUsers.id, { onDelete: "set null" }),
-  status: text("status").notNull().default("draft"),
+  status: text("status").notNull().default("published"),
   isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

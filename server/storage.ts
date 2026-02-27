@@ -466,7 +466,7 @@ class MemoryStorage implements IStorage {
       subject: quiz.subject ?? null,
       curriculumContext: quiz.curriculumContext ?? null,
       authorId: quiz.authorId ?? null,
-      status: quiz.status ?? "draft",
+      status: quiz.status ?? "published",
       isArchived: quiz.isArchived ?? false,
     };
     this.somaQuizzesList.push(created);

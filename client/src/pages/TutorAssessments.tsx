@@ -507,11 +507,6 @@ export default function TutorAssessments() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                              quiz.status === "published" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
-                            }`}>
-                              {quiz.status}
-                            </span>
                             {isExpanded && reports.length > 0 && (
                               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">
                                 {reports.length} submission{reports.length !== 1 ? "s" : ""} · avg {avgPct}%
