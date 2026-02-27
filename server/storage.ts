@@ -784,10 +784,24 @@ class MemoryStorage implements IStorage {
     return this.somaUsersList;
   }
   async deleteSomaUser(userId: string): Promise<void> {
+    this.tutorStudentsList = this.tutorStudentsList.filter(
+      (ts) => ts.tutorId !== userId && ts.studentId !== userId
+    );
+    this.tutorCommentsList = this.tutorCommentsList.filter(
+      (c) => c.tutorId !== userId && c.studentId !== userId
+    );
+    this.quizAssignmentsList = this.quizAssignmentsList.filter(
+      (qa) => qa.studentId !== userId
+    );
+    for (const r of this.somaReportsList) {
+      if (r.studentId === userId) r.studentId = null;
+    }
     this.somaUsersList = this.somaUsersList.filter((u) => u.id !== userId);
   }
   async deleteSomaQuiz(quizId: number): Promise<void> {
     this.somaQuestionsList = this.somaQuestionsList.filter((q) => q.quizId !== quizId);
+    this.somaReportsList = this.somaReportsList.filter((r) => r.quizId !== quizId);
+    this.quizAssignmentsList = this.quizAssignmentsList.filter((qa) => qa.quizId !== quizId);
     this.somaQuizzesList = this.somaQuizzesList.filter((q) => q.id !== quizId);
   }
   async getAllSomaQuizzes(): Promise<SomaQuiz[]> {

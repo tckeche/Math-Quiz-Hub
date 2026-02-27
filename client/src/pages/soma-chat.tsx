@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { supabase } from "@/lib/supabase";
+import { supabase, authFetch } from "@/lib/supabase";
 import { getSubjectColor } from "@/lib/subjectColors";
 import type { Session } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export default function SomaChatPage() {
     queryKey: ["/api/student/reports", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const res = await fetch(`/api/student/reports?studentId=${userId}`);
+      const res = await authFetch("/api/student/reports");
       if (!res.ok) return [];
       return res.json();
     },
@@ -67,7 +67,7 @@ export default function SomaChatPage() {
     queryKey: ["/api/student/submissions", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const res = await fetch(`/api/student/submissions?studentId=${userId}`);
+      const res = await authFetch("/api/student/submissions");
       if (!res.ok) return [];
       return res.json();
     },

@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
+import { authFetch } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,7 +43,7 @@ export default function SomaQuizReview() {
   const { data, isLoading, error } = useQuery<ReviewData>({
     queryKey: ["/api/soma/reports", reportId, "review"],
     queryFn: async () => {
-      const res = await fetch(`/api/soma/reports/${reportId}/review`);
+      const res = await authFetch(`/api/soma/reports/${reportId}/review`);
       if (!res.ok) throw new Error("Failed to load review data");
       return res.json();
     },
