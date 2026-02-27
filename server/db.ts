@@ -27,28 +27,25 @@ export let pool: pg.Pool | null = null;
 export let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
 export async function connectDb() {
-  const candidates = [
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_DB_URL,
-    process.env.DATABASE_URL,
-  ].filter(Boolean) as string[];
-
-  for (const url of candidates) {
-    try {
-      const p = createPool(url);
-      await p.query("SELECT 1");
-      const host = url.split("@")[1]?.split("/")[0] || "unknown";
-      console.log(`[db] connected to ${host}`);
-      pool = p;
-      db = drizzle(p, { schema });
-      return;
-    } catch (e: any) {
-      const host = url.split("@")[1]?.split("/")[0] || "unknown";
-      console.warn(`[db] failed to connect to ${host}: ${e.message}`);
-    }
+  const url = process.env.SUPABASE_URL;
+  if (!url) {
+    console.error("[db] SUPABASE_URL not set — cannot connect to database");
+    pool = null;
+    db = null;
+    return;
   }
 
-  console.warn("[db] no database connected, falling back to in-memory storage");
-  pool = null;
-  db = null;
+  try {
+    const p = createPool(url);
+    await p.query("SELECT 1");
+    const host = url.split("@")[1]?.split("/")[0] || "unknown";
+    console.log(`[db] connected to ${host}`);
+    pool = p;
+    db = drizzle(p, { schema });
+  } catch (e: any) {
+    const host = url.split("@")[1]?.split("/")[0] || "unknown";
+    console.error(`[db] failed to connect to ${host}: ${e.message}`);
+    pool = null;
+    db = null;
+  }
 }

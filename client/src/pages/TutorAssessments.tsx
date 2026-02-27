@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
-import type { SomaQuiz, SomaReport, SomaQuestion } from "@shared/schema";
+import type { SomaQuiz, SomaReport, SomaQuestion, QuizAssignment } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, X, ChevronDown, ChevronUp,
   Loader2, Check, LayoutDashboard, Clock, Award, Timer,
-  FileText, Eye, UserPlus,
+  FileText, Eye, UserPlus, Trash2, ClockArrowUp, UserMinus,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import DOMPurify from "dompurify";
@@ -17,6 +17,10 @@ interface SomaUser {
   email: string;
   displayName: string | null;
   role: string;
+}
+
+interface AssignmentWithStudent extends QuizAssignment {
+  student: SomaUser;
 }
 
 interface QuizReportsData {
@@ -72,7 +76,6 @@ function StudentReportCard({ report, maxScore, questions, onViewReport }: {
   const pct = maxScore > 0 ? Math.round((report.score / maxScore) * 100) : 0;
   const duration = formatDuration(report.startedAt as any, report.completedAt as any);
   const startedDate = formatDate(report.startedAt as any);
-  const completedDate = formatDate(report.completedAt as any);
   const answersObj = (report.answersJson || {}) as Record<string, string>;
   const correctCount = questions.filter(q => answersObj[String(q.id)] === q.correctAnswer).length;
 
@@ -259,6 +262,7 @@ export default function TutorAssessments() {
   const [dueDate, setDueDate] = useState("");
   const [expandedQuiz, setExpandedQuiz] = useState<number | null>(null);
   const [viewingReport, setViewingReport] = useState<{ report: SomaReport & { quiz: SomaQuiz }; questions: SomaQuestion[]; maxScore: number } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -303,6 +307,16 @@ export default function TutorAssessments() {
     enabled: !!expandedQuiz && !!userId,
   });
 
+  const { data: quizAssignments = [] } = useQuery<AssignmentWithStudent[]>({
+    queryKey: ["/api/tutor/quizzes", expandedQuiz, "assignments"],
+    queryFn: async () => {
+      const res = await fetch(`/api/tutor/quizzes/${expandedQuiz}/assignments`, { headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!expandedQuiz && !!userId,
+  });
+
   const assignMutation = useMutation({
     mutationFn: async ({ quizId, studentIds, dueDate: dd }: { quizId: number; studentIds: string[]; dueDate?: string }) => {
       const payload: any = { studentIds };
@@ -319,6 +333,55 @@ export default function TutorAssessments() {
       setShowAssignModal(null);
       setSelectedStudentIds(new Set());
       setDueDate("");
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/dashboard-stats"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (quizId: number) => {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+      return res.json();
+    },
+    onSuccess: () => {
+      setDeleteConfirm(null);
+      setExpandedQuiz(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/dashboard-stats"] });
+    },
+  });
+
+  const unassignMutation = useMutation({
+    mutationFn: async ({ quizId, studentId }: { quizId: number; studentId: string }) => {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}/assignments/${studentId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to unassign");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/dashboard-stats"] });
+    },
+  });
+
+  const extendMutation = useMutation({
+    mutationFn: async ({ quizId, studentId, hours }: { quizId: number; studentId: string; hours: number }) => {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}/assignments/${studentId}/extend`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ hours }),
+      });
+      if (!res.ok) throw new Error("Failed to extend");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
     },
   });
 
@@ -395,9 +458,17 @@ export default function TutorAssessments() {
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-100">My Assessments</h2>
-          <p className="text-sm text-slate-400 mt-1">{tutorQuizzes.length} assessment{tutorQuizzes.length !== 1 ? "s" : ""} available · Click to view student submissions</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-100">My Assessments</h2>
+            <p className="text-sm text-slate-400 mt-1">{tutorQuizzes.length} assessment{tutorQuizzes.length !== 1 ? "s" : ""} · Click to expand</p>
+          </div>
+          <Link href="/tutor/assessments/new">
+            <span className="glow-button flex items-center gap-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold cursor-pointer" data-testid="button-create-new">
+              <Plus className="w-4 h-4" />
+              Create New
+            </span>
+          </Link>
         </div>
 
         {quizzesLoading ? (
@@ -408,7 +479,6 @@ export default function TutorAssessments() {
           <div className={`${CARD_CLASS} text-center py-12`}>
             <BookOpen className="w-12 h-12 mx-auto text-slate-600 mb-4" />
             <p className="text-sm text-slate-400">No assessments created yet</p>
-            <p className="text-xs text-slate-500 mt-1">Use the Create Assessment button on your Dashboard to generate assessments with the AI Copilot</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -421,83 +491,170 @@ export default function TutorAssessments() {
               const maxScore = isExpanded && quizReportsData?.quiz?.id === quiz.id ? quizReportsData.maxScore : 0;
               const avgScore = reports.length > 0 ? Math.round(reports.reduce((s, r) => s + r.score, 0) / reports.length) : 0;
               const avgPct = reports.length > 0 && maxScore > 0 ? Math.round((avgScore / maxScore) * 100) : 0;
+              const currentAssignments = isExpanded ? quizAssignments : [];
 
               return (
                 <div key={quiz.id} className="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl overflow-hidden" data-testid={`quiz-card-${quiz.id}`}>
                   <div
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 cursor-pointer hover:bg-slate-800/30 transition-colors"
+                    className="px-5 py-4 cursor-pointer hover:bg-slate-800/30 transition-colors"
                     onClick={() => toggleExpand(quiz.id)}
                     data-testid={`quiz-tile-${quiz.id}`}
                   >
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${sc.border} shrink-0`} style={{ backgroundColor: `${sc.hex}15` }}>
-                        <SubIcon className="w-5 h-5" style={{ color: sc.hex }} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            quiz.status === "published" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
-                          }`}>
-                            {quiz.status}
-                          </span>
-                          {isExpanded && reports.length > 0 && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">
-                              {reports.length} submission{reports.length !== 1 ? "s" : ""} · avg {avgPct}%
-                            </span>
-                          )}
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${sc.border} shrink-0`} style={{ backgroundColor: `${sc.hex}15` }}>
+                          <SubIcon className="w-5 h-5" style={{ color: sc.hex }} />
                         </div>
-                        <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
-                        <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} · {quiz.level}</p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              quiz.status === "published" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                            }`}>
+                              {quiz.status}
+                            </span>
+                            {isExpanded && reports.length > 0 && (
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">
+                                {reports.length} submission{reports.length !== 1 ? "s" : ""} · avg {avgPct}%
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
+                          <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} · {quiz.level}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); setDueDate(""); }}
-                        className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all"
-                        data-testid={`button-assign-${quiz.id}`}
-                      >
-                        <UserPlus className="w-3 h-3" />
-                        Assign
-                      </button>
                       <div className="p-2 text-slate-400">
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </div>
                     </div>
+
+                    <div className="flex items-center gap-2 ml-14" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); setDueDate(""); }}
+                        className="flex items-center gap-1.5 px-3 py-2 min-h-[36px] rounded-lg text-xs font-medium bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition-all"
+                        data-testid={`button-assign-${quiz.id}`}
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Assign to Students
+                      </button>
+                      <Link href={`/tutor/assessments/edit/${quiz.id}`}>
+                        <span className="flex items-center gap-1.5 px-3 py-2 min-h-[36px] rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 border border-slate-700/50 hover:bg-slate-800/80 transition-all cursor-pointer" data-testid={`button-edit-${quiz.id}`}>
+                          <FileText className="w-3.5 h-3.5" />
+                          Edit
+                        </span>
+                      </Link>
+                      {deleteConfirm === quiz.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => deleteMutation.mutate(quiz.id)}
+                            disabled={deleteMutation.isPending}
+                            className="flex items-center gap-1 px-3 py-2 min-h-[36px] rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-500 transition-all"
+                            data-testid={`button-confirm-delete-${quiz.id}`}
+                          >
+                            {deleteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes, Delete"}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-3 py-2 min-h-[36px] rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 border border-slate-700/50 hover:bg-slate-800/80 transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirm(quiz.id)}
+                          className="flex items-center gap-1.5 px-3 py-2 min-h-[36px] rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                          data-testid={`button-delete-${quiz.id}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {isExpanded && (
-                    <div className="border-t border-slate-800/60 px-5 py-4">
-                      {reportsLoading ? (
-                        <div className="flex justify-center py-8">
-                          <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
-                        </div>
-                      ) : reports.length === 0 ? (
-                        <div className="text-center py-8">
-                          <FileText className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-                          <p className="text-sm text-slate-400">No submissions yet</p>
-                          <p className="text-xs text-slate-500 mt-1">Students will appear here once they complete this assessment</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-sm font-semibold text-slate-300">Student Submissions</h4>
-                            <div className="flex items-center gap-3 text-xs text-slate-400">
-                              <span>{reports.length} submission{reports.length !== 1 ? "s" : ""}</span>
-                              <span>·</span>
-                              <span>Avg: <span className={scoreColor(avgScore, maxScore)}>{avgPct}%</span></span>
-                            </div>
+                    <div className="border-t border-slate-800/60">
+                      <div className="px-5 py-4">
+                        <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-3">
+                          <UserPlus className="w-4 h-4 text-emerald-400" />
+                          Assigned Students ({currentAssignments.length})
+                        </h4>
+                        {currentAssignments.length === 0 ? (
+                          <p className="text-xs text-slate-500 py-2">No students assigned yet. Use the "Assign to Students" button above.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {currentAssignments.map((a: any) => (
+                              <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-slate-800/40 border border-slate-700/50" data-testid={`assignment-${a.id}`}>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center shrink-0">
+                                    <span className="text-[10px] font-bold text-violet-300">
+                                      {(a.student?.displayName || a.student?.email || "?").split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
+                                    </span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-slate-200 truncate">{a.student?.displayName || a.student?.email || "Student"}</p>
+                                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                      <span className={`font-semibold ${a.status === "completed" ? "text-emerald-400" : "text-amber-400"}`}>{a.status}</span>
+                                      {a.dueDate && (
+                                        <span className="flex items-center gap-1">
+                                          <Clock className="w-3 h-3" />
+                                          Due: {formatDate(a.dueDate)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    onClick={() => extendMutation.mutate({ quizId: quiz.id, studentId: a.studentId, hours: 24 })}
+                                    disabled={extendMutation.isPending}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 min-h-[32px] rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-all"
+                                    data-testid={`button-extend-${a.id}`}
+                                  >
+                                    <ClockArrowUp className="w-3 h-3" />
+                                    +24h
+                                  </button>
+                                  <button
+                                    onClick={() => unassignMutation.mutate({ quizId: quiz.id, studentId: a.studentId })}
+                                    disabled={unassignMutation.isPending}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 min-h-[32px] rounded-lg text-[11px] font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                                    data-testid={`button-unassign-${a.id}`}
+                                  >
+                                    <UserMinus className="w-3 h-3" />
+                                    Unassign
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          {reports.map(report => (
-                            <StudentReportCard
-                              key={report.id}
-                              report={report}
-                              maxScore={maxScore}
-                              questions={questions}
-                              onViewReport={(r) => setViewingReport({ report: r as any, questions, maxScore })}
-                            />
-                          ))}
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      <div className="border-t border-slate-800/60 px-5 py-4">
+                        <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-3">
+                          <FileText className="w-4 h-4 text-violet-400" />
+                          Student Submissions ({reports.length})
+                        </h4>
+                        {reportsLoading ? (
+                          <div className="flex justify-center py-8">
+                            <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
+                          </div>
+                        ) : reports.length === 0 ? (
+                          <p className="text-xs text-slate-500 py-2">No submissions yet. Students will appear here once they complete this assessment.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {reports.map(report => (
+                              <StudentReportCard
+                                key={report.id}
+                                report={report}
+                                maxScore={maxScore}
+                                questions={questions}
+                                onViewReport={(r) => setViewingReport({ report: r as any, questions, maxScore })}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -1,0 +1,26 @@
+{
+  "system_prompt": {
+    "task": "SOMA V3 - Critical UI Fix: Missing Tutor Control Buttons",
+    "role": "Lead Frontend UI Architect",
+    "objective": "You previously claimed to implement Delete, Extend, Assign, and Unassign features, but the buttons are COMPLETELY INVISIBLE on the frontend. You must render these buttons clearly and prominently on the UI, removing any broken conditional logic that is hiding them.",
+    "execution_instructions": "Read the 3 UI mandates below. Rewrite the frontend components to force these buttons to render. Output the exact frontend code blocks you fix."
+  },
+  "ui_mandates": {
+    "1_remove_broken_author_checks": {
+      "target_file": "client/src/pages/TutorAssessments.tsx",
+      "diagnostic": "The buttons are likely hidden behind a broken `quiz.authorId === user.id` check where type coercion (string vs int) is failing.",
+      "action": "Remove the strict author conditional wrapper around the management UI for now. If the user is on the Tutor Assessments page, they should see the controls for the quizzes listed. Render the buttons unconditionally to prove they exist."
+    },
+    "2_force_visible_card_actions": {
+      "target_file": "client/src/pages/TutorAssessments.tsx (Quiz Card UI)",
+      "diagnostic": "The management features are buried too deep in a detail view the user cannot find.",
+      "action": "On the main Quiz Card itself (the high-level list view), add a highly visible 'Action Row' at the bottom of the card. This row MUST explicitly contain: \n1. A 'Manage Assignments' button.\n2. A 'Delete Assessment' button (red trash icon).\nMake sure these are standard, visible `<Button>` or HTML `<button>` elements, NOT hidden inside a dropdown menu."
+    },
+    "3_force_visible_student_roster_controls": {
+      "target_file": "client/src/pages/TutorAssessments.tsx (or wherever the Assigned Students list lives)",
+      "diagnostic": "The Unassign and +24h Extend buttons are not rendering on the screen.",
+      "action": "Ensure the 'Assigned Students' section is expanded by default (not hidden inside a closed accordion). Force the render of the '+24h Extend' button at the top of the list. Force the render of the 'Revoke/Unassign' button next to EVERY student's name."
+    }
+  },
+  "strict_command": "Do not touch the backend storage or routes. This is strictly a React rendering failure. Put the buttons plainly on the screen so the user can actually click them."
+}

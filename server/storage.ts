@@ -58,6 +58,8 @@ export interface IStorage {
   getQuizAssignmentsForStudent(studentId: string): Promise<(QuizAssignment & { quiz: SomaQuiz })[]>;
   getQuizAssignmentsForQuiz(quizId: number): Promise<(QuizAssignment & { student: SomaUser })[]>;
   updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void>;
+  deleteQuizAssignment(quizId: number, studentId: string): Promise<void>;
+  extendAssignmentDueDate(quizId: number, studentId: string, hours: number): Promise<void>;
 
   getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]>;
 
@@ -285,6 +287,17 @@ class DatabaseStorage implements IStorage {
   async updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void> {
     await this.database.update(quizAssignments)
       .set({ status })
+      .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+  }
+
+  async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    await this.database.delete(quizAssignments)
+      .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+  }
+
+  async extendAssignmentDueDate(quizId: number, studentId: string, hours: number): Promise<void> {
+    await this.database.update(quizAssignments)
+      .set({ dueDate: sql`coalesce(${quizAssignments.dueDate}, now()) + interval '1 hour' * ${hours}` })
       .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
   }
 
@@ -634,6 +647,18 @@ class MemoryStorage implements IStorage {
   async updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void> {
     const qa = this.quizAssignmentsList.find((a) => a.quizId === quizId && a.studentId === studentId);
     if (qa) qa.status = status;
+  }
+
+  async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    this.quizAssignmentsList = this.quizAssignmentsList.filter((a) => !(a.quizId === quizId && a.studentId === studentId));
+  }
+
+  async extendAssignmentDueDate(quizId: number, studentId: string, hours: number): Promise<void> {
+    const qa = this.quizAssignmentsList.find((a) => a.quizId === quizId && a.studentId === studentId);
+    if (qa) {
+      const base = qa.dueDate ? new Date(qa.dueDate) : new Date();
+      qa.dueDate = new Date(base.getTime() + hours * 3600000);
+    }
   }
 
   async getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]> {

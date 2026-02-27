@@ -561,7 +561,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Get assignments for a specific quiz
+  app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
+      await storage.deleteSomaQuiz(quizId);
+      res.json({ message: "Quiz deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete quiz" });
+    }
+  });
+
+  app.delete("/api/tutor/quizzes/:quizId/assignments/:studentId", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      const studentId = req.params.studentId;
+      if (isNaN(quizId) || !studentId) return res.status(400).json({ message: "Invalid parameters" });
+      await storage.deleteQuizAssignment(quizId, studentId);
+      res.json({ message: "Assignment removed" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to remove assignment" });
+    }
+  });
+
+  app.post("/api/tutor/quizzes/:quizId/assignments/:studentId/extend", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      const studentId = req.params.studentId;
+      const hours = parseInt(String(req.body?.hours || 24));
+      if (isNaN(quizId) || !studentId) return res.status(400).json({ message: "Invalid parameters" });
+      await storage.extendAssignmentDueDate(quizId, studentId, hours);
+      res.json({ message: `Due date extended by ${hours} hours` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to extend due date" });
+    }
+  });
+
   app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
     try {
       const quizId = parseInt(String(req.params.quizId));
