@@ -1,15 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
-import type { SomaQuiz } from "@shared/schema";
+import type { SomaQuiz, SomaUser } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, Clock,
   Loader2, LayoutDashboard, TrendingUp,
   Award, Sparkles, ChevronRight, Eye, Timer, AlertTriangle,
+  X, Check, Send, UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@supabase/supabase-js";
@@ -121,8 +122,12 @@ function DonutCard({ subject, percentage, color }: { subject: string; percentage
 }
 
 export default function TutorDashboard() {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [, setLocation] = useLocation();
+  const [showAssignModal, setShowAssignModal] = useState<number | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [dueDate, setDueDate] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -145,6 +150,57 @@ export default function TutorDashboard() {
     enabled: !!userId,
   });
 
+  const { data: tutorQuizzes = [], isLoading: quizzesLoading } = useQuery<SomaQuiz[]>({
+    queryKey: ["/api/tutor/quizzes", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const res = await fetch("/api/tutor/quizzes", { headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!userId,
+  });
+
+  const { data: adoptedStudents = [] } = useQuery<SomaUser[]>({
+    queryKey: ["/api/tutor/students", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const res = await fetch("/api/tutor/students", { headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!userId,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: async ({ quizId, studentIds, dueDate: dd }: { quizId: number; studentIds: string[]; dueDate?: string }) => {
+      const payload: any = { studentIds };
+      if (dd) payload.dueDate = new Date(dd).toISOString();
+      const res = await fetch(`/api/tutor/quizzes/${quizId}/assign`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Failed to assign");
+      return res.json();
+    },
+    onSuccess: () => {
+      setShowAssignModal(null);
+      setSelectedStudentIds(new Set());
+      setDueDate("");
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/dashboard-stats"] });
+    },
+  });
+
+  const toggleStudentSelection = useCallback((id: string) => {
+    setSelectedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setLocation("/login");
@@ -156,6 +212,8 @@ export default function TutorDashboard() {
     const count = stats.cohortAverages.reduce((s, c) => s + c.count, 0);
     return count > 0 ? Math.round(total / count) : null;
   }, [stats]);
+
+  const publishedQuizzes = useMemo(() => tutorQuizzes.filter(q => q.status === "published"), [tutorQuizzes]);
 
   return (
     <div className="min-h-screen">
@@ -183,7 +241,7 @@ export default function TutorDashboard() {
                 <p className="text-[10px] text-violet-400 font-semibold uppercase tracking-wider">Tutor</p>
               </div>
             </div>
-            <button onClick={handleLogout} className="text-slate-400 hover:text-slate-300 transition-colors p-2 min-h-[44px] min-w-[44px]" aria-label="Log out">
+            <button onClick={handleLogout} className="text-slate-400 hover:text-slate-300 transition-colors p-2 min-h-[44px] min-w-[44px]" aria-label="Log out" data-testid="button-logout">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -237,7 +295,7 @@ export default function TutorDashboard() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard icon={Users} label="Students" value={stats?.totalStudents ?? 0} color="#8B5CF6" />
               <StatCard icon={BookOpen} label="Assessments" value={stats?.totalQuizzes ?? 0} color="#10B981" />
-              <StatCard icon={TrendingUp} label="Submissions" value={stats?.recentSubmissions?.length ?? 0} color="#F59E0B" />
+              <StatCard icon={Send} label="Assigned" value={stats?.pendingAssignments?.length ?? 0} color="#F59E0B" />
               <StatCard icon={Award} label="Cohort Avg" value={overallAvg !== null ? `${overallAvg}%` : "—"} color="#3B82F6" />
             </div>
 
@@ -255,12 +313,73 @@ export default function TutorDashboard() {
 
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h3 className={SECTION_LABEL}>Recent Submissions</h3>
+                <h3 className={SECTION_LABEL}>My Assessments</h3>
                 <Link href="/tutor/assessments">
                   <span className="text-xs text-violet-400 hover:text-violet-300 cursor-pointer flex items-center gap-1" data-testid="link-view-all-assessments">
-                    View All Assessments <ChevronRight className="w-3 h-3" />
+                    View All <ChevronRight className="w-3 h-3" />
                   </span>
                 </Link>
+              </div>
+
+              {quizzesLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
+                </div>
+              ) : publishedQuizzes.length === 0 ? (
+                <div className={`${CARD_CLASS} text-center py-10`}>
+                  <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+                  <p className="text-sm text-slate-400">No assessments yet</p>
+                  <p className="text-xs text-slate-500 mt-1">Create your first assessment to get started</p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {publishedQuizzes.map((quiz) => {
+                    const sc = getSubjectColor(quiz.subject);
+                    const SubIcon = getSubjectIcon(quiz.subject);
+                    return (
+                      <div
+                        key={quiz.id}
+                        className="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl px-5 py-4 group hover:border-slate-700 transition-all"
+                        data-testid={`quiz-tile-${quiz.id}`}
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${sc.border}`} style={{ backgroundColor: `${sc.hex}15` }}>
+                            <SubIcon className="w-4 h-4" style={{ color: sc.hex }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-medium text-slate-200 truncate" data-testid={`quiz-title-${quiz.id}`}>{quiz.title}</h4>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${sc.bg} ${sc.label}`}>{quiz.subject || "General"}</span>
+                              {quiz.level && <span className="text-[10px] text-slate-500">{quiz.level}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); setDueDate(""); }}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 min-h-[36px] rounded-lg text-xs font-medium bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition-all"
+                            data-testid={`button-assign-${quiz.id}`}
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            Assign to Students
+                          </button>
+                          <Link href={`/tutor/assessments`}>
+                            <span className="flex items-center justify-center gap-1.5 py-2 px-3 min-h-[36px] rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 border border-slate-700/50 hover:bg-slate-800/80 transition-all cursor-pointer" data-testid={`button-details-${quiz.id}`}>
+                              <Eye className="w-3.5 h-3.5" />
+                              Details
+                            </span>
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={SECTION_LABEL}>Recent Submissions</h3>
               </div>
 
               {(stats?.recentSubmissions?.length ?? 0) === 0 ? (
@@ -325,19 +444,14 @@ export default function TutorDashboard() {
 
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h3 className={SECTION_LABEL}>Assigned Assessments</h3>
-                <Link href="/tutor/assessments">
-                  <span className="text-xs text-violet-400 hover:text-violet-300 cursor-pointer flex items-center gap-1" data-testid="link-manage-assessments">
-                    Manage <ChevronRight className="w-3 h-3" />
-                  </span>
-                </Link>
+                <h3 className={SECTION_LABEL}>Pending Assignments</h3>
               </div>
 
               {(stats?.pendingAssignments?.length ?? 0) === 0 ? (
                 <div className={`${CARD_CLASS} text-center py-10`}>
-                  <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+                  <Send className="w-10 h-10 mx-auto text-slate-600 mb-3" />
                   <p className="text-sm text-slate-400">No pending assignments</p>
-                  <p className="text-xs text-slate-500 mt-1">Assigned assessments that haven't been started will appear here</p>
+                  <p className="text-xs text-slate-500 mt-1">Use the "Assign to Students" button above to assign assessments</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -357,7 +471,7 @@ export default function TutorDashboard() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-slate-200">
                             <span className="font-medium">{pa.studentName}</span>
-                            <span className="text-slate-500"> assigned </span>
+                            <span className="text-slate-500"> — </span>
                             <span className="text-slate-300">{pa.quizTitle}</span>
                           </p>
                           <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
@@ -387,6 +501,75 @@ export default function TutorDashboard() {
           </>
         )}
       </main>
+
+      {showAssignModal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowAssignModal(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <h3 className="text-lg font-bold text-slate-200">Assign Assessment to Students</h3>
+              <button onClick={() => setShowAssignModal(null)} className="text-slate-400 hover:text-slate-300 p-1" data-testid="button-close-assign-modal">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">Select from your adopted students to assign this assessment:</p>
+            {adoptedStudents.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-8">You have no adopted students. Go to the Students tab to adopt students first.</p>
+            ) : (
+              <>
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {adoptedStudents.map((student) => (
+                    <button
+                      key={student.id}
+                      onClick={() => toggleStudentSelection(student.id)}
+                      className={`w-full min-h-[44px] flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                        selectedStudentIds.has(student.id)
+                          ? "bg-emerald-500/20 border border-emerald-500/40"
+                          : "bg-slate-800/40 border border-slate-700/50 hover:bg-slate-800/60"
+                      }`}
+                      data-testid={`assign-student-${student.id}`}
+                    >
+                      <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${
+                        selectedStudentIds.has(student.id) ? "bg-emerald-500 border-emerald-500" : "border-slate-600"
+                      }`}>
+                        {selectedStudentIds.has(student.id) && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-200">{student.displayName || "Student"}</p>
+                        <p className="text-xs text-slate-400">{student.email}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-300 mb-2">
+                    <Clock className="w-3.5 h-3.5 text-violet-400" />
+                    Due Date & Time <span className="text-slate-500">(optional)</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-3 py-2.5 min-h-[44px] rounded-lg bg-slate-900/80 border border-slate-600/50 text-sm text-slate-200 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 [color-scheme:dark]"
+                    data-testid="input-due-date"
+                  />
+                </div>
+                <button
+                  onClick={() => assignMutation.mutate({ quizId: showAssignModal, studentIds: Array.from(selectedStudentIds), dueDate: dueDate || undefined })}
+                  disabled={selectedStudentIds.size === 0 || assignMutation.isPending}
+                  className="w-full mt-4 py-3 min-h-[44px] rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  data-testid="button-confirm-assign"
+                >
+                  {assignMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                  ) : (
+                    `Assign to ${selectedStudentIds.size} Student${selectedStudentIds.size !== 1 ? "s" : ""}`
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
