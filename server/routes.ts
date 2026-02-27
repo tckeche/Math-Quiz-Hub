@@ -950,14 +950,16 @@ RULES:
       const assignments = await storage.getQuizAssignmentsForStudent(studentId);
       const assignmentMap = new Map<number, any>();
       for (const a of assignments) {
-        assignmentMap.set(a.quizId, a);
+        if (a.status === "pending") {
+          assignmentMap.set(a.quizId, a);
+        }
       }
       const available = allQuizzes
         .filter(q => !q.isArchived && q.status === "published" && assignmentMap.has(q.id))
         .map(q => ({
           ...q,
           isAssigned: true,
-          assignmentStatus: assignmentMap.get(q.id)?.status || null,
+          assignmentStatus: "pending",
           dueDate: assignmentMap.get(q.id)?.dueDate || null,
         }));
       res.json(available);

@@ -198,7 +198,7 @@ export default function StudentDashboard() {
 
   const availableQuizzes = useMemo(() => {
     return (somaQuizzes || [])
-      .filter((q: any) => q.status === "published" && !completedSomaQuizIds.has(q.id))
+      .filter((q: any) => q.status === "published")
       .map((q: any) => ({
         id: q.id,
         title: q.title,
