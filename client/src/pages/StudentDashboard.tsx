@@ -13,7 +13,6 @@ import {
   Eye, FileText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { Session } from "@supabase/supabase-js";
 
 interface ReportWithQuiz {
@@ -371,10 +370,10 @@ export default function StudentDashboard() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/">
             <div className="flex items-center gap-3 cursor-pointer" data-testid="link-dashboard-home">
-              <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-10 w-auto object-contain" />
+              <img src="/MCEC - White Logo.png" alt="MCEC Logo" loading="lazy" className="h-10 w-auto object-contain" />
               <div>
                 <h1 className="text-lg font-bold gradient-text" data-testid="text-dashboard-title">SOMA</h1>
-                <p className="text-[10px] text-slate-500 tracking-widest uppercase">Student Dashboard</p>
+                <p className="text-[10px] text-slate-400 tracking-widest uppercase">Student Dashboard</p>
               </div>
             </div>
           </Link>
@@ -390,12 +389,13 @@ export default function StudentDashboard() {
               </div>
               <div className="hidden sm:block">
                 <p className="text-sm font-medium text-slate-200" data-testid="text-user-name">{displayName}</p>
-                <p className="text-[10px] text-slate-500">{session?.user?.email}</p>
+                <p className="text-[10px] text-slate-400">{session?.user?.email}</p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="text-slate-500 hover:text-slate-300 transition-colors p-2"
+              className="text-slate-400 hover:text-slate-300 transition-colors p-2 min-h-[44px] min-w-[44px]"
+              aria-label="Log out"
               data-testid="button-logout"
             >
               <LogOut className="w-4 h-4" />
@@ -406,23 +406,23 @@ export default function StudentDashboard() {
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         {isLoading ? (
-          <div className="space-y-6">
+          <div className="space-y-6" data-testid="dashboard-skeleton-loading">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className={CARD_CLASS}>
-                  <div className="flex flex-col items-center">
-                    <Skeleton className="w-32 h-32 rounded-full bg-white/5" />
-                    <Skeleton className="h-3 w-16 mt-3 bg-white/5" />
+                <div key={i} className={`${CARD_CLASS} animate-pulse`}>
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-32 h-32 rounded-full bg-slate-800" />
+                    <div className="h-3 w-16 rounded bg-slate-800" />
                   </div>
                 </div>
               ))}
             </div>
             <div className="grid md:grid-cols-2 gap-6">
               {[1, 2].map((i) => (
-                <div key={i} className={CARD_CLASS}>
-                  <Skeleton className="h-4 w-40 mb-5 bg-white/5" />
+                <div key={i} className={`${CARD_CLASS} animate-pulse`}>
+                  <div className="h-4 w-40 mb-5 rounded bg-slate-800" />
                   {[1, 2, 3].map((j) => (
-                    <Skeleton key={j} className="h-20 w-full mb-3 bg-white/5 rounded-xl" />
+                    <div key={j} className="h-20 w-full mb-3 rounded-xl bg-slate-800" />
                   ))}
                 </div>
               ))}
@@ -454,12 +454,12 @@ export default function StudentDashboard() {
                   Available Quizzes
                 </h2>
 
-                <div className="mt-4 mb-2 overflow-x-auto pb-2" data-testid="filter-bar">
+                <div className="mt-4 mb-2 overflow-x-auto pb-2 -mx-1 px-1" data-testid="filter-bar">
                   <div className="flex items-center gap-2 min-w-max">
                     <select
                       value={subjectFilter}
                       onChange={(e) => setSubjectFilter(e.target.value)}
-                      className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                      className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-2 min-h-[44px] rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
                       data-testid="select-subject-filter"
                     >
                       <option value="all">All Subjects</option>
@@ -468,7 +468,7 @@ export default function StudentDashboard() {
                     <select
                       value={levelFilter}
                       onChange={(e) => setLevelFilter(e.target.value)}
-                      className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                      className="bg-slate-800/60 border border-slate-700 text-slate-300 text-xs px-3 py-2 min-h-[44px] rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-500/50"
                       data-testid="select-level-filter"
                     >
                       <option value="all">All Levels</option>
@@ -481,7 +481,7 @@ export default function StudentDashboard() {
                   {filteredQuizzes.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-                      <p className="text-sm text-slate-500">No available quizzes</p>
+                      <p className="text-sm text-slate-400">No available quizzes</p>
                     </div>
                   ) : (
                     <>
@@ -508,7 +508,7 @@ export default function StudentDashboard() {
                                       {q.subject}
                                     </span>
                                     {q.level && (
-                                      <span className="text-[10px] text-slate-500 px-2 py-0.5 rounded-full bg-slate-800/60">
+                                      <span className="text-[10px] text-slate-400 px-2 py-0.5 rounded-full bg-slate-800/60">
                                         {q.level}
                                       </span>
                                     )}
@@ -522,7 +522,7 @@ export default function StudentDashboard() {
                                   <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.type}-${q.id}`}>
                                     {q.title}
                                   </h3>
-                                  <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
+                                  <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
                                     {q.dueDate && (
                                       <span className="flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
@@ -543,7 +543,7 @@ export default function StudentDashboard() {
                       {filteredQuizzes.length > 4 && (
                         <button
                           onClick={() => setShowAllAvailable(!showAllAvailable)}
-                          className="w-full text-center py-2.5 text-xs font-medium text-violet-400 hover:text-violet-300 border border-slate-700/50 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 transition-all"
+                          className="w-full text-center py-2.5 min-h-[44px] text-xs font-medium text-violet-400 hover:text-violet-300 border border-slate-700/50 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 transition-all"
                           data-testid="button-show-more-available"
                         >
                           {showAllAvailable ? "Show Less" : `Show More (${filteredQuizzes.length - 4} more)`}
@@ -562,7 +562,7 @@ export default function StudentDashboard() {
                   {completedItems.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <CheckCircle2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-                      <p className="text-sm text-slate-500">No completed quizzes yet</p>
+                      <p className="text-sm text-slate-400">No completed quizzes yet</p>
                     </div>
                   ) : (
                     <>
@@ -640,7 +640,7 @@ export default function StudentDashboard() {
                                 <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.type}-${item.id}`}>
                                   {item.title}
                                 </h3>
-                                <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
+                                <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
                                   <span>{format(new Date(item.date), "MMM d, yyyy")}</span>
                                 </div>
                               </div>
@@ -652,7 +652,7 @@ export default function StudentDashboard() {
                                 >
                                   {pct}%
                                 </div>
-                                <div className="text-[10px] text-slate-500">
+                                <div className="text-[10px] text-slate-400">
                                   {item.score}/{item.maxScore}
                                 </div>
                                 <div className="flex items-center gap-2 mt-1.5 justify-end">
@@ -696,7 +696,7 @@ export default function StudentDashboard() {
                       {completedItems.length > 5 && (
                         <button
                           onClick={() => setShowAllCompleted(!showAllCompleted)}
-                          className="w-full text-center py-2.5 text-xs font-medium text-violet-400 hover:text-violet-300 border border-slate-700/50 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 transition-all"
+                          className="w-full text-center py-2.5 min-h-[44px] text-xs font-medium text-violet-400 hover:text-violet-300 border border-slate-700/50 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 transition-all"
                           data-testid="button-show-more-completed"
                         >
                           {showAllCompleted ? "Show Less" : `Show More (${completedItems.length - 5} more)`}

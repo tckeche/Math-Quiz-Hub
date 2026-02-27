@@ -183,7 +183,7 @@ function SummaryView({
                   ) : (
                     <Circle className="w-4 h-4 text-slate-600 shrink-0" />
                   )}
-                  <span className={`text-sm truncate flex-1 ${isAnswered ? "text-slate-200" : "text-slate-500"}`}>
+                  <span className={`text-sm truncate flex-1 ${isAnswered ? "text-slate-200" : "text-slate-400"}`}>
                     {q.stem.slice(0, 60)}{q.stem.length > 60 ? "..." : ""}
                   </span>
                   <Badge className={`text-xs ${isAnswered ? "bg-cyan-500/10 text-cyan-400 border-cyan-400/30" : "bg-slate-800/60 text-slate-600 border-slate-700/40"}`}>
@@ -198,7 +198,7 @@ function SummaryView({
         <div className="flex gap-3">
           <Button
             variant="outline"
-            className="flex-1 glow-button-outline"
+            className="flex-1 glow-button-outline min-h-[44px]"
             onClick={onBack}
             data-testid="button-summary-back"
           >
@@ -206,7 +206,7 @@ function SummaryView({
             Review Answers
           </Button>
           <Button
-            className="flex-1 glow-button"
+            className="flex-1 glow-button min-h-[44px]"
             onClick={onSubmit}
             disabled={isSubmitting}
             data-testid="button-summary-submit"
@@ -483,7 +483,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
             </Button>
           ) : (
             <Link href="/dashboard">
-              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" data-testid="button-soma-back">
+              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" aria-label="Back to dashboard" data-testid="button-soma-back">
                 <ArrowLeft className="w-4 h-4 mr-1" />
                 Exit
               </Button>
@@ -506,7 +506,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
                 {currentIndex + 1}
               </div>
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wider">Question {currentIndex + 1} of {questions.length}</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider">Question {currentIndex + 1} of {questions.length}</p>
                 <p className="text-xs text-violet-400/70">{currentQuestion.marks} mark{currentQuestion.marks > 1 ? "s" : ""}</p>
               </div>
             </div>
@@ -536,7 +536,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-semibold ${
                     isSelected
                       ? "bg-violet-500/30 text-violet-200 border border-violet-500/50"
-                      : "bg-white/5 text-slate-500 border border-white/10"
+                      : "bg-white/5 text-slate-400 border border-white/10"
                   }`}>
                     {letter}
                   </div>
@@ -552,7 +552,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
         <div className="flex items-center gap-3 mb-8">
           <Button
             variant="outline"
-            className="flex-1 glow-button-outline"
+            className="flex-1 glow-button-outline min-h-[44px]"
             onClick={handleSkip}
             data-testid="button-skip"
           >
@@ -561,7 +561,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
           </Button>
           {currentIndex === questions.length - 1 ? (
             <Button
-              className="flex-1 glow-button"
+              className="flex-1 glow-button min-h-[44px]"
               onClick={() => setShowSummary(true)}
               data-testid="button-submit-exam"
             >
@@ -570,7 +570,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
             </Button>
           ) : (
             <Button
-              className="flex-1 glow-button"
+              className="flex-1 glow-button min-h-[44px]"
               onClick={handleNext}
               data-testid="button-next"
             >
@@ -580,7 +580,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-2 flex-wrap" data-testid="nav-dots">
+        <div className="flex items-center justify-center gap-2 flex-wrap px-2" data-testid="nav-dots">
           {questions.map((q, idx) => (
             <button
               key={q.id}
@@ -592,13 +592,14 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
                     ? "bg-emerald-500/60"
                     : "bg-white/15 hover:bg-white/30"
               }`}
+              aria-label={`Go to question ${idx + 1}`}
               data-testid={`dot-question-${idx}`}
             />
           ))}
         </div>
 
         <div className="text-center mt-4">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-400">
             {answeredCount} of {questions.length} answered
           </p>
         </div>

@@ -38,7 +38,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen w-full relative overflow-hidden flex flex-col items-center justify-center px-4 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(139,92,246,0.2),transparent)]">
       <div className="text-center z-10 relative">
-        <img src="/MCEC - White Logo.png" alt="MCEC Logo" className="h-[106px] w-auto object-contain mx-auto mb-8" />
+        <img src="/MCEC - White Logo.png" alt="MCEC Logo" loading="lazy" className="h-[106px] w-auto object-contain mx-auto mb-8" />
 
         <h1 className="text-4xl md:text-6xl font-black text-[#DDD6FE] drop-shadow-[0_0_20px_rgba(139,92,246,0.3)] tracking-tight mb-4" data-testid="text-main-title">
           Welcome to SOMA
@@ -48,13 +48,13 @@ export default function Landing() {
           An Intelligent Assessment Platform
         </p>
 
-        <p className="text-sm md:text-base font-light tracking-[0.2em] text-slate-500 uppercase" data-testid="text-byline">
+        <p className="text-sm md:text-base font-light tracking-[0.2em] text-slate-400 uppercase" data-testid="text-byline">
           by MCEC
         </p>
 
         <Link href="/login">
           <button
-            className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-[0_0_20px_rgba(139,92,246,0.6)] text-white font-medium rounded-full px-8 py-4 mt-10 transition-all block w-fit mx-auto cursor-pointer"
+            className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-[0_0_20px_rgba(139,92,246,0.6)] text-white font-medium rounded-full px-8 py-4 min-h-[44px] mt-10 transition-all block w-fit mx-auto cursor-pointer"
             data-testid="button-enter-portal"
           >
             Enter Student Portal
