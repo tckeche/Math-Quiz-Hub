@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import express from "express";
 import { createServer } from "http";
 import supertest from "supertest";
+import jwt from "jsonwebtoken";
 
 // ─── Mock DB so MemoryStorage is used ────────────────────────────────────────
 vi.mock("../server/db", () => ({ db: null }));
@@ -72,6 +73,15 @@ beforeAll(async () => {
 afterAll(() => {
   httpServer.close();
 });
+
+// Helper: create a Supabase-style JWT for a synced user (for requireSupabaseAuth routes)
+async function createAuthToken(userId: string, email: string): Promise<string> {
+  // Sync the user first
+  await request.post("/api/auth/sync").send({ id: userId, email, user_metadata: {} });
+  // Create a JWT matching what requireSupabaseAuth expects (sub = userId)
+  const secret = process.env.JWT_SECRET || "test-jwt-secret-for-testing-only-32chars";
+  return jwt.sign({ sub: userId, email, role: "authenticated" }, secret, { expiresIn: "1h" });
+}
 
 // Helper: login as admin and get cookie
 async function loginAsAdmin() {
@@ -935,30 +945,34 @@ describe("POST /api/auth/sync", () => {
   });
 });
 
-// ─── STUDENT ENDPOINTS: Reports & Submissions ──────────────────────────────
+// ─── STUDENT ENDPOINTS: Reports & Submissions (JWT-protected) ────────────
 describe("GET /api/student/reports", () => {
-  it("returns 400 when studentId is missing", async () => {
+  it("returns 401 when no auth token provided", async () => {
     const res = await request.get("/api/student/reports");
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toMatch(/studentId required/i);
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toMatch(/authentication required/i);
   });
 
-  it("returns empty array for unknown studentId", async () => {
-    const res = await request.get("/api/student/reports?studentId=nonexistent-id");
+  it("returns empty array for authenticated user with no reports", async () => {
+    const token = await createAuthToken("aaaaaaaa-0000-0000-0000-000000000001", "teststudent@example.com");
+    const res = await request.get("/api/student/reports")
+      .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
 });
 
 describe("GET /api/student/submissions", () => {
-  it("returns 400 when studentId is missing", async () => {
+  it("returns 401 when no auth token provided", async () => {
     const res = await request.get("/api/student/submissions");
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toMatch(/studentId required/i);
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toMatch(/authentication required/i);
   });
 
-  it("returns empty array for unknown studentId", async () => {
-    const res = await request.get("/api/student/submissions?studentId=nonexistent-id");
+  it("returns empty array for authenticated user with no submissions", async () => {
+    const token = await createAuthToken("aaaaaaaa-0000-0000-0000-000000000002", "teststudent2@example.com");
+    const res = await request.get("/api/student/submissions")
+      .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });

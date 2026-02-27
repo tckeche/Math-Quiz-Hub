@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { supabase } from "@/lib/supabase";
+import { supabase, authFetch } from "@/lib/supabase";
 import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
 import DOMPurify from "dompurify";
 import type { Quiz, SomaQuiz } from "@shared/schema";
@@ -169,12 +169,12 @@ export default function StudentDashboard() {
     queryKey: ["/api/quizzes"],
   });
 
-  // Fetch only quizzes explicitly assigned to this student (row-level security)
+  // Fetch only quizzes explicitly assigned to this student (server-side JWT auth)
   const { data: somaQuizzes, isLoading: somaLoading } = useQuery<SomaQuiz[]>({
     queryKey: ["/api/quizzes/available", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const res = await fetch(`/api/quizzes/available?studentId=${userId}`);
+      const res = await authFetch("/api/quizzes/available");
       if (!res.ok) return [];
       return res.json();
     },
@@ -185,7 +185,7 @@ export default function StudentDashboard() {
     queryKey: ["/api/student/reports", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const res = await fetch(`/api/student/reports?studentId=${userId}`);
+      const res = await authFetch("/api/student/reports");
       if (!res.ok) return [];
       return res.json();
     },
@@ -196,7 +196,7 @@ export default function StudentDashboard() {
     queryKey: ["/api/student/submissions", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const res = await fetch(`/api/student/submissions?studentId=${userId}`);
+      const res = await authFetch("/api/student/submissions");
       if (!res.ok) return [];
       return res.json();
     },

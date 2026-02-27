@@ -176,6 +176,49 @@ function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
   });
 }
 
+/**
+ * Supabase JWT authentication middleware.
+ * Verifies the Bearer token from the Authorization header using the Supabase
+ * JWT secret, extracts the user ID (sub claim), looks up the user in
+ * soma_users, and attaches `req.authUser` with { id, email, role }.
+ */
+function getSupabaseJwtSecret(): string {
+  return process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET || "";
+}
+
+function requireSupabaseAuth(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  const token = authHeader.slice(7);
+  const secret = getSupabaseJwtSecret();
+  if (!secret) {
+    return res.status(500).json({ message: "Server authentication not configured" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, secret) as { sub?: string; email?: string; role?: string };
+    const userId = decoded.sub;
+    if (!userId) {
+      return res.status(401).json({ message: "Invalid token: missing user ID" });
+    }
+
+    storage.getSomaUserById(userId).then((user) => {
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      (req as any).authUser = { id: user.id, email: user.email, role: user.role, displayName: user.displayName };
+      next();
+    }).catch(() => {
+      res.status(500).json({ message: "Failed to verify user identity" });
+    });
+  } catch {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+}
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -642,12 +685,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ─── Student Routes ──────────────────────────────────────────────
+  // ─── Student Routes (Supabase JWT-protected) ────────────────────
 
-  app.get("/api/student/reports", async (req, res) => {
+  app.get("/api/student/reports", requireSupabaseAuth, async (req, res) => {
     try {
-      const studentId = req.query.studentId as string;
-      if (!studentId) return res.status(400).json({ message: "studentId required" });
+      const studentId = (req as any).authUser.id;
       const reports = await storage.getSomaReportsByStudentId(studentId);
       res.json(reports);
     } catch (err: any) {
@@ -655,10 +697,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/student/submissions", async (req, res) => {
+  app.get("/api/student/submissions", requireSupabaseAuth, async (req, res) => {
     try {
-      const studentId = req.query.studentId as string;
-      if (!studentId) return res.status(400).json({ message: "studentId required" });
+      const studentId = (req as any).authUser.id;
       const subs = await storage.getSubmissionsByStudentUserId(studentId);
       res.json(subs);
     } catch (err: any) {
@@ -666,11 +707,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Row-level security: Only return quizzes explicitly assigned to this student
-  app.get("/api/quizzes/available", async (req, res) => {
+  // Row-level security: Only return quizzes explicitly assigned to this authenticated student
+  app.get("/api/quizzes/available", requireSupabaseAuth, async (req, res) => {
     try {
-      const studentId = req.query.studentId as string;
-      if (!studentId) return res.status(400).json({ message: "studentId required" });
+      const studentId = (req as any).authUser.id;
       const assignments = await storage.getQuizAssignmentsForStudent(studentId);
       const unique = new Map<number, (typeof assignments)[number]["quiz"]>();
       for (const assignment of assignments) {
@@ -1555,13 +1595,31 @@ Sections to include:
     }
   });
 
-  app.get("/api/soma/reports/:reportId/review", async (req, res) => {
+  app.get("/api/soma/reports/:reportId/review", requireSupabaseAuth, async (req, res) => {
     try {
-      const reportId = parseInt(req.params.reportId);
+      const reportId = parseInt(String(req.params.reportId));
       if (isNaN(reportId)) return res.status(400).json({ message: "Invalid report ID" });
 
       const report = await storage.getSomaReportById(reportId);
       if (!report) return res.status(404).json({ message: "Report not found" });
+
+      // Ownership check: student owns the report, OR tutor adopted the student, OR super_admin
+      const authUser = (req as any).authUser as { id: string; role: string };
+      const isOwner = report.studentId === authUser.id;
+      const isSuperAdmin = authUser.role === "super_admin";
+
+      if (!isOwner && !isSuperAdmin) {
+        // Check if requester is a tutor who adopted this student
+        if (authUser.role === "tutor" && report.studentId) {
+          const adopted = await storage.getAdoptedStudents(authUser.id);
+          const isTutorOfStudent = adopted.some((s) => s.id === report.studentId);
+          if (!isTutorOfStudent) {
+            return res.status(403).json({ message: "Forbidden: you do not have access to this report" });
+          }
+        } else {
+          return res.status(403).json({ message: "Forbidden: you do not have access to this report" });
+        }
+      }
 
       const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
 
