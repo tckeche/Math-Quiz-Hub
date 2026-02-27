@@ -40,6 +40,7 @@ export default function SuperAdminDashboard() {
   const [activeTab, setActiveTab] = useState<"users" | "quizzes">("users");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: "user" | "quiz"; id: string | number; name: string } | null>(null);
+  const [roleVerified, setRoleVerified] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -50,6 +51,20 @@ export default function SuperAdminDashboard() {
   const userId = session?.user?.id;
   const headers = useMemo(() => ({ "x-admin-id": userId || "" }), [userId]);
 
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`/api/auth/me?userId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.role !== "super_admin") {
+          setLocation("/dashboard");
+        } else {
+          setRoleVerified(true);
+        }
+      })
+      .catch(() => setLocation("/login"));
+  }, [userId, setLocation]);
+
   const { data: stats } = useQuery<AdminStats>({
     queryKey: ["/api/super-admin/stats", userId],
     queryFn: async () => {
@@ -57,7 +72,7 @@ export default function SuperAdminDashboard() {
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    enabled: !!userId,
+    enabled: !!userId && roleVerified,
   });
 
   const { data: users = [], isLoading: usersLoading } = useQuery<SomaUser[]>({
@@ -67,7 +82,7 @@ export default function SuperAdminDashboard() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!userId,
+    enabled: !!userId && roleVerified,
   });
 
   const { data: quizzes = [], isLoading: quizzesLoading } = useQuery<SomaQuiz[]>({
@@ -77,7 +92,7 @@ export default function SuperAdminDashboard() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!userId,
+    enabled: !!userId && roleVerified,
   });
 
   const deleteUserMutation = useMutation({
