@@ -169,6 +169,14 @@ export default function SuperAdminDashboard() {
     return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
   };
 
+  if (!roleVerified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-red-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-red-900/40 bg-slate-950/90 backdrop-blur-xl sticky top-0 z-20">
