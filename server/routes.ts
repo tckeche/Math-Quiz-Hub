@@ -502,9 +502,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get tutor's quizzes
   app.get("/api/tutor/quizzes", requireTutor, async (req, res) => {
     try {
-      const tutorId = (req as any).tutorId;
-      const quizzes = await storage.getSomaQuizzesByAuthor(tutorId);
-      res.json(quizzes);
+      const allQuizzes = await storage.getSomaQuizzes();
+      res.json(allQuizzes.filter((q) => !q.isArchived));
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
     }
@@ -525,8 +524,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "studentIds array required" });
       }
       const quiz = await storage.getSomaQuiz(quizId);
-      if (!quiz || quiz.authorId !== tutorId) {
-        return res.status(403).json({ message: "You can only assign your own quizzes" });
+      if (!quiz || quiz.isArchived) {
+        return res.status(404).json({ message: "Quiz not found" });
       }
       const adopted = await storage.getAdoptedStudents(tutorId);
       const adoptedIds = new Set(adopted.map((s) => s.id));
@@ -544,11 +543,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get assignments for a specific quiz
   app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
     try {
-      const tutorId = (req as any).tutorId;
       const quizId = parseInt(String(req.params.quizId));
       const quiz = await storage.getSomaQuiz(quizId);
-      if (!quiz || quiz.authorId !== tutorId) {
-        return res.status(403).json({ message: "Access denied" });
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
       }
       const assignments = await storage.getQuizAssignmentsForQuiz(quizId);
       res.json(assignments);
