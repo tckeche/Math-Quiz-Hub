@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import {
   LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
   Loader2, AlertTriangle, Sparkles,
-  Eye, FileText,
+  Eye, FileText, Calendar,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@supabase/supabase-js";
@@ -198,12 +198,13 @@ export default function StudentDashboard() {
 
   const availableQuizzes = useMemo(() => {
     return (somaQuizzes || [])
-      .filter((q) => q.status === "published" && !completedSomaQuizIds.has(q.id))
-      .map((q) => ({
+      .filter((q: any) => q.status === "published" && !completedSomaQuizIds.has(q.id))
+      .map((q: any) => ({
         id: q.id,
         title: q.title,
         subject: q.topic || q.subject || "General",
         level: q.level || "",
+        dueDate: q.dueDate || null,
       }));
   }, [somaQuizzes, completedSomaQuizIds]);
 
@@ -403,7 +404,7 @@ export default function StudentDashboard() {
                                   <SubjectIcon className={`w-5 h-5 ${sc.label}`} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1.5">
+                                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
                                       {q.subject}
                                     </span>
@@ -412,6 +413,23 @@ export default function StudentDashboard() {
                                         {q.level}
                                       </span>
                                     )}
+                                    {q.dueDate && (() => {
+                                      const due = new Date(q.dueDate);
+                                      const isOverdue = due.getTime() < Date.now();
+                                      return (
+                                        <span
+                                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                            isOverdue
+                                              ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                                              : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                          }`}
+                                          data-testid={`badge-due-${q.id}`}
+                                        >
+                                          <Calendar className="w-3 h-3" />
+                                          {isOverdue ? "Overdue" : `Due: ${format(due, "MMM d, h:mm a")}`}
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
                                   <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.id}`}>
                                     {q.title}

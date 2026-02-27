@@ -53,7 +53,7 @@ export interface IStorage {
   getAdoptedStudents(tutorId: string): Promise<SomaUser[]>;
   getAvailableStudents(tutorId: string): Promise<SomaUser[]>;
 
-  createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]>;
+  createQuizAssignments(quizId: number, studentIds: string[], dueDate?: Date | null): Promise<QuizAssignment[]>;
   getQuizAssignmentsForStudent(studentId: string): Promise<(QuizAssignment & { quiz: SomaQuiz })[]>;
   getQuizAssignmentsForQuiz(quizId: number): Promise<(QuizAssignment & { student: SomaUser })[]>;
   updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void>;
@@ -247,9 +247,9 @@ class DatabaseStorage implements IStorage {
     return available;
   }
 
-  async createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]> {
+  async createQuizAssignments(quizId: number, studentIds: string[], dueDate?: Date | null): Promise<QuizAssignment[]> {
     if (studentIds.length === 0) return [];
-    const values = studentIds.map((studentId) => ({ quizId, studentId, status: "pending" }));
+    const values = studentIds.map((studentId) => ({ quizId, studentId, status: "pending", dueDate: dueDate || null }));
     return this.database.insert(quizAssignments).values(values).onConflictDoNothing().returning();
   }
 
@@ -535,12 +535,12 @@ class MemoryStorage implements IStorage {
     return allStudents.filter((s) => s.id !== tutorId && !adoptedIds.has(s.id));
   }
 
-  async createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]> {
+  async createQuizAssignments(quizId: number, studentIds: string[], dueDate?: Date | null): Promise<QuizAssignment[]> {
     const created: QuizAssignment[] = [];
     for (const studentId of studentIds) {
       const existing = this.quizAssignmentsList.find((qa) => qa.quizId === quizId && qa.studentId === studentId);
       if (!existing) {
-        const record: QuizAssignment = { id: this.quizAssignmentId++, quizId, studentId, status: "pending", createdAt: new Date() };
+        const record: QuizAssignment = { id: this.quizAssignmentId++, quizId, studentId, status: "pending", dueDate: dueDate || null, createdAt: new Date() };
         this.quizAssignmentsList.push(record);
         created.push(record);
       }

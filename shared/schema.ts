@@ -61,6 +61,7 @@ export const quizAssignments = pgTable("quiz_assignments", {
   quizId: integer("quiz_id").notNull().references(() => somaQuizzes.id, { onDelete: "cascade" }),
   studentId: uuid("student_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("pending"),
+  dueDate: timestamp("due_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("quiz_assignment_unique_idx").on(table.quizId, table.studentId),

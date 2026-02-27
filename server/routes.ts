@@ -516,22 +516,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tutorId = (req as any).tutorId;
       const quizId = parseInt(String(req.params.quizId));
       const studentIds = sanitizeStudentIds(req.body?.studentIds);
+      const rawDueDate = req.body?.dueDate;
+      const dueDate = rawDueDate ? new Date(rawDueDate) : null;
+      if (dueDate && isNaN(dueDate.getTime())) {
+        return res.status(400).json({ message: "Invalid dueDate format" });
+      }
       if (studentIds.length === 0) {
         return res.status(400).json({ message: "studentIds array required" });
       }
-      // Verify quiz belongs to this tutor
       const quiz = await storage.getSomaQuiz(quizId);
       if (!quiz || quiz.authorId !== tutorId) {
         return res.status(403).json({ message: "You can only assign your own quizzes" });
       }
-      // Verify all students are adopted by this tutor
       const adopted = await storage.getAdoptedStudents(tutorId);
       const adoptedIds = new Set(adopted.map((s) => s.id));
       const validIds = studentIds.filter((id: string) => adoptedIds.has(id));
       if (validIds.length === 0) {
         return res.status(400).json({ message: "None of the provided students are adopted by you" });
       }
-      const assignments = await storage.createQuizAssignments(quizId, validIds);
+      const assignments = await storage.createQuizAssignments(quizId, validIds, dueDate);
       res.json({ assigned: assignments.length, assignments });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to assign quiz" });
@@ -913,11 +916,11 @@ RULES:
     try {
       const studentId = (req as any).authUser.id;
       const assignments = await storage.getQuizAssignmentsForStudent(studentId);
-      const unique = new Map<number, (typeof assignments)[number]["quiz"]>();
+      const unique = new Map<number, any>();
       for (const assignment of assignments) {
         const quiz = assignment.quiz;
         if (quiz.isArchived || quiz.status !== "published") continue;
-        unique.set(quiz.id, quiz);
+        unique.set(quiz.id, { ...quiz, dueDate: assignment.dueDate || null });
       }
       res.json(Array.from(unique.values()));
     } catch (err: any) {

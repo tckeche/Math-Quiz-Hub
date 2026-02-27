@@ -6,7 +6,7 @@ import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
 import type { SomaQuiz } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, UserPlus, X,
-  Loader2, Check, LayoutDashboard, Sparkles,
+  Loader2, Check, LayoutDashboard, Sparkles, Clock,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 
@@ -25,6 +25,7 @@ export default function TutorAssessments() {
   const [, setLocation] = useLocation();
   const [showAssignModal, setShowAssignModal] = useState<number | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [dueDate, setDueDate] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -60,11 +61,13 @@ export default function TutorAssessments() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: async ({ quizId, studentIds }: { quizId: number; studentIds: string[] }) => {
+    mutationFn: async ({ quizId, studentIds, dueDate: dd }: { quizId: number; studentIds: string[]; dueDate?: string }) => {
+      const payload: any = { studentIds };
+      if (dd) payload.dueDate = new Date(dd).toISOString();
       const res = await fetch(`/api/tutor/quizzes/${quizId}/assign`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ studentIds }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to assign");
       return res.json();
@@ -72,6 +75,7 @@ export default function TutorAssessments() {
     onSuccess: () => {
       setShowAssignModal(null);
       setSelectedStudentIds(new Set());
+      setDueDate("");
     },
   });
 
@@ -187,7 +191,7 @@ export default function TutorAssessments() {
                     </div>
                   </div>
                   <button
-                    onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); }}
+                    onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); setDueDate(""); }}
                     className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all sm:ml-3"
                     data-testid={`button-assign-${quiz.id}`}
                   >
@@ -239,8 +243,21 @@ export default function TutorAssessments() {
                     </button>
                   ))}
                 </div>
+                <div className="mt-4 p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-300 mb-2">
+                    <Clock className="w-3.5 h-3.5 text-violet-400" />
+                    Due Date & Time <span className="text-slate-500">(optional)</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full px-3 py-2.5 min-h-[44px] rounded-lg bg-slate-900/80 border border-slate-600/50 text-sm text-slate-200 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 [color-scheme:dark]"
+                    data-testid="input-due-date"
+                  />
+                </div>
                 <button
-                  onClick={() => assignMutation.mutate({ quizId: showAssignModal, studentIds: Array.from(selectedStudentIds) })}
+                  onClick={() => assignMutation.mutate({ quizId: showAssignModal, studentIds: Array.from(selectedStudentIds), dueDate: dueDate || undefined })}
                   disabled={selectedStudentIds.size === 0 || assignMutation.isPending}
                   className="w-full mt-4 py-3 min-h-[44px] rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   data-testid="button-confirm-assign"
