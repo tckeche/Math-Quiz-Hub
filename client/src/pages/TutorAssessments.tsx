@@ -8,6 +8,7 @@ import {
   LogOut, Users, BookOpen, Plus, UserPlus, X,
   Loader2, Check, LayoutDashboard, Sparkles,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { Session } from "@supabase/supabase-js";
 
 interface SomaUser {
@@ -21,6 +22,7 @@ const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rou
 
 export default function TutorAssessments() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [, setLocation] = useLocation();
   const [showAssignModal, setShowAssignModal] = useState<number | null>(null);
@@ -72,6 +74,12 @@ export default function TutorAssessments() {
     onSuccess: () => {
       setShowAssignModal(null);
       setSelectedStudentIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quizzes/available"] });
+      toast({ title: "Quiz assigned successfully" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to assign quiz", description: err.message, variant: "destructive" });
     },
   });
 

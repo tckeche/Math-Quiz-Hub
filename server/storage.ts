@@ -97,6 +97,12 @@ export interface IStorage {
   deleteSomaUser(userId: string): Promise<void>;
   deleteSomaQuiz(quizId: number): Promise<void>;
   getAllSomaQuizzes(): Promise<SomaQuiz[]>;
+
+  // Batch query helpers (N+1 elimination)
+  getSomaQuestionsByQuizIds(quizIds: number[]): Promise<Map<number, SomaQuestion[]>>;
+  getSomaReportsByStudentIds(studentIds: string[]): Promise<Map<string, (SomaReport & { quiz: SomaQuiz })[]>>;
+  getQuestionCountsByQuizIds(quizIds: number[]): Promise<Map<number, number>>;
+  getSubmissionCountsByQuizIds(quizIds: number[]): Promise<Map<number, number>>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -473,6 +479,57 @@ class DatabaseStorage implements IStorage {
     return this.database.select().from(somaQuizzes).orderBy(somaQuizzes.createdAt);
   }
 
+  // ─── Batch query helpers (N+1 elimination) ──────────────────────
+  async getSomaQuestionsByQuizIds(quizIds: number[]): Promise<Map<number, SomaQuestion[]>> {
+    const result = new Map<number, SomaQuestion[]>();
+    if (quizIds.length === 0) return result;
+    const rows = await this.database.select().from(somaQuestions).where(inArray(somaQuestions.quizId, quizIds));
+    for (const row of rows) {
+      const list = result.get(row.quizId) || [];
+      list.push(row);
+      result.set(row.quizId, list);
+    }
+    return result;
+  }
+
+  async getSomaReportsByStudentIds(studentIds: string[]): Promise<Map<string, (SomaReport & { quiz: SomaQuiz })[]>> {
+    const result = new Map<string, (SomaReport & { quiz: SomaQuiz })[]>();
+    if (studentIds.length === 0) return result;
+    const rows = await this.database
+      .select({ report: somaReports, quiz: somaQuizzes })
+      .from(somaReports)
+      .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+      .where(inArray(somaReports.studentId, studentIds));
+    for (const row of rows) {
+      const studentId = row.report.studentId;
+      if (!studentId) continue;
+      const list = result.get(studentId) || [];
+      list.push({ ...row.report, quiz: row.quiz });
+      result.set(studentId, list);
+    }
+    return result;
+  }
+
+  async getQuestionCountsByQuizIds(quizIds: number[]): Promise<Map<number, number>> {
+    const result = new Map<number, number>();
+    if (quizIds.length === 0) return result;
+    const rows = await this.database.select().from(questions).where(inArray(questions.quizId, quizIds));
+    for (const row of rows) {
+      result.set(row.quizId, (result.get(row.quizId) || 0) + 1);
+    }
+    return result;
+  }
+
+  async getSubmissionCountsByQuizIds(quizIds: number[]): Promise<Map<number, number>> {
+    const result = new Map<number, number>();
+    if (quizIds.length === 0) return result;
+    const rows = await this.database.select().from(submissions).where(inArray(submissions.quizId, quizIds));
+    for (const row of rows) {
+      result.set(row.quizId, (result.get(row.quizId) || 0) + 1);
+    }
+    return result;
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -806,6 +863,53 @@ class MemoryStorage implements IStorage {
   }
   async getAllSomaQuizzes(): Promise<SomaQuiz[]> {
     return this.somaQuizzesList;
+  }
+
+  // ─── Batch query helpers (N+1 elimination) ──────────────────────
+  async getSomaQuestionsByQuizIds(quizIds: number[]): Promise<Map<number, SomaQuestion[]>> {
+    const result = new Map<number, SomaQuestion[]>();
+    for (const q of this.somaQuestionsList) {
+      if (quizIds.includes(q.quizId)) {
+        const list = result.get(q.quizId) || [];
+        list.push(q);
+        result.set(q.quizId, list);
+      }
+    }
+    return result;
+  }
+
+  async getSomaReportsByStudentIds(studentIds: string[]): Promise<Map<string, (SomaReport & { quiz: SomaQuiz })[]>> {
+    const result = new Map<string, (SomaReport & { quiz: SomaQuiz })[]>();
+    for (const r of this.somaReportsList) {
+      if (r.studentId && studentIds.includes(r.studentId)) {
+        const quiz = this.somaQuizzesList.find((q) => q.id === r.quizId);
+        if (!quiz) continue;
+        const list = result.get(r.studentId) || [];
+        list.push({ ...r, quiz });
+        result.set(r.studentId, list);
+      }
+    }
+    return result;
+  }
+
+  async getQuestionCountsByQuizIds(quizIds: number[]): Promise<Map<number, number>> {
+    const result = new Map<number, number>();
+    for (const q of this.questions) {
+      if (quizIds.includes(q.quizId)) {
+        result.set(q.quizId, (result.get(q.quizId) || 0) + 1);
+      }
+    }
+    return result;
+  }
+
+  async getSubmissionCountsByQuizIds(quizIds: number[]): Promise<Map<number, number>> {
+    const result = new Map<number, number>();
+    for (const s of this.submissions) {
+      if (quizIds.includes(s.quizId)) {
+        result.set(s.quizId, (result.get(s.quizId) || 0) + 1);
+      }
+    }
+    return result;
   }
 
 }

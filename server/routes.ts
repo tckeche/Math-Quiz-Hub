@@ -560,11 +560,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         storage.getSubmissionsByStudentUserId(studentId),
       ]);
 
-      const reportsWithMax = await Promise.all(reports.map(async (r) => {
-        const questions = await storage.getSomaQuestionsByQuizId(r.quizId);
-        const maxScore = questions.reduce((s, q) => s + q.marks, 0);
+      // Batch-fetch all questions for all report quizzes in 1 query
+      const quizIds = Array.from(new Set(reports.map((r) => r.quizId)));
+      const questionsByQuiz = await storage.getSomaQuestionsByQuizIds(quizIds);
+      const reportsWithMax = reports.map((r) => {
+        const qs = questionsByQuiz.get(r.quizId) || [];
+        const maxScore = qs.reduce((s, q) => s + q.marks, 0);
         return { ...r, maxScore };
-      }));
+      });
 
       res.json({ reports: reportsWithMax, submissions });
     } catch (err: any) {
@@ -575,29 +578,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/tutor/dashboard-stats", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const adoptedStudents = await storage.getAdoptedStudents(tutorId);
-      const tutorQuizzes = await storage.getSomaQuizzesByAuthor(tutorId);
+      const [adoptedStudents, tutorQuizzes] = await Promise.all([
+        storage.getAdoptedStudents(tutorId),
+        storage.getSomaQuizzesByAuthor(tutorId),
+      ]);
 
+      // Batch-fetch all reports for all adopted students in 1 query
+      const studentIds = adoptedStudents.map((s) => s.id);
+      const reportsByStudent = await storage.getSomaReportsByStudentIds(studentIds);
+
+      // Collect unique quizIds across all reports, then batch-fetch questions in 1 query
+      const allReportsFlat = Array.from(reportsByStudent.values()).flat();
+      const quizIds = Array.from(new Set(allReportsFlat.map((r) => r.quizId)));
+      const questionsByQuiz = await storage.getSomaQuestionsByQuizIds(quizIds);
+
+      // Process in-memory — no more DB calls
       const allReports: { studentName: string; score: number; quizTitle: string; subject: string | null; createdAt: string }[] = [];
       const subjectScores: Record<string, { total: number; max: number; count: number }> = {};
 
-      for (const student of adoptedStudents) {
-        const reports = await storage.getSomaReportsByStudentId(student.id);
-        for (const r of reports) {
-          const maxScore = r.quiz ? (await storage.getSomaQuestionsByQuizId(r.quizId)).reduce((s, q) => s + q.marks, 0) : 0;
-          const subject = r.quiz?.subject || "General";
-          if (!subjectScores[subject]) subjectScores[subject] = { total: 0, max: 0, count: 0 };
-          subjectScores[subject].total += r.score;
-          subjectScores[subject].max += maxScore;
-          subjectScores[subject].count += 1;
-          allReports.push({
-            studentName: r.studentName,
-            score: maxScore > 0 ? Math.round((r.score / maxScore) * 100) : 0,
-            quizTitle: r.quiz?.title || "Unknown",
-            subject,
-            createdAt: r.createdAt.toISOString(),
-          });
-        }
+      for (const r of allReportsFlat) {
+        const qs = questionsByQuiz.get(r.quizId) || [];
+        const maxScore = qs.reduce((s, q) => s + q.marks, 0);
+        const subject = r.quiz?.subject || "General";
+        if (!subjectScores[subject]) subjectScores[subject] = { total: 0, max: 0, count: 0 };
+        subjectScores[subject].total += r.score;
+        subjectScores[subject].max += maxScore;
+        subjectScores[subject].count += 1;
+        allReports.push({
+          studentName: r.studentName,
+          score: maxScore > 0 ? Math.round((r.score / maxScore) * 100) : 0,
+          quizTitle: r.quiz?.title || "Unknown",
+          subject,
+          createdAt: r.createdAt.toISOString(),
+        });
       }
 
       const cohortAverages = Object.entries(subjectScores).map(([subject, data]) => ({
@@ -972,20 +985,20 @@ ${JSON.stringify(breakdown, null, 2)}`;
 
   app.get("/api/admin/quizzes", async (_req, res) => {
     const allQuizzes = await storage.getQuizzes();
-    const withSnapshots = await Promise.all(allQuizzes.map(async (quiz) => {
-      const [quizQuestions, quizSubmissions] = await Promise.all([
-        storage.getQuestionsByQuizId(quiz.id),
-        storage.getSubmissionsByQuizId(quiz.id),
-      ]);
-      return {
-        ...quiz,
-        snapshot: {
-          totalQuestions: quizQuestions.length,
-          totalSubmissions: quizSubmissions.length,
-          subject: quiz.subject || "General",
-          level: quiz.level || "Unspecified",
-        },
-      };
+    // Batch-fetch question and submission counts in 2 queries instead of 2N
+    const quizIds = allQuizzes.map((q) => q.id);
+    const [questionCounts, submissionCounts] = await Promise.all([
+      storage.getQuestionCountsByQuizIds(quizIds),
+      storage.getSubmissionCountsByQuizIds(quizIds),
+    ]);
+    const withSnapshots = allQuizzes.map((quiz) => ({
+      ...quiz,
+      snapshot: {
+        totalQuestions: questionCounts.get(quiz.id) || 0,
+        totalSubmissions: submissionCounts.get(quiz.id) || 0,
+        subject: quiz.subject || "General",
+        level: quiz.level || "Unspecified",
+      },
     }));
     res.json(withSnapshots);
   });
@@ -1160,10 +1173,6 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
   app.delete("/api/admin/quizzes/:id/submissions", async (req, res) => {
     await storage.deleteSubmissionsByQuizId(parseInt(req.params.id));
     res.json({ success: true });
-  });
-
-  app.post("/api/generate-questions", requireAdmin, (_req, res) => {
-    res.status(410).json({ message: "Generate from PDF is now available only through Copilot supporting documents." });
   });
 
   app.post("/api/admin/copilot-chat", async (req, res) => {

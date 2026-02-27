@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useParams } from "wouter";
 import type { Quiz, Question } from "@shared/schema";
@@ -421,6 +421,7 @@ function Timer({ startTime, timeLimitMinutes, onTimeUp }: { startTime: number; t
 
 function ExamView({ quiz, questions, studentId, studentFirstName, studentLastName }: { quiz: Quiz; questions: Question[]; studentId: number; studentFirstName: string; studentLastName: string }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showSummary, setShowSummary] = useState(false);
@@ -463,6 +464,8 @@ function ExamView({ quiz, questions, studentId, studentFirstName, studentLastNam
       localStorage.removeItem(answersKey);
       localStorage.setItem(`completed_quiz_${quiz.id}`, "true");
       localStorage.setItem(`quiz_result_${quiz.id}`, JSON.stringify({ totalScore: data.totalScore, maxPossibleScore: data.maxPossibleScore }));
+      queryClient.invalidateQueries({ queryKey: ["/api/student/submissions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/student/reports"] });
     },
     onError: (err: Error) => {
       submittingRef.current = false;

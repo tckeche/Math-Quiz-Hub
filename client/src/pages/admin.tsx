@@ -371,7 +371,7 @@ function PdfQuizGenerator({ quizId, onDone }: { quizId: number; onDone: () => vo
             <div key={idx} className="border border-white/10 rounded-xl p-4 space-y-3 bg-white/[0.02]" data-testid={`card-generated-q-${idx}`}>
               <div className="flex items-start justify-between gap-2">
                 <span className="font-mono text-sm text-violet-400 font-medium shrink-0">Q{idx + 1}</span>
-                <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-400" onClick={() => removeQuestion(idx)} data-testid={`button-remove-generated-${idx}`}>
+                <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-400 min-h-[44px] min-w-[44px]" onClick={() => removeQuestion(idx)} data-testid={`button-remove-generated-${idx}`}>
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -665,7 +665,7 @@ function QuizDetail({ quizId, onBack, onDeleted }: { quizId: number; onBack: () 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 flex-wrap">
-        <Button className="glow-button-outline" size="sm" onClick={onBack} data-testid="button-back-admin">
+        <Button className="glow-button-outline min-h-[44px]" size="sm" onClick={onBack} data-testid="button-back-admin">
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back to Assessments
         </Button>
@@ -913,7 +913,7 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-slate-200" onClick={handleLogout} data-testid="button-admin-logout">
+            <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-slate-200 min-h-[44px]" onClick={handleLogout} data-testid="button-admin-logout">
               <LogOut className="w-4 h-4 mr-1" />
               Log Out
             </Button>
@@ -955,11 +955,11 @@ export default function AdminPage() {
                 {selectedIds.length > 0 && (
                   <div className="sticky bottom-3 z-20 glass-card p-3 flex flex-wrap gap-2 items-center">
                     <span className="text-xs text-slate-300">{selectedIds.length} selected</span>
-                    <Button size="sm" onClick={() => bulkMutation.mutate("archive")}>Archive</Button>
-                    <Button size="sm" onClick={() => bulkMutation.mutate("extend_24h")}>+24h</Button>
-                    <Button size="sm" onClick={() => bulkMutation.mutate("mark_open")}>Mark Open</Button>
-                    <Button size="sm" onClick={() => bulkMutation.mutate("mark_overdue")}>Mark Overdue</Button>
-                    <Button size="sm" variant="destructive" onClick={() => bulkMutation.mutate("hard_delete")}>Hard Delete</Button>
+                    <Button size="sm" className="min-h-[44px]" onClick={() => bulkMutation.mutate("archive")}>Archive</Button>
+                    <Button size="sm" className="min-h-[44px]" onClick={() => bulkMutation.mutate("extend_24h")}>+24h</Button>
+                    <Button size="sm" className="min-h-[44px]" onClick={() => bulkMutation.mutate("mark_open")}>Mark Open</Button>
+                    <Button size="sm" className="min-h-[44px]" onClick={() => bulkMutation.mutate("mark_overdue")}>Mark Overdue</Button>
+                    <Button size="sm" className="min-h-[44px]" variant="destructive" onClick={() => bulkMutation.mutate("hard_delete")}>Hard Delete</Button>
                   </div>
                 )}
                 {quizzes.map((quiz) => {
