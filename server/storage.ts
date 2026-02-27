@@ -44,6 +44,7 @@ export interface IStorage {
   updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined>;
   checkSomaSubmission(quizId: number, studentId: string): Promise<boolean>;
   getSomaReportById(reportId: number): Promise<(SomaReport & { quiz: SomaQuiz }) | undefined>;
+  getSomaReportsByQuizId(quizId: number): Promise<(SomaReport & { quiz: SomaQuiz })[]>;
 
   getSomaUserByEmail(email: string): Promise<SomaUser | undefined>;
   getSomaUserById(id: string): Promise<SomaUser | undefined>;
@@ -184,6 +185,15 @@ class DatabaseStorage implements IStorage {
       .where(eq(somaReports.id, reportId));
     if (rows.length === 0) return undefined;
     return { ...rows[0].report, quiz: rows[0].quiz };
+  }
+
+  async getSomaReportsByQuizId(quizId: number): Promise<(SomaReport & { quiz: SomaQuiz })[]> {
+    const rows = await this.database
+      .select({ report: somaReports, quiz: somaQuizzes })
+      .from(somaReports)
+      .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+      .where(eq(somaReports.quizId, quizId));
+    return rows.map((r) => ({ ...r.report, quiz: r.quiz }));
   }
 
   async getSomaUserByEmail(email: string): Promise<SomaUser | undefined> {
@@ -489,6 +499,17 @@ class MemoryStorage implements IStorage {
     const quiz = this.somaQuizzesList.find((q) => q.id === report.quizId);
     if (!quiz) return undefined;
     return { ...report, quiz };
+  }
+
+  async getSomaReportsByQuizId(quizId: number): Promise<(SomaReport & { quiz: SomaQuiz })[]> {
+    return this.somaReportsList
+      .filter((r) => r.quizId === quizId)
+      .map((r) => {
+        const quiz = this.somaQuizzesList.find((q) => q.id === r.quizId);
+        if (!quiz) return null;
+        return { ...r, quiz };
+      })
+      .filter(Boolean) as (SomaReport & { quiz: SomaQuiz })[];
   }
 
   async getSomaUserByEmail(email: string): Promise<SomaUser | undefined> {

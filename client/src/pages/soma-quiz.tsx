@@ -255,6 +255,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showSummary, setShowSummary] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<{ score: number; maxScore: number } | null>(null);
+  const [quizStartedAt] = useState<string>(new Date().toISOString());
 
   useEffect(() => {
     if (isPreview) return;
@@ -308,6 +309,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
         studentId: userId,
         studentName: displayName,
         answers,
+        startedAt: quizStartedAt,
       });
       return res.json();
     },

@@ -16,7 +16,7 @@ A full-stack educational assessment platform (SOMA). Students take interactive M
 - `soma_users` - id (uuid, maps to Supabase auth UID), email, display_name, role, created_at
 - `soma_quizzes` - id, title, topic, syllabus, level, subject, curriculum_context, author_id, status (draft/published), is_archived, created_at
 - `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation (NOT NULL), marks
-- `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status, ai_feedback_html, answers_json, created_at
+- `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status, ai_feedback_html, answers_json, started_at, completed_at, created_at
 - `tutor_students` - id, tutor_id, student_id (unique index), created_at
 - `quiz_assignments` - id, quiz_id, student_id, status, due_date (optional timestamp), created_at
 - `tutor_comments` - id, tutor_id, student_id, comment, created_at
@@ -61,7 +61,7 @@ A full-stack educational assessment platform (SOMA). Students take interactive M
 - `DELETE /api/admin/questions/:id` - Delete soma question
 - `POST /api/admin/copilot-chat` - AI copilot chat for quiz generation
 - `POST /api/upload-image` - Upload image for question attachment
-- `GET /api/tutor/*` - Tutor endpoints (students, performance, dashboard-stats, comments)
+- `GET /api/tutor/*` - Tutor endpoints (students, performance, dashboard-stats, comments, quizzes/:quizId/reports)
 - `GET /api/super-admin/*` - Super admin endpoints (users, quizzes, delete)
 
 ### Key Features

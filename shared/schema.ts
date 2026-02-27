@@ -44,6 +44,8 @@ export const somaReports = pgTable("soma_reports", {
   status: text("status").notNull().default("pending"),
   aiFeedbackHtml: text("ai_feedback_html"),
   answersJson: jsonb("answers_json"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

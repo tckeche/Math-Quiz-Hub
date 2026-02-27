@@ -569,6 +569,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/tutor/quizzes/:quizId/reports", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      const adoptedIds = new Set(adopted.map((s) => s.id));
+      const allReports = await storage.getSomaReportsByQuizId(quizId);
+      const reports = allReports.filter((r) => r.studentId && adoptedIds.has(r.studentId));
+      const questions = await storage.getSomaQuestionsByQuizId(quizId);
+      const maxScore = questions.reduce((s, q) => s + q.marks, 0);
+      res.json({ quiz, reports, questions, maxScore });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch reports" });
+    }
+  });
+
   app.get("/api/tutor/students/:studentId/comments", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
@@ -1396,15 +1416,9 @@ ${supportingText || "No extra context."}`,
       const quizId = parseInt(req.params.id);
       if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
 
-      const { studentId, studentName, answers } = req.body;
+      const { studentId, studentName, answers, startedAt } = req.body;
       if (!studentId || !studentName || !answers) {
         return res.status(400).json({ message: "Missing studentId, studentName, or answers" });
-      }
-
-      const assignments = await storage.getQuizAssignmentsForStudent(studentId);
-      const hasAssignment = assignments.some((assignment) => assignment.quizId === quizId);
-      if (!hasAssignment) {
-        return res.status(403).json({ message: "Quiz is not assigned to this student" });
       }
 
       const alreadySubmitted = await storage.checkSomaSubmission(quizId, studentId);
@@ -1426,6 +1440,9 @@ ${supportingText || "No extra context."}`,
         }
       }
 
+      const now = new Date();
+      const parsedStartedAt = startedAt ? new Date(startedAt) : null;
+
       const report = await storage.createSomaReport({
         quizId,
         studentId,
@@ -1433,6 +1450,8 @@ ${supportingText || "No extra context."}`,
         score: totalScore,
         status: "pending",
         answersJson: sanitizedAnswers,
+        startedAt: parsedStartedAt && !isNaN(parsedStartedAt.getTime()) ? parsedStartedAt : null,
+        completedAt: now,
       });
 
       res.json(report);

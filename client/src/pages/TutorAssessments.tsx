@@ -3,12 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
-import type { SomaQuiz } from "@shared/schema";
+import type { SomaQuiz, SomaReport, SomaQuestion } from "@shared/schema";
 import {
-  LogOut, Users, BookOpen, Plus, UserPlus, X,
-  Loader2, Check, LayoutDashboard, Sparkles, Clock,
+  LogOut, Users, BookOpen, Plus, X, ChevronDown, ChevronUp,
+  Loader2, Check, LayoutDashboard, Clock, Award, Timer,
+  FileText, Eye, UserPlus,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
+import DOMPurify from "dompurify";
 
 interface SomaUser {
   id: string;
@@ -17,7 +19,236 @@ interface SomaUser {
   role: string;
 }
 
+interface QuizReportsData {
+  quiz: SomaQuiz;
+  reports: (SomaReport & { quiz: SomaQuiz })[];
+  questions: SomaQuestion[];
+  maxScore: number;
+}
+
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
+
+function formatDuration(startedAt: string | null, completedAt: string | null): string {
+  if (!startedAt || !completedAt) return "—";
+  const start = new Date(startedAt).getTime();
+  const end = new Date(completedAt).getTime();
+  const diffMs = end - start;
+  if (diffMs < 0 || isNaN(diffMs)) return "—";
+  const mins = Math.floor(diffMs / 60000);
+  const secs = Math.floor((diffMs % 60000) / 1000);
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function scoreColor(score: number, max: number): string {
+  if (max === 0) return "text-slate-400";
+  const pct = (score / max) * 100;
+  if (pct >= 80) return "text-emerald-400";
+  if (pct >= 50) return "text-amber-400";
+  return "text-red-400";
+}
+
+function scoreBg(score: number, max: number): string {
+  if (max === 0) return "bg-slate-500/10";
+  const pct = (score / max) * 100;
+  if (pct >= 80) return "bg-emerald-500/10 border-emerald-500/30";
+  if (pct >= 50) return "bg-amber-500/10 border-amber-500/30";
+  return "bg-red-500/10 border-red-500/30";
+}
+
+function StudentReportCard({ report, maxScore, questions, onViewReport }: {
+  report: SomaReport & { quiz: SomaQuiz };
+  maxScore: number;
+  questions: SomaQuestion[];
+  onViewReport: (report: SomaReport) => void;
+}) {
+  const pct = maxScore > 0 ? Math.round((report.score / maxScore) * 100) : 0;
+  const duration = formatDuration(report.startedAt as any, report.completedAt as any);
+  const startedDate = formatDate(report.startedAt as any);
+  const completedDate = formatDate(report.completedAt as any);
+  const answersObj = (report.answersJson || {}) as Record<string, string>;
+  const correctCount = questions.filter(q => answersObj[String(q.id)] === q.correctAnswer).length;
+
+  return (
+    <div
+      className={`rounded-xl border p-4 transition-all hover:bg-slate-800/40 ${scoreBg(report.score, maxScore)}`}
+      data-testid={`student-report-${report.id}`}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-9 h-9 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-violet-300">
+              {report.studentName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-200 truncate" data-testid={`report-student-name-${report.id}`}>
+              {report.studentName}
+            </p>
+            <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-0.5">
+              {startedDate !== "—" && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Started {startedDate}
+                </span>
+              )}
+              {duration !== "—" && (
+                <span className="flex items-center gap-1">
+                  <Timer className="w-3 h-3 text-violet-400" />
+                  {duration}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className={`text-lg font-bold ${scoreColor(report.score, maxScore)}`} data-testid={`report-score-${report.id}`}>
+              {report.score}/{maxScore}
+            </p>
+            <p className={`text-[10px] font-semibold ${scoreColor(report.score, maxScore)}`}>
+              {pct}% — {correctCount}/{questions.length} correct
+            </p>
+          </div>
+          <button
+            onClick={() => onViewReport(report)}
+            className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all"
+            data-testid={`button-view-report-${report.id}`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            View
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportDetailModal({ report, questions, maxScore, onClose }: {
+  report: SomaReport & { quiz: SomaQuiz };
+  questions: SomaQuestion[];
+  maxScore: number;
+  onClose: () => void;
+}) {
+  const answersObj = (report.answersJson || {}) as Record<string, string>;
+  const pct = maxScore > 0 ? Math.round((report.score / maxScore) * 100) : 0;
+  const duration = formatDuration(report.startedAt as any, report.completedAt as any);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-3xl w-full my-8" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 p-6 border-b border-slate-800">
+          <div>
+            <h3 className="text-lg font-bold text-slate-200" data-testid="modal-student-name">{report.studentName}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{report.quiz.title}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className={`text-xl font-bold ${scoreColor(report.score, maxScore)}`}>{pct}%</p>
+              <p className="text-[10px] text-slate-400">{report.score}/{maxScore} marks</p>
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-300 p-2 min-h-[44px] min-w-[44px]" data-testid="button-close-report">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="flex flex-wrap gap-3 text-xs">
+            {report.startedAt && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-slate-300">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                Started: {formatDate(report.startedAt as any)}
+              </span>
+            )}
+            {report.completedAt && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-slate-300">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                Completed: {formatDate(report.completedAt as any)}
+              </span>
+            )}
+            {duration !== "—" && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/30 text-violet-300">
+                <Timer className="w-3.5 h-3.5" />
+                Duration: {duration}
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-violet-400" />
+              Questions & Answers
+            </h4>
+            {questions.map((q, idx) => {
+              const studentAnswer = answersObj[String(q.id)] || "Not answered";
+              const isCorrect = studentAnswer === q.correctAnswer;
+              return (
+                <div
+                  key={q.id}
+                  className={`rounded-xl border p-4 ${isCorrect ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"}`}
+                  data-testid={`modal-question-${q.id}`}
+                >
+                  <div className="flex items-start gap-2 mb-2">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isCorrect ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>
+                      Q{idx + 1}
+                    </span>
+                    <p className="text-sm text-slate-300 flex-1">{q.stem.replace(/\\\\/g, "\\")}</p>
+                    <span className="text-[10px] text-slate-500 shrink-0">{q.marks} mark{q.marks !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="ml-7 space-y-1">
+                    <p className="text-xs">
+                      <span className="text-slate-500">Student:</span>{" "}
+                      <span className={isCorrect ? "text-emerald-400" : "text-red-400"}>{studentAnswer}</span>
+                    </p>
+                    {!isCorrect && (
+                      <p className="text-xs">
+                        <span className="text-slate-500">Correct:</span>{" "}
+                        <span className="text-emerald-400">{q.correctAnswer}</span>
+                      </p>
+                    )}
+                    {q.explanation && (
+                      <p className="text-[11px] text-slate-400 mt-1 italic">{q.explanation}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {report.aiFeedbackHtml && (
+            <div className="mt-4">
+              <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-3">
+                <Award className="w-4 h-4 text-violet-400" />
+                AI Analysis Report
+              </h4>
+              <div
+                className="prose prose-sm prose-invert max-w-none bg-slate-800/40 rounded-xl p-4 border border-slate-700/50 text-slate-300 [&_h3]:text-violet-300 [&_strong]:text-slate-200 [&_li]:text-slate-300"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(report.aiFeedbackHtml) }}
+                data-testid="modal-ai-feedback"
+              />
+            </div>
+          )}
+
+          {report.status === "pending" && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              AI analysis is still being generated...
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function TutorAssessments() {
   const queryClient = useQueryClient();
@@ -26,6 +257,8 @@ export default function TutorAssessments() {
   const [showAssignModal, setShowAssignModal] = useState<number | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [dueDate, setDueDate] = useState("");
+  const [expandedQuiz, setExpandedQuiz] = useState<number | null>(null);
+  const [viewingReport, setViewingReport] = useState<{ report: SomaReport & { quiz: SomaQuiz }; questions: SomaQuestion[]; maxScore: number } | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -60,6 +293,16 @@ export default function TutorAssessments() {
     enabled: !!userId,
   });
 
+  const { data: quizReportsData, isLoading: reportsLoading } = useQuery<QuizReportsData>({
+    queryKey: ["/api/tutor/quizzes", expandedQuiz, "reports"],
+    queryFn: async () => {
+      const res = await fetch(`/api/tutor/quizzes/${expandedQuiz}/reports`, { headers });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!expandedQuiz && !!userId,
+  });
+
   const assignMutation = useMutation({
     mutationFn: async ({ quizId, studentIds, dueDate: dd }: { quizId: number; studentIds: string[]; dueDate?: string }) => {
       const payload: any = { studentIds };
@@ -91,6 +334,10 @@ export default function TutorAssessments() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setLocation("/login");
+  };
+
+  const toggleExpand = (quizId: number) => {
+    setExpandedQuiz(prev => prev === quizId ? null : quizId);
   };
 
   return (
@@ -150,7 +397,7 @@ export default function TutorAssessments() {
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-100">My Assessments</h2>
-          <p className="text-sm text-slate-400 mt-1">{tutorQuizzes.length} assessment{tutorQuizzes.length !== 1 ? "s" : ""} created</p>
+          <p className="text-sm text-slate-400 mt-1">{tutorQuizzes.length} assessment{tutorQuizzes.length !== 1 ? "s" : ""} available · Click to view student submissions</p>
         </div>
 
         {quizzesLoading ? (
@@ -164,40 +411,95 @@ export default function TutorAssessments() {
             <p className="text-xs text-slate-500 mt-1">Use the Create Assessment button on your Dashboard to generate assessments with the AI Copilot</p>
           </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="space-y-3">
             {tutorQuizzes.map((quiz) => {
               const sc = getSubjectColor(quiz.subject);
               const SubIcon = getSubjectIcon(quiz.subject);
+              const isExpanded = expandedQuiz === quiz.id;
+              const reports = isExpanded && quizReportsData?.quiz?.id === quiz.id ? quizReportsData.reports : [];
+              const questions = isExpanded && quizReportsData?.quiz?.id === quiz.id ? quizReportsData.questions : [];
+              const maxScore = isExpanded && quizReportsData?.quiz?.id === quiz.id ? quizReportsData.maxScore : 0;
+              const avgScore = reports.length > 0 ? Math.round(reports.reduce((s, r) => s + r.score, 0) / reports.length) : 0;
+              const avgPct = reports.length > 0 && maxScore > 0 ? Math.round((avgScore / maxScore) * 100) : 0;
+
               return (
-                <div
-                  key={quiz.id}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl px-5 py-4"
-                  data-testid={`quiz-card-${quiz.id}`}
-                >
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${sc.border} shrink-0`} style={{ backgroundColor: `${sc.hex}15` }}>
-                      <SubIcon className="w-5 h-5" style={{ color: sc.hex }} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          quiz.status === "published" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
-                        }`}>
-                          {quiz.status}
-                        </span>
+                <div key={quiz.id} className="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl overflow-hidden" data-testid={`quiz-card-${quiz.id}`}>
+                  <div
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 cursor-pointer hover:bg-slate-800/30 transition-colors"
+                    onClick={() => toggleExpand(quiz.id)}
+                    data-testid={`quiz-tile-${quiz.id}`}
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${sc.border} shrink-0`} style={{ backgroundColor: `${sc.hex}15` }}>
+                        <SubIcon className="w-5 h-5" style={{ color: sc.hex }} />
                       </div>
-                      <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} | {quiz.level}</p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            quiz.status === "published" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                          }`}>
+                            {quiz.status}
+                          </span>
+                          {isExpanded && reports.length > 0 && (
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">
+                              {reports.length} submission{reports.length !== 1 ? "s" : ""} · avg {avgPct}%
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} · {quiz.level}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); setDueDate(""); }}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all"
+                        data-testid={`button-assign-${quiz.id}`}
+                      >
+                        <UserPlus className="w-3 h-3" />
+                        Assign
+                      </button>
+                      <div className="p-2 text-slate-400">
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); setDueDate(""); }}
-                    className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all sm:ml-3"
-                    data-testid={`button-assign-${quiz.id}`}
-                  >
-                    <Plus className="w-3 h-3" />
-                    Assign
-                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-slate-800/60 px-5 py-4">
+                      {reportsLoading ? (
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
+                        </div>
+                      ) : reports.length === 0 ? (
+                        <div className="text-center py-8">
+                          <FileText className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+                          <p className="text-sm text-slate-400">No submissions yet</p>
+                          <p className="text-xs text-slate-500 mt-1">Students will appear here once they complete this assessment</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-semibold text-slate-300">Student Submissions</h4>
+                            <div className="flex items-center gap-3 text-xs text-slate-400">
+                              <span>{reports.length} submission{reports.length !== 1 ? "s" : ""}</span>
+                              <span>·</span>
+                              <span>Avg: <span className={scoreColor(avgScore, maxScore)}>{avgPct}%</span></span>
+                            </div>
+                          </div>
+                          {reports.map(report => (
+                            <StudentReportCard
+                              key={report.id}
+                              report={report}
+                              maxScore={maxScore}
+                              questions={questions}
+                              onViewReport={(r) => setViewingReport({ report: r as any, questions, maxScore })}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -272,6 +574,15 @@ export default function TutorAssessments() {
             )}
           </div>
         </div>
+      )}
+
+      {viewingReport && (
+        <ReportDetailModal
+          report={viewingReport.report}
+          questions={viewingReport.questions}
+          maxScore={viewingReport.maxScore}
+          onClose={() => setViewingReport(null)}
+        />
       )}
     </div>
   );
