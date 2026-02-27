@@ -90,6 +90,10 @@ httpServer.listen(
           await client.query(`ALTER TABLE soma_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'student'`);
           await client.query(`ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS author_id UUID REFERENCES soma_users(id) ON DELETE SET NULL`);
           await client.query(`ALTER TABLE soma_quizzes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false`);
+          await client.query(`CREATE TABLE IF NOT EXISTS tutor_students (id SERIAL PRIMARY KEY, tutor_id UUID NOT NULL REFERENCES soma_users(id) ON DELETE CASCADE, student_id UUID NOT NULL REFERENCES soma_users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`);
+          await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS tutor_student_unique_idx ON tutor_students(tutor_id, student_id)`);
+          await client.query(`CREATE TABLE IF NOT EXISTS quiz_assignments (id SERIAL PRIMARY KEY, quiz_id INTEGER NOT NULL REFERENCES soma_quizzes(id) ON DELETE CASCADE, student_id UUID NOT NULL REFERENCES soma_users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`);
+          await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS quiz_assignment_unique_idx ON quiz_assignments(quiz_id, student_id)`);
           await client.query(`CREATE TABLE IF NOT EXISTS tutor_comments (id SERIAL PRIMARY KEY, tutor_id UUID NOT NULL REFERENCES soma_users(id) ON DELETE CASCADE, student_id UUID NOT NULL REFERENCES soma_users(id) ON DELETE CASCADE, comment TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`);
           log("schema migrations applied", "bootstrap");
         } finally {
