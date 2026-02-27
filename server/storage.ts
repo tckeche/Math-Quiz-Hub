@@ -68,7 +68,8 @@ export interface IStorage {
     totalStudents: number;
     totalQuizzes: number;
     cohortAverages: { subject: string; average: number; count: number }[];
-    recentSubmissions: { studentName: string; score: number; quizTitle: string; subject: string | null; createdAt: string }[];
+    recentSubmissions: { reportId: number; studentName: string; score: number; quizTitle: string; subject: string | null; createdAt: string; startedAt: string | null; completedAt: string | null }[];
+    pendingAssignments: { assignmentId: number; quizId: number; quizTitle: string; subject: string | null; studentId: string; studentName: string; dueDate: string | null; createdAt: string }[];
   }>;
 
   getAllSomaUsers(): Promise<SomaUser[]>;
@@ -314,10 +315,10 @@ class DatabaseStorage implements IStorage {
 
     if (totalStudents === 0) {
       const tutorQuizzes = await this.database.select({ id: somaQuizzes.id }).from(somaQuizzes);
-      return { totalStudents: 0, totalQuizzes: tutorQuizzes.length, cohortAverages: [], recentSubmissions: [] };
+      return { totalStudents: 0, totalQuizzes: tutorQuizzes.length, cohortAverages: [], recentSubmissions: [], pendingAssignments: [] };
     }
 
-    const [quizCountResult, subjectAvgRows, recentRows] = await Promise.all([
+    const [quizCountResult, subjectAvgRows, recentRows, pendingRows] = await Promise.all([
       this.database.select({ cnt: sql<number>`count(*)::int` }).from(somaQuizzes),
 
       this.database
@@ -334,11 +335,14 @@ class DatabaseStorage implements IStorage {
 
       this.database
         .select({
+          reportId: somaReports.id,
           studentName: somaReports.studentName,
           score: somaReports.score,
           quizTitle: somaQuizzes.title,
           subject: somaQuizzes.subject,
           createdAt: somaReports.createdAt,
+          startedAt: somaReports.startedAt,
+          completedAt: somaReports.completedAt,
           maxScore: sql<number>`(select coalesce(sum(${somaQuestions.marks}), 0) from ${somaQuestions} where ${somaQuestions.quizId} = ${somaReports.quizId})::int`,
         })
         .from(somaReports)
@@ -346,6 +350,26 @@ class DatabaseStorage implements IStorage {
         .where(inArray(somaReports.studentId, adoptedIds))
         .orderBy(sql`${somaReports.createdAt} desc`)
         .limit(10),
+
+      this.database
+        .select({
+          assignmentId: quizAssignments.id,
+          quizId: quizAssignments.quizId,
+          quizTitle: somaQuizzes.title,
+          subject: somaQuizzes.subject,
+          studentId: quizAssignments.studentId,
+          studentName: sql<string>`coalesce(${somaUsers.displayName}, ${somaUsers.email})`,
+          dueDate: quizAssignments.dueDate,
+          assignedAt: quizAssignments.createdAt,
+        })
+        .from(quizAssignments)
+        .innerJoin(somaQuizzes, eq(quizAssignments.quizId, somaQuizzes.id))
+        .innerJoin(somaUsers, eq(quizAssignments.studentId, somaUsers.id))
+        .where(and(
+          inArray(quizAssignments.studentId, adoptedIds),
+          eq(quizAssignments.status, "pending"),
+        ))
+        .orderBy(sql`${quizAssignments.createdAt} desc`),
     ]);
 
     const cohortAverages = subjectAvgRows
@@ -353,11 +377,25 @@ class DatabaseStorage implements IStorage {
       .map((r) => ({ subject: r.subject, average: Math.round((r.totalScore / r.totalMax) * 100), count: r.cnt }));
 
     const recentSubmissions = recentRows.map((r) => ({
+      reportId: r.reportId,
       studentName: r.studentName,
       score: r.maxScore > 0 ? Math.round((r.score / r.maxScore) * 100) : 0,
       quizTitle: r.quizTitle,
       subject: r.subject,
       createdAt: r.createdAt.toISOString(),
+      startedAt: r.startedAt ? r.startedAt.toISOString() : null,
+      completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+    }));
+
+    const pendingAssignments = pendingRows.map((r) => ({
+      assignmentId: r.assignmentId,
+      quizId: r.quizId,
+      quizTitle: r.quizTitle,
+      subject: r.subject,
+      studentId: r.studentId,
+      studentName: r.studentName,
+      dueDate: r.dueDate ? r.dueDate.toISOString() : null,
+      createdAt: r.assignedAt.toISOString(),
     }));
 
     return {
@@ -365,6 +403,7 @@ class DatabaseStorage implements IStorage {
       totalQuizzes: quizCountResult[0]?.cnt ?? 0,
       cohortAverages,
       recentSubmissions,
+      pendingAssignments,
     };
   }
 
@@ -612,7 +651,7 @@ class MemoryStorage implements IStorage {
 
   async getDashboardStatsForTutor(tutorId: string) {
     const adoptedIds = this.tutorStudentsList.filter((ts) => ts.tutorId === tutorId).map((ts) => ts.studentId);
-    return { totalStudents: adoptedIds.length, totalQuizzes: 0, cohortAverages: [], recentSubmissions: [] };
+    return { totalStudents: adoptedIds.length, totalQuizzes: 0, cohortAverages: [], recentSubmissions: [], pendingAssignments: [] };
   }
 
   async getAllSomaUsers(): Promise<SomaUser[]> {

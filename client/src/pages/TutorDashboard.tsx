@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
@@ -7,9 +7,9 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import type { SomaQuiz } from "@shared/schema";
 import {
-  LogOut, Users, BookOpen, Plus, UserPlus, X,
-  Loader2, Check, LayoutDashboard, TrendingUp,
-  Award, Sparkles, ChevronRight,
+  LogOut, Users, BookOpen, Plus, Clock,
+  Loader2, LayoutDashboard, TrendingUp,
+  Award, Sparkles, ChevronRight, Eye, Timer, AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@supabase/supabase-js";
@@ -21,7 +21,36 @@ interface DashboardStats {
   totalStudents: number;
   totalQuizzes: number;
   cohortAverages: { subject: string; average: number; count: number }[];
-  recentSubmissions: { studentName: string; score: number; quizTitle: string; subject: string | null; createdAt: string }[];
+  recentSubmissions: {
+    reportId: number;
+    studentName: string;
+    score: number;
+    quizTitle: string;
+    subject: string | null;
+    createdAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+  }[];
+  pendingAssignments: {
+    assignmentId: number;
+    quizId: number;
+    quizTitle: string;
+    subject: string | null;
+    studentId: string;
+    studentName: string;
+    dueDate: string | null;
+    createdAt: string;
+  }[];
+}
+
+function formatDuration(startedAt: string | null, completedAt: string | null): string {
+  if (!startedAt || !completedAt) return "";
+  const diffMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  if (diffMs < 0 || isNaN(diffMs)) return "";
+  const mins = Math.floor(diffMs / 60000);
+  const secs = Math.floor((diffMs % 60000) / 1000);
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
 }
 
 function DonutCard({ subject, percentage, color }: { subject: string; percentage: number; color: string }) {
@@ -227,9 +256,9 @@ export default function TutorDashboard() {
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h3 className={SECTION_LABEL}>Recent Submissions</h3>
-                <Link href="/tutor/students">
-                  <span className="text-xs text-violet-400 hover:text-violet-300 cursor-pointer flex items-center gap-1" data-testid="link-view-all-students">
-                    View All Students <ChevronRight className="w-3 h-3" />
+                <Link href="/tutor/assessments">
+                  <span className="text-xs text-violet-400 hover:text-violet-300 cursor-pointer flex items-center gap-1" data-testid="link-view-all-assessments">
+                    View All Assessments <ChevronRight className="w-3 h-3" />
                   </span>
                 </Link>
               </div>
@@ -245,35 +274,110 @@ export default function TutorDashboard() {
                   {stats!.recentSubmissions.map((sub, idx) => {
                     const sc = getSubjectColor(sub.subject);
                     const SubIcon = getSubjectIcon(sub.subject);
+                    const duration = formatDuration(sub.startedAt, sub.completedAt);
+                    return (
+                      <Link key={idx} href={`/soma/review/${sub.reportId}`}>
+                        <div
+                          className="flex items-center gap-4 bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl px-5 py-3.5 cursor-pointer hover:bg-slate-800/50 hover:border-slate-700 transition-all group"
+                          data-testid={`submission-${idx}`}
+                        >
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${sc.border}`} style={{ backgroundColor: `${sc.hex}15` }}>
+                            <SubIcon className="w-4 h-4" style={{ color: sc.hex }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-slate-200">
+                              <span className="font-medium">{sub.studentName}</span>
+                              <span className="text-slate-500"> completed </span>
+                              <span className="text-slate-300">{sub.quizTitle}</span>
+                            </p>
+                            <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
+                              <span>{format(new Date(sub.createdAt), "PPp")}</span>
+                              {duration && (
+                                <span className="flex items-center gap-1 text-violet-400">
+                                  <Timer className="w-3 h-3" />
+                                  {duration}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={`text-xs font-bold px-2.5 py-1 border ${
+                                sub.score >= 70
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                  : sub.score >= 40
+                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                  : "bg-red-500/10 text-red-400 border-red-500/30"
+                              }`}
+                              data-testid={`score-${idx}`}
+                            >
+                              {sub.score}%
+                            </Badge>
+                            <Eye className="w-4 h-4 text-slate-500 group-hover:text-violet-400 transition-colors" />
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={SECTION_LABEL}>Assigned Assessments</h3>
+                <Link href="/tutor/assessments">
+                  <span className="text-xs text-violet-400 hover:text-violet-300 cursor-pointer flex items-center gap-1" data-testid="link-manage-assessments">
+                    Manage <ChevronRight className="w-3 h-3" />
+                  </span>
+                </Link>
+              </div>
+
+              {(stats?.pendingAssignments?.length ?? 0) === 0 ? (
+                <div className={`${CARD_CLASS} text-center py-10`}>
+                  <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+                  <p className="text-sm text-slate-400">No pending assignments</p>
+                  <p className="text-xs text-slate-500 mt-1">Assigned assessments that haven't been started will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {stats!.pendingAssignments.map((pa, idx) => {
+                    const sc = getSubjectColor(pa.subject);
+                    const SubIcon = getSubjectIcon(pa.subject);
+                    const isOverdue = pa.dueDate && new Date(pa.dueDate) < new Date();
                     return (
                       <div
-                        key={idx}
+                        key={pa.assignmentId}
                         className="flex items-center gap-4 bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl px-5 py-3.5"
-                        data-testid={`submission-${idx}`}
+                        data-testid={`pending-assignment-${idx}`}
                       >
                         <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${sc.border}`} style={{ backgroundColor: `${sc.hex}15` }}>
                           <SubIcon className="w-4 h-4" style={{ color: sc.hex }} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-slate-200">
-                            <span className="font-medium">{sub.studentName}</span>
-                            <span className="text-slate-500"> completed </span>
-                            <span className="text-slate-300">{sub.quizTitle}</span>
+                            <span className="font-medium">{pa.studentName}</span>
+                            <span className="text-slate-500"> assigned </span>
+                            <span className="text-slate-300">{pa.quizTitle}</span>
                           </p>
-                          <p className="text-[10px] text-slate-500">{format(new Date(sub.createdAt), "PPp")}</p>
+                          <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
+                            <span>Assigned {format(new Date(pa.createdAt), "PPp")}</span>
+                            {pa.dueDate && (
+                              <span className={`flex items-center gap-1 ${isOverdue ? "text-red-400" : "text-amber-400"}`}>
+                                <Clock className="w-3 h-3" />
+                                Due {format(new Date(pa.dueDate), "PPp")}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <Badge
-                          className={`text-xs font-bold px-2.5 py-1 border ${
-                            sub.score >= 70
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                              : sub.score >= 40
-                              ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                              : "bg-red-500/10 text-red-400 border-red-500/30"
-                          }`}
-                          data-testid={`score-${idx}`}
-                        >
-                          {sub.score}%
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className="text-[10px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                            Not Started
+                          </Badge>
+                          {isOverdue && (
+                            <AlertTriangle className="w-4 h-4 text-red-400" />
+                          )}
+                        </div>
                       </div>
                     );
                   })}
