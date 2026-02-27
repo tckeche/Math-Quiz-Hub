@@ -326,7 +326,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
 
   const questions = isPreview ? (props as PreviewProps).previewQuestions : fetchedQuestions;
   const effectiveQuiz: SomaQuiz | undefined = isPreview
-    ? { id: 0, title: (props as PreviewProps).previewTitle, topic: "", curriculumContext: null, status: "draft", createdAt: new Date() } as SomaQuiz
+    ? { id: 0, title: (props as PreviewProps).previewTitle, topic: "", curriculumContext: null, status: "published", createdAt: new Date() } as SomaQuiz
     : quiz;
 
   const isLoading = isPreview ? false : (quizLoading || questionsLoading || sessionLoading);

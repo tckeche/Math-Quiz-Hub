@@ -7,7 +7,8 @@ import type { SomaQuiz, SomaReport, SomaQuestion } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, X, ChevronDown, ChevronUp,
   Loader2, Check, LayoutDashboard, Clock, Award, Timer,
-  FileText, Eye, UserPlus, UserMinus,
+  FileText, Eye, UserPlus, UserMinus, Trash2, AlertTriangle,
+  ClockArrowUp, Pencil,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import DOMPurify from "dompurify";
@@ -269,6 +270,8 @@ export default function TutorAssessments() {
   const [dueDate, setDueDate] = useState("");
   const [expandedQuiz, setExpandedQuiz] = useState<number | null>(null);
   const [viewingReport, setViewingReport] = useState<{ report: SomaReport & { quiz: SomaQuiz }; questions: SomaQuestion[]; maxScore: number } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ quizId: number; title: string } | null>(null);
+  const [confirmDeleteQuestion, setConfirmDeleteQuestion] = useState<{ questionId: number; stem: string } | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -357,6 +360,59 @@ export default function TutorAssessments() {
     onSuccess: () => {
       if (expandedQuiz) {
         queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", expandedQuiz, "assignments"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", expandedQuiz, "reports"] });
+      }
+    },
+  });
+
+  const deleteQuizMutation = useMutation({
+    mutationFn: async (quizId: number) => {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed to delete" }));
+        throw new Error(err.message);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setConfirmDelete(null);
+      setExpandedQuiz(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
+    },
+  });
+
+  const extendDeadlineMutation = useMutation({
+    mutationFn: async (quizId: number) => {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}/assignments/extend`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ hours: 24 }),
+      });
+      if (!res.ok) throw new Error("Failed to extend deadline");
+      return res.json();
+    },
+    onSuccess: () => {
+      if (expandedQuiz) {
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", expandedQuiz, "assignments"] });
+      }
+    },
+  });
+
+  const deleteQuestionMutation = useMutation({
+    mutationFn: async (questionId: number) => {
+      const res = await fetch(`/api/tutor/questions/${questionId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to delete question");
+      return res.json();
+    },
+    onSuccess: () => {
+      setConfirmDeleteQuestion(null);
+      if (expandedQuiz) {
         queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", expandedQuiz, "reports"] });
       }
     },
@@ -475,10 +531,8 @@ export default function TutorAssessments() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            quiz.status === "published" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
-                          }`}>
-                            {quiz.status}
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">
+                            Published
                           </span>
                           {isExpanded && reports.length > 0 && (
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">
@@ -498,6 +552,23 @@ export default function TutorAssessments() {
                       >
                         <UserPlus className="w-3 h-3" />
                         Assign
+                      </button>
+                      <Link href={`/tutor/assessments/edit/${quiz.id}`}>
+                        <span
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center justify-center p-2 min-h-[40px] min-w-[40px] rounded-lg text-slate-400 hover:text-violet-300 hover:bg-violet-500/10 transition-all"
+                          title="Edit assessment"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </span>
+                      </Link>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete({ quizId: quiz.id, title: quiz.title }); }}
+                        className="flex items-center justify-center p-2 min-h-[40px] min-w-[40px] rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                        title="Delete assessment"
+                        data-testid={`button-delete-quiz-${quiz.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                       <div className="p-2 text-slate-400">
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -520,9 +591,21 @@ export default function TutorAssessments() {
                                 <Users className="w-4 h-4 text-violet-400" />
                                 Assigned Students
                               </h4>
-                              <span className="text-xs text-slate-400">
-                                {pendingAssignments.length} pending
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => extendDeadlineMutation.mutate(quiz.id)}
+                                  disabled={extendDeadlineMutation.isPending}
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[32px] rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                                  title="Extend all deadlines by 24 hours"
+                                  data-testid={`button-extend-deadline-${quiz.id}`}
+                                >
+                                  <ClockArrowUp className="w-3 h-3" />
+                                  {extendDeadlineMutation.isPending ? "Extending..." : "+24h"}
+                                </button>
+                                <span className="text-xs text-slate-400">
+                                  {pendingAssignments.length} pending
+                                </span>
+                              </div>
                             </div>
                             <div className="space-y-1.5">
                               {pendingAssignments.map(assignment => (
@@ -567,6 +650,43 @@ export default function TutorAssessments() {
                           </div>
                         );
                       })()}
+
+                      {/* Questions Section */}
+                      {isExpanded && questions.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-3">
+                            <FileText className="w-4 h-4 text-violet-400" />
+                            Questions ({questions.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {questions.map((q, idx) => (
+                              <div
+                                key={q.id}
+                                className="flex items-start justify-between gap-3 px-4 py-3 rounded-lg bg-slate-800/40 border border-slate-700/40"
+                                data-testid={`question-row-${q.id}`}
+                              >
+                                <div className="flex items-start gap-2 min-w-0 flex-1">
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 shrink-0 mt-0.5">
+                                    Q{idx + 1}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="text-sm text-slate-300 line-clamp-2">{q.stem}</p>
+                                    <p className="text-[10px] text-slate-500 mt-1">{q.marks} mark{q.marks !== 1 ? "s" : ""} · {(q.options as string[]).length} options</p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => setConfirmDeleteQuestion({ questionId: q.id, stem: q.stem.slice(0, 60) })}
+                                  className="flex items-center justify-center p-1.5 min-h-[28px] min-w-[28px] rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+                                  title="Delete question"
+                                  data-testid={`button-delete-question-${q.id}`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Student Submissions Section */}
                       {reportsLoading ? (
@@ -685,6 +805,84 @@ export default function TutorAssessments() {
           maxScore={viewingReport.maxScore}
           onClose={() => setViewingReport(null)}
         />
+      )}
+
+      {/* Delete Assessment Confirmation Dialog */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setConfirmDelete(null)}>
+          <div className="bg-slate-900 border border-red-500/30 rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-200">Delete Assessment</h3>
+                <p className="text-xs text-slate-400">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-300 mb-1">Are you sure you want to permanently delete:</p>
+            <p className="text-sm font-semibold text-red-300 mb-4">"{confirmDelete.title}"</p>
+            <p className="text-xs text-slate-400 mb-6">This will remove the quiz, all questions, student submissions, and assignments.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 min-h-[44px] rounded-xl text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteQuizMutation.mutate(confirmDelete.quizId)}
+                disabled={deleteQuizMutation.isPending}
+                className="flex-1 py-2.5 min-h-[44px] rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 transition-all"
+                data-testid="button-confirm-delete-quiz"
+              >
+                {deleteQuizMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                ) : (
+                  "Delete Permanently"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Question Confirmation Dialog */}
+      {confirmDeleteQuestion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setConfirmDeleteQuestion(null)}>
+          <div className="bg-slate-900 border border-red-500/30 rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-200">Delete Question</h3>
+                <p className="text-xs text-slate-400">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-300 mb-4">"{confirmDeleteQuestion.stem}..."</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteQuestion(null)}
+                className="flex-1 py-2.5 min-h-[44px] rounded-xl text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteQuestionMutation.mutate(confirmDeleteQuestion.questionId)}
+                disabled={deleteQuestionMutation.isPending}
+                className="flex-1 py-2.5 min-h-[44px] rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 transition-all"
+                data-testid="button-confirm-delete-question"
+              >
+                {deleteQuestionMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                ) : (
+                  "Delete Question"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

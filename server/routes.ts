@@ -574,6 +574,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Delete an entire assessment (tutor must be the author)
+  app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      if (quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Only the author can delete this assessment" });
+      }
+      await storage.deleteSomaQuiz(quizId);
+      return res.json({ success: true, message: "Assessment deleted" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to delete assessment" });
+    }
+  });
+
+  // Extend deadline by specified hours for all pending assignments on a quiz
+  app.patch("/api/tutor/quizzes/:quizId/assignments/extend", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const hours = Number(req.body.hours) || 24;
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      if (quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Only the author can extend deadlines" });
+      }
+      const updated = await storage.extendQuizAssignmentDeadlines(quizId, hours);
+      return res.json({ success: true, message: `Extended deadline by ${hours}h for ${updated} assignment(s)`, updated });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to extend deadline" });
+    }
+  });
+
   // Get assignments for a specific quiz
   app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
     try {
