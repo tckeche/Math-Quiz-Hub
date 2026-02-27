@@ -336,7 +336,7 @@ class DatabaseStorage implements IStorage {
       this.database
         .select({
           reportId: somaReports.id,
-          studentName: somaReports.studentName,
+          studentName: sql<string>`coalesce(${somaUsers.displayName}, ${somaReports.studentName}, ${somaUsers.email})`,
           score: somaReports.score,
           quizTitle: somaQuizzes.title,
           subject: somaQuizzes.subject,
@@ -347,6 +347,7 @@ class DatabaseStorage implements IStorage {
         })
         .from(somaReports)
         .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+        .leftJoin(somaUsers, eq(somaReports.studentId, somaUsers.id))
         .where(inArray(somaReports.studentId, adoptedIds))
         .orderBy(sql`${somaReports.createdAt} desc`)
         .limit(10),

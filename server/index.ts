@@ -102,6 +102,7 @@ httpServer.listen(
           await client.query(`ALTER TABLE quiz_assignments ADD COLUMN IF NOT EXISTS due_date TIMESTAMPTZ`);
           await client.query(`ALTER TABLE soma_reports ADD COLUMN IF NOT EXISTS started_at TIMESTAMP`);
           await client.query(`ALTER TABLE soma_reports ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`);
+          await client.query(`UPDATE soma_reports SET student_name = su.display_name FROM soma_users su WHERE soma_reports.student_id = su.id AND su.display_name IS NOT NULL AND su.display_name != '' AND soma_reports.student_name != su.display_name AND su.display_name NOT LIKE '%@%'`);
           log("schema migrations applied", "bootstrap");
         } finally {
           client.release();

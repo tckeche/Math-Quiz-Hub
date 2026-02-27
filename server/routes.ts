@@ -1417,9 +1417,12 @@ ${supportingText || "No extra context."}`,
       if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
 
       const { studentId, studentName, answers, startedAt } = req.body;
-      if (!studentId || !studentName || !answers) {
-        return res.status(400).json({ message: "Missing studentId, studentName, or answers" });
+      if (!studentId || !answers) {
+        return res.status(400).json({ message: "Missing studentId or answers" });
       }
+
+      const dbUser = await storage.getSomaUserById(studentId);
+      const resolvedName = dbUser?.displayName || studentName || "Student";
 
       const alreadySubmitted = await storage.checkSomaSubmission(quizId, studentId);
       if (alreadySubmitted) {
@@ -1446,7 +1449,7 @@ ${supportingText || "No extra context."}`,
       const report = await storage.createSomaReport({
         quizId,
         studentId,
-        studentName,
+        studentName: resolvedName,
         score: totalScore,
         status: "pending",
         answersJson: sanitizedAnswers,
