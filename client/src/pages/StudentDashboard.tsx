@@ -197,8 +197,8 @@ export default function StudentDashboard() {
   }, [subjectStats]);
 
   const availableQuizzes = useMemo(() => {
+    // Backend already filters for published + pending assignments — no frontend filter needed
     return (somaQuizzes || [])
-      .filter((q: any) => q.status === "published")
       .map((q: any) => ({
         id: q.id,
         title: q.title,

@@ -531,10 +531,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Quiz not found" });
       }
 
-      // Auto-publish draft quizzes when a tutor explicitly assigns them
-      if (quiz.status === "draft") {
+      // Force-publish quiz on every assign — guarantees it's visible to students
+      if (quiz.status !== "published") {
         await storage.updateSomaQuiz(quizId, { status: "published" });
-        console.log(`[Assign] Auto-published quiz ${quizId} (was draft)`);
+        console.log(`[Assign] Force-published quiz ${quizId} (was "${quiz.status}")`);
       }
 
       const adopted = await storage.getAdoptedStudents(tutorId);
@@ -1010,6 +1010,11 @@ RULES:
 
       console.log(`[Available] Fetching for Student: ${studentId}, Found Assignments: ${assignments.length}`);
 
+      // X-ray: log every raw assignment before any filtering
+      for (const a of assignments) {
+        console.log(`[Available]   Assignment quizId=${a.quizId} status="${a.status}" dueDate=${a.dueDate || "null"} quizStatus="${a.quiz?.status}" quizTitle="${a.quiz?.title}"`);
+      }
+
       const assignmentMap = new Map<number, any>();
       for (const a of assignments) {
         if (a.status === "pending") {
@@ -1021,6 +1026,18 @@ RULES:
       const publishedQuizzes = allQuizzes.filter(q => !q.isArchived && q.status === "published");
 
       console.log(`[Available] Student ${studentId}: ${assignments.length} total assignments, ${pendingCount} pending, ${publishedQuizzes.length} published quizzes, ${allQuizzes.length} total quizzes`);
+
+      // Log any quiz that has a pending assignment but is NOT published (ghost assignment root cause)
+      for (const quizId of Array.from(assignmentMap.keys())) {
+        const matchingQuiz = allQuizzes.find(q => q.id === quizId);
+        if (!matchingQuiz) {
+          console.log(`[Available] WARNING: Assignment for quizId=${quizId} but quiz not found in DB!`);
+        } else if (matchingQuiz.status !== "published") {
+          console.log(`[Available] WARNING: Assignment for quizId=${quizId} but quiz status="${matchingQuiz.status}" (not published) — title="${matchingQuiz.title}"`);
+        } else if (matchingQuiz.isArchived) {
+          console.log(`[Available] WARNING: Assignment for quizId=${quizId} but quiz is archived — title="${matchingQuiz.title}"`);
+        }
+      }
 
       const available = publishedQuizzes
         .filter(q => assignmentMap.has(q.id))
