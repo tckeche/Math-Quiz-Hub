@@ -49,4 +49,4 @@ waitForPort = 5000
 JWT_SECRET = "1ARBq1xysHxkLujZBNPUnFqYeG8N99+DkA0hZO2CMaTKjYq7x4pApRQnyoQS7/G8K8LD7TBg85uvawwZyhXzmg=="
 ADMIN_PASSWORD = "Chomukamba"
 ADMIN_USERNAME = "admin.soma@melaniacalvin.com"
-SUPABASE_DB_URL = "postgresql://postgres.lwjauxauqvwnwoyqezvu:bcFiNTtk6NoEL1eE@aws-1-eu-central-1.pooler.supabase.com:6543/postgres"
+SUPABASE_DB_URL = "postgresql://postgres.lwjauxauqvwnwoyqezvu:kCbFtnqhfhzPIaBr@aws-1-eu-central-1.pooler.supabase.com:6543/postgres"
