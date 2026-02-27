@@ -169,8 +169,16 @@ export default function StudentDashboard() {
     queryKey: ["/api/quizzes"],
   });
 
+  // Fetch only quizzes explicitly assigned to this student (row-level security)
   const { data: somaQuizzes, isLoading: somaLoading } = useQuery<SomaQuiz[]>({
-    queryKey: ["/api/soma/quizzes"],
+    queryKey: ["/api/quizzes/available", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const res = await fetch(`/api/quizzes/available?studentId=${userId}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!userId,
   });
 
   const { data: reports = [], isLoading: reportsLoading } = useQuery<ReportWithQuiz[]>({

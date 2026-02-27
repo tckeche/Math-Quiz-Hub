@@ -1,9 +1,9 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema, insertSomaUserSchema, quizzes, questions, submissions } from "@shared/schema";
+import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema, insertSomaUserSchema, quizzes, questions, submissions, somaUsers, quizAssignments, somaQuizzes } from "@shared/schema";
 import { db } from "./db";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
@@ -130,6 +130,30 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   } catch {
     return res.status(401).json({ message: "Unauthorized" });
   }
+}
+
+const TUTOR_EMAIL_DOMAIN = process.env.TUTOR_EMAIL_DOMAIN || "melaniacalvin.com";
+
+function determinRole(email: string): "tutor" | "student" {
+  const domain = email.split("@")[1]?.toLowerCase();
+  return domain === TUTOR_EMAIL_DOMAIN.toLowerCase() ? "tutor" : "student";
+}
+
+function requireTutor(req: Request, res: Response, next: NextFunction) {
+  const tutorId = req.headers["x-tutor-id"] as string;
+  if (!tutorId) {
+    return res.status(401).json({ message: "Tutor ID required" });
+  }
+  storage.getSomaUserById(tutorId).then((user) => {
+    if (!user || user.role !== "tutor") {
+      return res.status(403).json({ message: "Access denied: tutor role required" });
+    }
+    (req as any).tutorId = tutorId;
+    (req as any).tutorUser = user;
+    next();
+  }).catch(() => {
+    res.status(500).json({ message: "Failed to verify tutor identity" });
+  });
 }
 
 const loginLimiter = rateLimit({
@@ -268,10 +292,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!id || !email) {
         return res.status(400).json({ message: "Missing id or email" });
       }
+      const role = determinRole(email);
       const parsed = insertSomaUserSchema.parse({
         id,
         email,
         displayName: user_metadata?.display_name || user_metadata?.full_name || email.split("@")[0],
+        role,
       });
       const user = await storage.upsertSomaUser(parsed);
       res.json(user);
@@ -280,6 +306,132 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: err.message || "Failed to sync user" });
     }
   });
+
+  // Get current user's role and info
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) return res.status(400).json({ message: "userId required" });
+      const user = await storage.getSomaUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      res.json({ id: user.id, email: user.email, displayName: user.displayName, role: user.role });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch user" });
+    }
+  });
+
+  // ─── Tutor API Routes ──────────────────────────────────────────────
+
+  // Get tutor's adopted students
+  app.get("/api/tutor/students", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const students = await storage.getAdoptedStudents(tutorId);
+      res.json(students);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch students" });
+    }
+  });
+
+  // Get students available for adoption
+  app.get("/api/tutor/students/available", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const available = await storage.getAvailableStudents(tutorId);
+      res.json(available);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch available students" });
+    }
+  });
+
+  // Adopt a student
+  app.post("/api/tutor/students/adopt", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const { studentIds } = req.body;
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "studentIds array required" });
+      }
+      const results = [];
+      for (const studentId of studentIds) {
+        const student = await storage.getSomaUserById(studentId);
+        if (!student || student.role !== "student") continue;
+        const record = await storage.adoptStudent(tutorId, studentId);
+        results.push(record);
+      }
+      res.json({ adopted: results.length });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to adopt students" });
+    }
+  });
+
+  // Remove adopted student
+  app.delete("/api/tutor/students/:studentId", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      await storage.removeAdoptedStudent(tutorId, req.params.studentId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to remove student" });
+    }
+  });
+
+  // Get tutor's quizzes
+  app.get("/api/tutor/quizzes", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizzes = await storage.getSomaQuizzesByAuthor(tutorId);
+      res.json(quizzes);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
+    }
+  });
+
+  // Assign quiz to students
+  app.post("/api/tutor/quizzes/:quizId/assign", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(req.params.quizId);
+      const { studentIds } = req.body;
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "studentIds array required" });
+      }
+      // Verify quiz belongs to this tutor
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz || quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "You can only assign your own quizzes" });
+      }
+      // Verify all students are adopted by this tutor
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      const adoptedIds = new Set(adopted.map((s) => s.id));
+      const validIds = studentIds.filter((id: string) => adoptedIds.has(id));
+      if (validIds.length === 0) {
+        return res.status(400).json({ message: "None of the provided students are adopted by you" });
+      }
+      const assignments = await storage.createQuizAssignments(quizId, validIds);
+      res.json({ assigned: assignments.length, assignments });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to assign quiz" });
+    }
+  });
+
+  // Get assignments for a specific quiz
+  app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(req.params.quizId);
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz || quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const assignments = await storage.getQuizAssignmentsForQuiz(quizId);
+      res.json(assignments);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch assignments" });
+    }
+  });
+
+  // ─── Student Routes ──────────────────────────────────────────────
 
   app.get("/api/student/reports", async (req, res) => {
     try {
@@ -300,6 +452,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(subs);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch submissions" });
+    }
+  });
+
+  // Row-level security: Only return quizzes explicitly assigned to this student
+  app.get("/api/quizzes/available", async (req, res) => {
+    try {
+      const studentId = req.query.studentId as string;
+      if (!studentId) return res.status(400).json({ message: "studentId required" });
+      const assignments = await storage.getQuizAssignmentsForStudent(studentId);
+      const assignedQuizzes = assignments
+        .filter((a) => !a.quiz.isArchived && a.quiz.status === "published")
+        .map((a) => a.quiz);
+      res.json(assignedQuizzes);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });
     }
   });
 
@@ -1009,6 +1176,73 @@ Sections to include:
     }
   });
 
+  // Tutor quiz generation — sets authorId and optionally assigns to students
+  app.post("/api/tutor/quizzes/generate", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const parsed = somaGenerateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const { topic, title, curriculumContext, subject, syllabus, level } = parsed.data;
+      const { assignTo } = req.body; // array of student IDs
+      const quizTitle = title || `${topic} Quiz`;
+
+      const result = await generateAuditedQuiz({
+        topic, subject, syllabus, level,
+        copilotPrompt: curriculumContext,
+      });
+
+      const quiz = await storage.createSomaQuiz({
+        title: quizTitle,
+        topic,
+        subject,
+        syllabus,
+        level,
+        curriculumContext: curriculumContext || null,
+        authorId: tutorId,
+        status: "published",
+        isArchived: false,
+      });
+
+      const insertedQuestions = await storage.createSomaQuestions(
+        result.questions.map((q) => ({
+          quizId: quiz.id,
+          stem: q.stem,
+          options: q.options,
+          correctAnswer: q.correct_answer,
+          explanation: q.explanation,
+          marks: q.marks,
+        }))
+      );
+
+      // Auto-assign to selected students
+      let assignments: any[] = [];
+      if (Array.isArray(assignTo) && assignTo.length > 0) {
+        const adopted = await storage.getAdoptedStudents(tutorId);
+        const adoptedIds = new Set(adopted.map((s) => s.id));
+        const validIds = assignTo.filter((id: string) => adoptedIds.has(id));
+        if (validIds.length > 0) {
+          assignments = await storage.createQuizAssignments(quiz.id, validIds);
+        }
+      }
+
+      res.json({
+        quiz,
+        questions: insertedQuestions,
+        assignments: assignments.length,
+        pipeline: {
+          stages: ["Claude Sonnet (Maker)", "Gemini 2.5 Flash (Checker)"],
+          totalQuestions: insertedQuestions.length,
+        },
+      });
+    } catch (err: any) {
+      console.error("[SOMA Tutor] Generation failed:", err);
+      res.status(500).json({ message: `Pipeline failed: ${err.message}` });
+    }
+  });
+
   app.get("/api/soma/quizzes", async (_req, res) => {
     try {
       const allQuizzes = await storage.getSomaQuizzes();
@@ -1081,6 +1315,9 @@ Sections to include:
       });
 
       res.json(report);
+
+      // Mark quiz assignment as completed
+      storage.updateQuizAssignmentStatus(quizId, studentId, "completed").catch(() => {});
 
       const maxPossibleScore = allQuestions.reduce((s, q) => s + q.marks, 0);
       runBackgroundGrading(report.id, allQuestions, answers, totalScore, maxPossibleScore).catch(() => {});

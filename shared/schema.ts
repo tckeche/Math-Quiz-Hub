@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, serial, uuid, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, serial, uuid, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -71,6 +71,7 @@ export const somaUsers = pgTable("soma_users", {
   id: uuid("id").primaryKey(),
   email: text("email").notNull(),
   displayName: text("display_name"),
+  role: text("role").notNull().default("student"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -82,6 +83,7 @@ export const somaQuizzes = pgTable("soma_quizzes", {
   level: text("level").default("Grade 6-12"),
   subject: text("subject"),
   curriculumContext: text("curriculum_context"),
+  authorId: uuid("author_id").references(() => somaUsers.id, { onDelete: "set null" }),
   status: text("status").notNull().default("draft"),
   isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -109,9 +111,33 @@ export const somaReports = pgTable("soma_reports", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const somaQuizzesRelations = relations(somaQuizzes, ({ many }) => ({
+export const tutorStudents = pgTable("tutor_students", {
+  id: serial("id").primaryKey(),
+  tutorId: uuid("tutor_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("tutor_student_unique_idx").on(table.tutorId, table.studentId),
+]);
+
+export const quizAssignments = pgTable("quiz_assignments", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => somaQuizzes.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("quiz_assignment_unique_idx").on(table.quizId, table.studentId),
+]);
+
+export const somaQuizzesRelations = relations(somaQuizzes, ({ one, many }) => ({
   questions: many(somaQuestions),
   reports: many(somaReports),
+  assignments: many(quizAssignments),
+  author: one(somaUsers, {
+    fields: [somaQuizzes.authorId],
+    references: [somaUsers.id],
+  }),
 }));
 
 export const somaQuestionsRelations = relations(somaQuestions, ({ one }) => ({
@@ -123,6 +149,9 @@ export const somaQuestionsRelations = relations(somaQuestions, ({ one }) => ({
 
 export const somaUsersRelations = relations(somaUsers, ({ many }) => ({
   reports: many(somaReports),
+  tutoredStudents: many(tutorStudents, { relationName: "tutorToStudents" }),
+  tutors: many(tutorStudents, { relationName: "studentToTutors" }),
+  quizAssignments: many(quizAssignments),
 }));
 
 export const somaReportsRelations = relations(somaReports, ({ one }) => ({
@@ -132,6 +161,30 @@ export const somaReportsRelations = relations(somaReports, ({ one }) => ({
   }),
   student: one(somaUsers, {
     fields: [somaReports.studentId],
+    references: [somaUsers.id],
+  }),
+}));
+
+export const tutorStudentsRelations = relations(tutorStudents, ({ one }) => ({
+  tutor: one(somaUsers, {
+    fields: [tutorStudents.tutorId],
+    references: [somaUsers.id],
+    relationName: "tutorToStudents",
+  }),
+  student: one(somaUsers, {
+    fields: [tutorStudents.studentId],
+    references: [somaUsers.id],
+    relationName: "studentToTutors",
+  }),
+}));
+
+export const quizAssignmentsRelations = relations(quizAssignments, ({ one }) => ({
+  quiz: one(somaQuizzes, {
+    fields: [quizAssignments.quizId],
+    references: [somaQuizzes.id],
+  }),
+  student: one(somaUsers, {
+    fields: [quizAssignments.studentId],
     references: [somaUsers.id],
   }),
 }));
@@ -149,3 +202,11 @@ export type SomaQuestion = typeof somaQuestions.$inferSelect;
 export type InsertSomaQuestion = z.infer<typeof insertSomaQuestionSchema>;
 export type SomaReport = typeof somaReports.$inferSelect;
 export type InsertSomaReport = z.infer<typeof insertSomaReportSchema>;
+
+export const insertTutorStudentSchema = createInsertSchema(tutorStudents).omit({ id: true, createdAt: true });
+export const insertQuizAssignmentSchema = createInsertSchema(quizAssignments).omit({ id: true, createdAt: true });
+
+export type TutorStudent = typeof tutorStudents.$inferSelect;
+export type InsertTutorStudent = z.infer<typeof insertTutorStudentSchema>;
+export type QuizAssignment = typeof quizAssignments.$inferSelect;
+export type InsertQuizAssignment = z.infer<typeof insertQuizAssignmentSchema>;
