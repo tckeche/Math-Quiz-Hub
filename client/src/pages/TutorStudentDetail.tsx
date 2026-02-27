@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { Session } from "@supabase/supabase-js";
-import type { SomaQuiz, Quiz } from "@shared/schema";
+import type { SomaQuiz } from "@shared/schema";
 import {
   ArrowLeft, MessageSquare, Send, Loader2, BookOpen,
   CheckCircle2, XCircle, Clock, Award,
@@ -26,14 +26,6 @@ interface ReportWithQuiz {
   aiFeedbackHtml: string | null;
   createdAt: string;
   quiz: SomaQuiz;
-}
-
-interface SubmissionWithQuiz {
-  id: number;
-  totalScore: number;
-  maxPossibleScore: number;
-  submittedAt: string;
-  quiz: Quiz;
 }
 
 interface TutorComment {
@@ -118,12 +110,9 @@ export default function TutorStudentDetail() {
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 
   const allResults = useMemo(() => {
-    const items: { title: string; subject: string | null; score: number; maxScore: number; date: string; type: string }[] = [];
+    const items: { title: string; subject: string | null; score: number; maxScore: number; date: string }[] = [];
     for (const r of performance?.reports || []) {
-      items.push({ title: r.quiz?.title || "Quiz", subject: r.quiz?.subject || null, score: r.score, maxScore: r.maxScore || 0, date: r.createdAt, type: "soma" });
-    }
-    for (const s of performance?.submissions || []) {
-      items.push({ title: s.quiz?.title || "Quiz", subject: (s.quiz as any)?.subject || null, score: s.totalScore, maxScore: s.maxPossibleScore, date: s.submittedAt, type: "legacy" });
+      items.push({ title: r.quiz?.title || "Quiz", subject: r.quiz?.subject || null, score: r.score, maxScore: r.maxScore || 0, date: r.createdAt });
     }
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [performance]);

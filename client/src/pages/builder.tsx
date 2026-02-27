@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Quiz, Question } from "@shared/schema";
+import type { SomaQuiz, SomaQuestion } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,8 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Send, Loader2, Sparkles, FileStack, Upload, Trash2,
-  FileText, X, Pencil, BookOpen, Calendar,
-  Scan, Brain, Search, CheckCircle2, Eye, PartyPopper, LayoutDashboard, Clock
+  FileText, X, Pencil, BookOpen,
+  Scan, Brain, Search, CheckCircle2, Eye, PartyPopper, LayoutDashboard
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { renderLatex, unescapeLatex } from '@/lib/render-latex';
@@ -37,15 +37,13 @@ export default function BuilderPage() {
   const isEditMode = editId !== null;
 
   const [title, setTitle] = useState("");
-  const [timeLimit, setTimeLimit] = useState("60");
-  const [dueDate, setDueDate] = useState("");
   const [syllabus, setSyllabus] = useState("");
   const [level, setLevel] = useState("");
   const [subject, setSubject] = useState("");
 
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState<{ role: "user" | "ai"; text: string; metadata?: { provider: string; model: string; durationMs: number } }[]>([]);
-  const [savedQuestions, setSavedQuestions] = useState<Question[]>([]);
+  const [savedQuestions, setSavedQuestions] = useState<SomaQuestion[]>([]);
   const [populated, setPopulated] = useState(false);
   const [activeQuizId, setActiveQuizId] = useState<number | null>(editId);
 
@@ -61,7 +59,6 @@ export default function BuilderPage() {
   const [docContext, setDocContext] = useState<{ name: string; type: string; fileId: string }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const dueDateRef = useRef<HTMLInputElement>(null);
 
   const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
     queryKey: ["/api/admin/session"],
@@ -73,7 +70,7 @@ export default function BuilderPage() {
 
   const authenticated = adminSession?.authenticated === true;
 
-  const { data: quizData, isLoading: quizLoading } = useQuery<Quiz & { questions: Question[] }>({
+  const { data: quizData, isLoading: quizLoading } = useQuery<SomaQuiz & { questions: SomaQuestion[] }>({
     queryKey: ["/api/admin/quizzes", activeQuizId],
     enabled: authenticated && activeQuizId !== null,
   });
@@ -81,8 +78,6 @@ export default function BuilderPage() {
   useEffect(() => {
     if (quizData && !populated) {
       setTitle(quizData.title);
-      setTimeLimit(String(quizData.timeLimitMinutes));
-      setDueDate(quizData.dueDate ? new Date(quizData.dueDate).toISOString().slice(0, 16) : "");
       setSyllabus(quizData.syllabus || "");
       setLevel(quizData.level || "");
       setSubject(quizData.subject || "");
@@ -108,15 +103,11 @@ export default function BuilderPage() {
   const ensureQuizExists = async (): Promise<number> => {
     if (activeQuizId) return activeQuizId;
     if (!title.trim()) throw new Error("Please fill in a quiz title before generating questions.");
-    if (!dueDate) throw new Error("Please set a due date before generating questions.");
-    const tl = parseInt(timeLimit);
-    if (isNaN(tl) || tl < 1) throw new Error("Time limit must be a positive number.");
     const quizRes = await apiRequest("POST", "/api/admin/quizzes", {
       title: title.trim(),
-      timeLimitMinutes: tl,
-      dueDate,
-      syllabus: syllabus || null,
-      level: level || null,
+      topic: title.trim(),
+      syllabus: syllabus || "IEB",
+      level: level || "Grade 6-12",
       subject: subject || null,
     });
     const quiz = await quizRes.json();
@@ -173,7 +164,7 @@ export default function BuilderPage() {
         await queryClient.refetchQueries({ queryKey: ["/api/admin/quizzes", quizId] });
         queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
 
-        const refetched = queryClient.getQueryData<Quiz & { questions: Question[] }>(["/api/admin/quizzes", quizId]);
+        const refetched = queryClient.getQueryData<SomaQuiz & { questions: SomaQuestion[] }>(["/api/admin/quizzes", quizId]);
         if (refetched?.questions) {
           setSavedQuestions(refetched.questions);
         }
@@ -202,14 +193,9 @@ export default function BuilderPage() {
   const updateMetaMutation = useMutation({
     mutationFn: async () => {
       if (!activeQuizId) throw new Error("No quiz to update");
-      const tl = parseInt(timeLimit);
-      if (isNaN(tl) || tl < 1) throw new Error("Time limit must be a positive number");
       if (!title.trim()) throw new Error("Title is required");
-      if (!dueDate) throw new Error("Due date is required");
       await apiRequest("PUT", `/api/admin/quizzes/${activeQuizId}`, {
         title: title.trim(),
-        timeLimitMinutes: tl,
-        dueDate,
         syllabus: syllabus || null,
         level: level || null,
         subject: subject || null,
@@ -280,9 +266,9 @@ export default function BuilderPage() {
     savedQuestions.map((q) => ({
       id: q.id,
       quizId: activeQuizId || 0,
-      stem: unescapeLatex(q.promptText),
+      stem: unescapeLatex(q.stem),
       options: q.options,
-      marks: q.marksWorth,
+      marks: q.marks,
     } as StudentQuestion)), [savedQuestions, activeQuizId]);
 
   if (sessionLoading) {
@@ -427,36 +413,6 @@ export default function BuilderPage() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-slate-400 text-xs flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> Due Date
-                </Label>
-                <div className="relative">
-                  <Input
-                    ref={dueDateRef}
-                    type="datetime-local"
-                    value={dueDate}
-                    onChange={(e) => { setDueDate(e.target.value); markMeta(); }}
-                    className="glass-input text-sm h-12 pl-9 cursor-pointer"
-                    onClick={() => { try { dueDateRef.current?.showPicker?.(); } catch {} }}
-                    data-testid="input-quiz-due"
-                  />
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-slate-400 text-xs flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Time (min)
-                </Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={timeLimit}
-                  onChange={(e) => { setTimeLimit(e.target.value); markMeta(); }}
-                  className="glass-input text-sm h-12"
-                  data-testid="input-quiz-time"
-                />
-              </div>
             </div>
             {metaDirty && activeQuizId && (
               <div className="mt-3 flex justify-end">
@@ -464,7 +420,7 @@ export default function BuilderPage() {
                   className="glow-button text-xs min-h-[44px]"
                   size="sm"
                   onClick={() => updateMetaMutation.mutate()}
-                  disabled={updateMetaMutation.isPending || !title.trim() || !dueDate}
+                  disabled={updateMetaMutation.isPending || !title.trim()}
                   data-testid="button-save-metadata"
                 >
                   {updateMetaMutation.isPending ? (
@@ -678,10 +634,10 @@ export default function BuilderPage() {
                   <div key={q.id} className="bg-white/[0.03] border border-white/5 rounded-lg p-3 flex items-start gap-2" data-testid={`card-saved-q-${q.id}`}>
                     <span className="text-xs font-mono text-emerald-400 font-medium mt-0.5 shrink-0 w-6">Q{idx + 1}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-slate-300 line-clamp-2">{renderLatex(unescapeLatex(q.promptText))}</div>
+                      <div className="text-xs text-slate-300 line-clamp-2">{renderLatex(unescapeLatex(q.stem))}</div>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.options.length} opts</Badge>
-                        <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.marksWorth}m</Badge>
+                        <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.marks}m</Badge>
                       </div>
                     </div>
                     <button
