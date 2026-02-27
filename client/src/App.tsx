@@ -17,6 +17,7 @@ import TutorDashboard from "@/pages/TutorDashboard";
 import TutorStudents from "@/pages/TutorStudents";
 import TutorStudentDetail from "@/pages/TutorStudentDetail";
 import TutorAssessments from "@/pages/TutorAssessments";
+import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
 import SomaChatPage from "@/pages/soma-chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import RoleRouter from "@/components/RoleRouter";
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={StudentAuth} />
       <Route path="/portal">{() => <RoleRouter studentComponent={StudentDashboard} tutorComponent={TutorDashboard} />}</Route>
+      <Route path="/super-admin">{() => <ProtectedRoute component={SuperAdminDashboard} />}</Route>
       <Route path="/tutor">{() => <ProtectedRoute component={TutorDashboard} />}</Route>
       <Route path="/tutor/students/:id">{(params) => <ProtectedRoute component={TutorStudentDetail} params={params} />}</Route>
       <Route path="/tutor/students">{() => <ProtectedRoute component={TutorStudents} />}</Route>

@@ -44,11 +44,19 @@ export default function StudentAuth() {
       if (error) throw error;
 
       if (data.user) {
-        await apiRequest("POST", "/api/auth/sync", {
+        const syncRes = await apiRequest("POST", "/api/auth/sync", {
           id: data.user.id,
           email: data.user.email,
           user_metadata: data.user.user_metadata,
         });
+        const syncData = await syncRes.json();
+        if (syncData.role === "super_admin") {
+          setLocation("/super-admin");
+          return;
+        } else if (syncData.role === "tutor") {
+          setLocation("/tutor");
+          return;
+        }
       }
 
       setLocation("/dashboard");
@@ -101,13 +109,20 @@ export default function StudentAuth() {
       if (error) throw error;
 
       if (data.session) {
-        await apiRequest("POST", "/api/auth/sync", {
+        const syncRes = await apiRequest("POST", "/api/auth/sync", {
           id: data.user!.id,
           email: data.user!.email,
           user_metadata: data.user!.user_metadata,
         });
+        const syncData = await syncRes.json();
         toast({ title: "Welcome!", description: "Your account has been created." });
-        setLocation("/dashboard");
+        if (syncData.role === "super_admin") {
+          setLocation("/super-admin");
+        } else if (syncData.role === "tutor") {
+          setLocation("/tutor");
+        } else {
+          setLocation("/dashboard");
+        }
       } else {
         toast({
           title: "Account created",

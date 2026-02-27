@@ -57,6 +57,10 @@ export default function RoleRouter({ studentComponent: StudentComp, tutorCompone
     return <Redirect to="/login" />;
   }
 
+  if (role === "super_admin") {
+    return <Redirect to="/super-admin" />;
+  }
+
   if (role === "tutor") {
     return <TutorComp />;
   }

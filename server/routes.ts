@@ -134,7 +134,10 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 const TUTOR_EMAIL_DOMAIN = process.env.TUTOR_EMAIL_DOMAIN || "melaniacalvin.com";
 
-function determinRole(email: string): "tutor" | "student" {
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin.soma@melaniacalvin.com";
+
+function determinRole(email: string): "tutor" | "student" | "super_admin" {
+  if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) return "super_admin";
   const domain = email.split("@")[1]?.toLowerCase();
   return domain === TUTOR_EMAIL_DOMAIN.toLowerCase() ? "tutor" : "student";
 }
@@ -145,7 +148,7 @@ function requireTutor(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ message: "Tutor ID required" });
   }
   storage.getSomaUserById(tutorId).then((user) => {
-    if (!user || user.role !== "tutor") {
+    if (!user || (user.role !== "tutor" && user.role !== "super_admin")) {
       return res.status(403).json({ message: "Access denied: tutor role required" });
     }
     (req as any).tutorId = tutorId;
@@ -153,6 +156,23 @@ function requireTutor(req: Request, res: Response, next: NextFunction) {
     next();
   }).catch(() => {
     res.status(500).json({ message: "Failed to verify tutor identity" });
+  });
+}
+
+function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const adminId = req.headers["x-admin-id"] as string;
+  if (!adminId) {
+    return res.status(401).json({ message: "Admin ID required" });
+  }
+  storage.getSomaUserById(adminId).then((user) => {
+    if (!user || user.role !== "super_admin") {
+      return res.status(403).json({ message: "Access denied: super_admin role required" });
+    }
+    (req as any).adminId = adminId;
+    (req as any).adminUser = user;
+    next();
+  }).catch(() => {
+    res.status(500).json({ message: "Failed to verify admin identity" });
   });
 }
 
@@ -552,6 +572,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalQuizzes: tutorQuizzes.length,
         cohortAverages,
         recentSubmissions,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch stats" });
+    }
+  });
+
+  // ─── Super Admin Routes ──────────────────────────────────────────
+
+  app.get("/api/super-admin/users", requireSuperAdmin, async (_req, res) => {
+    try {
+      const users = await storage.getAllSomaUsers();
+      res.json(users);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch users" });
+    }
+  });
+
+  app.delete("/api/super-admin/users/:userId", requireSuperAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getSomaUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (user.role === "super_admin") return res.status(403).json({ message: "Cannot delete super admin" });
+      await storage.deleteSomaUser(userId);
+      res.json({ message: "User deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete user" });
+    }
+  });
+
+  app.get("/api/super-admin/quizzes", requireSuperAdmin, async (_req, res) => {
+    try {
+      const quizzes = await storage.getAllSomaQuizzes();
+      res.json(quizzes);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
+    }
+  });
+
+  app.delete("/api/super-admin/quizzes/:quizId", requireSuperAdmin, async (req, res) => {
+    try {
+      const quizId = parseInt(req.params.quizId);
+      if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
+      await storage.deleteSomaQuiz(quizId);
+      res.json({ message: "Quiz deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete quiz" });
+    }
+  });
+
+  app.get("/api/super-admin/stats", requireSuperAdmin, async (_req, res) => {
+    try {
+      const [users, quizzes] = await Promise.all([
+        storage.getAllSomaUsers(),
+        storage.getAllSomaQuizzes(),
+      ]);
+      const students = users.filter((u) => u.role === "student");
+      const tutors = users.filter((u) => u.role === "tutor");
+      res.json({
+        totalUsers: users.length,
+        totalStudents: students.length,
+        totalTutors: tutors.length,
+        totalQuizzes: quizzes.length,
+        publishedQuizzes: quizzes.filter((q) => q.status === "published").length,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch stats" });

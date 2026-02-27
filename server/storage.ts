@@ -91,6 +91,12 @@ export interface IStorage {
   // Tutor comments
   addTutorComment(comment: InsertTutorComment): Promise<TutorComment>;
   getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]>;
+
+  // Super Admin
+  getAllSomaUsers(): Promise<SomaUser[]>;
+  deleteSomaUser(userId: string): Promise<void>;
+  deleteSomaQuiz(quizId: number): Promise<void>;
+  getAllSomaQuizzes(): Promise<SomaQuiz[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -448,6 +454,25 @@ class DatabaseStorage implements IStorage {
       .orderBy(tutorComments.createdAt);
   }
 
+  async getAllSomaUsers(): Promise<SomaUser[]> {
+    return this.database.select().from(somaUsers).orderBy(somaUsers.createdAt);
+  }
+
+  async deleteSomaUser(userId: string): Promise<void> {
+    await this.database.delete(somaUsers).where(eq(somaUsers.id, userId));
+  }
+
+  async deleteSomaQuiz(quizId: number): Promise<void> {
+    await this.database.delete(somaQuestions).where(eq(somaQuestions.quizId, quizId));
+    await this.database.delete(somaReports).where(eq(somaReports.quizId, quizId));
+    await this.database.delete(quizAssignments).where(eq(quizAssignments.quizId, quizId));
+    await this.database.delete(somaQuizzes).where(eq(somaQuizzes.id, quizId));
+  }
+
+  async getAllSomaQuizzes(): Promise<SomaQuiz[]> {
+    return this.database.select().from(somaQuizzes).orderBy(somaQuizzes.createdAt);
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -753,6 +778,20 @@ class MemoryStorage implements IStorage {
   }
   async getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]> {
     return this.tutorCommentsList.filter((c) => c.tutorId === tutorId && c.studentId === studentId);
+  }
+
+  async getAllSomaUsers(): Promise<SomaUser[]> {
+    return this.somaUsersList;
+  }
+  async deleteSomaUser(userId: string): Promise<void> {
+    this.somaUsersList = this.somaUsersList.filter((u) => u.id !== userId);
+  }
+  async deleteSomaQuiz(quizId: number): Promise<void> {
+    this.somaQuestionsList = this.somaQuestionsList.filter((q) => q.quizId !== quizId);
+    this.somaQuizzesList = this.somaQuizzesList.filter((q) => q.id !== quizId);
+  }
+  async getAllSomaQuizzes(): Promise<SomaQuiz[]> {
+    return this.somaQuizzesList;
   }
 
 }

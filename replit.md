@@ -35,6 +35,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `client/src/pages/TutorStudents.tsx` - Tutor student roster with adopt/remove, search, clickable drill-down links to `/tutor/students/:id`
 - `client/src/pages/TutorStudentDetail.tsx` - Student drill-down: assessment history with scores, private tutor notes/comments system
 - `client/src/pages/TutorAssessments.tsx` - Tutor assessment management with assign-to-students modal
+- `client/src/pages/SuperAdminDashboard.tsx` - Super admin global management: user/quiz data tables, hard delete, stats overview. Red-accented glassmorphism theme. Route: `/super-admin`
 
 ### API Endpoints
 - `GET /api/quizzes` - List all quizzes
@@ -61,6 +62,7 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `POST /api/soma/global-tutor` - Global AI Tutor endpoint (accepts { message }, returns { reply })
 
 ### Key Features
+- **RBAC (Role-Based Access Control)**: Three roles — `student`, `tutor`, `super_admin`. Automated domain-based assignment on auth sync: `admin.soma@melaniacalvin.com` → super_admin, `*@melaniacalvin.com` → tutor, all others → student. `requireTutor` middleware allows tutor+super_admin. `requireSuperAdmin` middleware strictly requires super_admin. Role-based redirect after login (student→/dashboard, tutor→/tutor, super_admin→/super-admin).
 - Admin password: Stored in ADMIN_PASSWORD env var; JWT sessions via JWT_SECRET env var
 - LaTeX rendering via react-katex (InlineMath/BlockMath)
 - Anti-cheat timer persisted in localStorage
