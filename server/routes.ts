@@ -956,8 +956,15 @@ RULES:
         .filter(q => !q.isArchived && q.status === "published")
         .map(q => ({
           ...q,
+          isAssigned: assignmentMap.has(q.id),
+          assignmentStatus: assignmentMap.get(q.id)?.status || null,
           dueDate: assignmentMap.get(q.id)?.dueDate || null,
         }));
+      available.sort((a, b) => {
+        if (a.isAssigned && !b.isAssigned) return -1;
+        if (!a.isAssigned && b.isAssigned) return 1;
+        return 0;
+      });
       res.json(available);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });

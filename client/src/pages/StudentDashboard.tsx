@@ -204,6 +204,7 @@ export default function StudentDashboard() {
         title: q.title,
         subject: q.topic || q.subject || "General",
         level: q.level || "",
+        isAssigned: q.isAssigned || false,
         dueDate: q.dueDate || null,
       }));
   }, [somaQuizzes, completedSomaQuizIds]);
@@ -396,7 +397,7 @@ export default function StudentDashboard() {
                             href={`/soma/quiz/${q.id}`}
                           >
                             <div
-                              className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
+                              className={`bg-slate-800/40 border rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group ${q.isAssigned ? "border-violet-500/40 shadow-[0_0_16px_rgba(139,92,246,0.06)]" : "border-slate-700/50"}`}
                               data-testid={`card-available-quiz-${q.id}`}
                             >
                               <div className="flex items-start justify-between gap-3">
@@ -411,6 +412,14 @@ export default function StudentDashboard() {
                                     {q.level && (
                                       <span className="text-[10px] text-slate-400 px-2 py-0.5 rounded-full bg-slate-800/60">
                                         {q.level}
+                                      </span>
+                                    )}
+                                    {q.isAssigned && (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/30"
+                                        data-testid={`badge-assigned-${q.id}`}
+                                      >
+                                        Assigned to you
                                       </span>
                                     )}
                                     {q.dueDate && (() => {
