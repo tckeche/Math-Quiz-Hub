@@ -218,7 +218,7 @@ export default function TutorDashboard() {
         {/* Students Tab */}
         {activeTab === "students" && (
           <section className={CARD_CLASS}>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
               <h2 className="text-2xl font-bold text-slate-200">My Students</h2>
               <button
                 onClick={() => { setShowAdoptModal(true); setSelectedStudentIds(new Set()); }}
@@ -244,7 +244,7 @@ export default function TutorDashboard() {
                 {adoptedStudents.map((student) => (
                   <div
                     key={student.id}
-                    className="flex items-center justify-between bg-slate-800/40 border border-slate-700/50 rounded-xl px-5 py-4"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-800/40 border border-slate-700/50 rounded-xl px-5 py-4"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-xs font-bold text-emerald-300">
@@ -272,7 +272,7 @@ export default function TutorDashboard() {
         {/* Quizzes Tab */}
         {activeTab === "quizzes" && (
           <section className={CARD_CLASS}>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
               <h2 className="text-2xl font-bold text-slate-200">My Quizzes</h2>
             </div>
 
@@ -291,7 +291,7 @@ export default function TutorDashboard() {
                 {tutorQuizzes.map((quiz) => (
                   <div
                     key={quiz.id}
-                    className="flex items-center justify-between bg-slate-800/40 border border-slate-700/50 rounded-xl px-5 py-4"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-800/40 border border-slate-700/50 rounded-xl px-5 py-4"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
@@ -311,7 +311,7 @@ export default function TutorDashboard() {
                     </div>
                     <button
                       onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all ml-3"
+                      className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 py-2.5 min-h-[44px] rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all sm:ml-3"
                     >
                       <Plus className="w-3 h-3" />
                       Assign
@@ -328,7 +328,7 @@ export default function TutorDashboard() {
       {showAdoptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowAdoptModal(false)}>
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between gap-3 mb-5">
               <h3 className="text-lg font-bold text-slate-200">Adopt Students</h3>
               <button onClick={() => setShowAdoptModal(false)} className="text-slate-400 hover:text-slate-300">
                 <X className="w-5 h-5" />
@@ -344,7 +344,7 @@ export default function TutorDashboard() {
                     <button
                       key={student.id}
                       onClick={() => toggleStudentSelection(student.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                      className={`w-full min-h-[44px] flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
                         selectedStudentIds.has(student.id)
                           ? "bg-violet-500/20 border border-violet-500/40"
                           : "bg-slate-800/40 border border-slate-700/50 hover:bg-slate-800/60"
@@ -367,7 +367,7 @@ export default function TutorDashboard() {
                 <button
                   onClick={() => adoptMutation.mutate(Array.from(selectedStudentIds))}
                   disabled={selectedStudentIds.size === 0 || adoptMutation.isPending}
-                  className="w-full mt-4 py-3 rounded-xl text-sm font-medium bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="w-full mt-4 py-3 min-h-[44px] rounded-xl text-sm font-medium bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {adoptMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -385,7 +385,7 @@ export default function TutorDashboard() {
       {showAssignModal !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowAssignModal(null)}>
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between gap-3 mb-5">
               <h3 className="text-lg font-bold text-slate-200">Assign Quiz to Students</h3>
               <button onClick={() => setShowAssignModal(null)} className="text-slate-400 hover:text-slate-300">
                 <X className="w-5 h-5" />
@@ -405,7 +405,7 @@ export default function TutorDashboard() {
                     <button
                       key={student.id}
                       onClick={() => toggleStudentSelection(student.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                      className={`w-full min-h-[44px] flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
                         selectedStudentIds.has(student.id)
                           ? "bg-emerald-500/20 border border-emerald-500/40"
                           : "bg-slate-800/40 border border-slate-700/50 hover:bg-slate-800/60"
@@ -428,7 +428,7 @@ export default function TutorDashboard() {
                 <button
                   onClick={() => assignMutation.mutate({ quizId: showAssignModal, studentIds: Array.from(selectedStudentIds) })}
                   disabled={selectedStudentIds.size === 0 || assignMutation.isPending}
-                  className="w-full mt-4 py-3 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="w-full mt-4 py-3 min-h-[44px] rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {assignMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin mx-auto" />

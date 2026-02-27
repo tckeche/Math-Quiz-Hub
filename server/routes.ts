@@ -203,6 +203,32 @@ function extractJsonArray(text: string): any[] | null {
   }
 }
 
+function sanitizeStudentIds(studentIds: unknown): string[] {
+  if (!Array.isArray(studentIds)) return [];
+  return Array.from(new Set(studentIds
+    .filter((id): id is string => typeof id === "string")
+    .map((id) => id.trim())
+    .filter(Boolean)));
+}
+
+function sanitizeSubmittedAnswers(
+  questions: { id: number }[],
+  answers: unknown,
+): Record<string, string> {
+  if (!answers || typeof answers !== "object") return {};
+  const rawAnswers = answers as Record<string, unknown>;
+  const questionIds = new Set(questions.map((q) => String(q.id)));
+  const sanitized: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(rawAnswers)) {
+    if (!questionIds.has(key) || typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) sanitized[key] = trimmed;
+  }
+
+  return sanitized;
+}
+
 async function runBackgroundGrading(
   reportId: number,
   questions: { id: number; stem: string; options: string[]; correctAnswer: string; marks: number }[],
@@ -235,7 +261,8 @@ Provide:
 1. An overall performance summary
 2. Specific strengths demonstrated
 3. Areas needing improvement with concrete study suggestions — reference questions by their sequential number (e.g. "Question 3")
-4. Encouragement and next steps`;
+4. For every incorrect response, include a 1-2 sentence explanation that starts with the exact label "Question X:" and briefly explains why the correct answer is right
+5. Encouragement and next steps`;
 
     const gradePromise = generateWithFallback(systemPrompt, userPrompt);
 
@@ -369,7 +396,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/tutor/students/:studentId", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      await storage.removeAdoptedStudent(tutorId, req.params.studentId);
+      await storage.removeAdoptedStudent(tutorId, String(req.params.studentId));
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to remove student" });
@@ -391,9 +418,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/tutor/quizzes/:quizId/assign", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const quizId = parseInt(req.params.quizId);
-      const { studentIds } = req.body;
-      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      const quizId = parseInt(String(req.params.quizId));
+      const studentIds = sanitizeStudentIds(req.body?.studentIds);
+      if (studentIds.length === 0) {
         return res.status(400).json({ message: "studentIds array required" });
       }
       // Verify quiz belongs to this tutor
@@ -419,7 +446,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const quizId = parseInt(req.params.quizId);
+      const quizId = parseInt(String(req.params.quizId));
       const quiz = await storage.getSomaQuiz(quizId);
       if (!quiz || quiz.authorId !== tutorId) {
         return res.status(403).json({ message: "Access denied" });
@@ -461,10 +488,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const studentId = req.query.studentId as string;
       if (!studentId) return res.status(400).json({ message: "studentId required" });
       const assignments = await storage.getQuizAssignmentsForStudent(studentId);
-      const assignedQuizzes = assignments
-        .filter((a) => !a.quiz.isArchived && a.quiz.status === "published")
-        .map((a) => a.quiz);
-      res.json(assignedQuizzes);
+      const unique = new Map<number, (typeof assignments)[number]["quiz"]>();
+      for (const assignment of assignments) {
+        const quiz = assignment.quiz;
+        if (quiz.isArchived || quiz.status !== "published") continue;
+        unique.set(quiz.id, quiz);
+      }
+      res.json(Array.from(unique.values()));
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });
     }
@@ -1186,7 +1216,7 @@ Sections to include:
       }
 
       const { topic, title, curriculumContext, subject, syllabus, level } = parsed.data;
-      const { assignTo } = req.body; // array of student IDs
+      const requestedStudentIds = sanitizeStudentIds(req.body?.assignTo);
       const quizTitle = title || `${topic} Quiz`;
 
       const result = await generateAuditedQuiz({
@@ -1194,47 +1224,40 @@ Sections to include:
         copilotPrompt: curriculumContext,
       });
 
-      const quiz = await storage.createSomaQuiz({
-        title: quizTitle,
-        topic,
-        subject,
-        syllabus,
-        level,
-        curriculumContext: curriculumContext || null,
-        authorId: tutorId,
-        status: "published",
-        isArchived: false,
-      });
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      const adoptedIds = new Set(adopted.map((s) => s.id));
+      const validAssignedStudentIds = requestedStudentIds.filter((id) => adoptedIds.has(id));
 
-      const insertedQuestions = await storage.createSomaQuestions(
-        result.questions.map((q) => ({
-          quizId: quiz.id,
+      const bundle = await storage.createSomaQuizBundle({
+        quiz: {
+          title: quizTitle,
+          topic,
+          subject,
+          syllabus,
+          level,
+          curriculumContext: curriculumContext || null,
+          authorId: tutorId,
+          status: "published",
+          isArchived: false,
+        },
+        questions: result.questions.map((q) => ({
           stem: q.stem,
           options: q.options,
           correctAnswer: q.correct_answer,
           explanation: q.explanation,
           marks: q.marks,
-        }))
-      );
-
-      // Auto-assign to selected students
-      let assignments: any[] = [];
-      if (Array.isArray(assignTo) && assignTo.length > 0) {
-        const adopted = await storage.getAdoptedStudents(tutorId);
-        const adoptedIds = new Set(adopted.map((s) => s.id));
-        const validIds = assignTo.filter((id: string) => adoptedIds.has(id));
-        if (validIds.length > 0) {
-          assignments = await storage.createQuizAssignments(quiz.id, validIds);
-        }
-      }
+        })),
+        assignedStudentIds: validAssignedStudentIds,
+      });
 
       res.json({
-        quiz,
-        questions: insertedQuestions,
-        assignments: assignments.length,
+        quiz: bundle.quiz,
+        questions: bundle.questions,
+        assignments: bundle.assignments.length,
+        assignedStudentIds: validAssignedStudentIds,
         pipeline: {
           stages: ["Claude Sonnet (Maker)", "Gemini 2.5 Flash (Checker)"],
-          totalQuestions: insertedQuestions.length,
+          totalQuestions: bundle.questions.length,
         },
       });
     } catch (err: any) {
@@ -1288,6 +1311,12 @@ Sections to include:
         return res.status(400).json({ message: "Missing studentId, studentName, or answers" });
       }
 
+      const assignments = await storage.getQuizAssignmentsForStudent(studentId);
+      const hasAssignment = assignments.some((assignment) => assignment.quizId === quizId);
+      if (!hasAssignment) {
+        return res.status(403).json({ message: "Quiz is not assigned to this student" });
+      }
+
       const alreadySubmitted = await storage.checkSomaSubmission(quizId, studentId);
       if (alreadySubmitted) {
         return res.status(409).json({ message: "You have already submitted this quiz." });
@@ -1298,9 +1327,11 @@ Sections to include:
         return res.status(404).json({ message: "No questions found for this quiz." });
       }
 
+      const sanitizedAnswers = sanitizeSubmittedAnswers(allQuestions, answers);
+
       let totalScore = 0;
       for (const q of allQuestions) {
-        if (answers[String(q.id)] === q.correctAnswer) {
+        if (sanitizedAnswers[String(q.id)] === q.correctAnswer) {
           totalScore += q.marks;
         }
       }
@@ -1311,7 +1342,7 @@ Sections to include:
         studentName,
         score: totalScore,
         status: "pending",
-        answersJson: answers,
+        answersJson: sanitizedAnswers,
       });
 
       res.json(report);
