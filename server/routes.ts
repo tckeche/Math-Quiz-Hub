@@ -575,7 +575,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/tutor/quizzes/:quizId/assignments/:studentId", requireTutor, async (req, res) => {
     try {
       const quizId = parseInt(String(req.params.quizId));
-      const studentId = req.params.studentId;
+      const studentId = String(req.params.studentId);
       if (isNaN(quizId) || !studentId) return res.status(400).json({ message: "Invalid parameters" });
       await storage.deleteQuizAssignment(quizId, studentId);
       res.json({ message: "Assignment removed" });
@@ -587,7 +587,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/tutor/quizzes/:quizId/assignments/:studentId/extend", requireTutor, async (req, res) => {
     try {
       const quizId = parseInt(String(req.params.quizId));
-      const studentId = req.params.studentId;
+      const studentId = String(req.params.studentId);
       const hours = parseInt(String(req.body?.hours || 24));
       if (isNaN(quizId) || !studentId) return res.status(400).json({ message: "Invalid parameters" });
       await storage.extendAssignmentDueDate(quizId, studentId, hours);

@@ -69,7 +69,7 @@ export default function TutorStudentDetail() {
 
   const student = adoptedStudents.find((s) => s.id === studentId);
 
-  const { data: performance, isLoading: perfLoading } = useQuery<{ reports: ReportWithQuiz[]; submissions: SubmissionWithQuiz[] }>({
+  const { data: performance, isLoading: perfLoading } = useQuery<{ reports: ReportWithQuiz[]; submissions: any[] }>({
     queryKey: ["/api/tutor/students", studentId, "performance"],
     queryFn: async () => {
       const res = await fetch(`/api/tutor/students/${studentId}/performance`, { headers });
