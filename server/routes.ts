@@ -516,8 +516,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get tutor's quizzes
   app.get("/api/tutor/quizzes", requireTutor, async (req, res) => {
     try {
-      const allQuizzes = await storage.getSomaQuizzes();
-      res.json(allQuizzes.filter((q) => !q.isArchived));
+      const tutorId = (req as any).tutorId;
+      const quizzes = await storage.getSomaQuizzesByAuthor(tutorId);
+      res.json(quizzes.filter((q) => !q.isArchived));
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
     }
