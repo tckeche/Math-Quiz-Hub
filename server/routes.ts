@@ -121,15 +121,35 @@ function getAdminSessionToken(req: Request) {
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const token = getAdminSessionToken(req);
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized" });
+  if (token) {
+    try {
+      jwt.verify(token, getJwtSecret());
+      return next();
+    } catch {}
   }
-  try {
-    jwt.verify(token, getJwtSecret());
-    next();
-  } catch {
-    return res.status(401).json({ message: "Unauthorized" });
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const supaToken = authHeader.slice(7);
+    const secret = getSupabaseJwtSecret();
+    if (secret) {
+      try {
+        const decoded = jwt.verify(supaToken, secret) as { sub?: string };
+        const userId = decoded.sub;
+        if (userId) {
+          return storage.getSomaUserById(userId).then((user) => {
+            if (user && (user.role === "tutor" || user.role === "super_admin")) {
+              (req as any).tutorId = userId;
+              (req as any).tutorUser = user;
+              (req as any).authUser = { id: user.id, email: user.email, role: user.role };
+              return next();
+            }
+            return res.status(401).json({ message: "Unauthorized" });
+          }).catch(() => res.status(401).json({ message: "Unauthorized" }));
+        }
+      } catch {}
+    }
   }
+  return res.status(401).json({ message: "Unauthorized" });
 }
 
 const TUTOR_EMAIL_DOMAIN = process.env.TUTOR_EMAIL_DOMAIN || "melaniacalvin.com";
@@ -725,13 +745,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/admin/session", async (req, res) => {
     const token = getAdminSessionToken(req);
-    if (!token) return res.json({ authenticated: false });
-    try {
-      jwt.verify(token, getJwtSecret());
-      res.json({ authenticated: true });
-    } catch {
-      res.json({ authenticated: false });
+    if (token) {
+      try {
+        jwt.verify(token, getJwtSecret());
+        return res.json({ authenticated: true });
+      } catch {}
     }
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const supaToken = authHeader.slice(7);
+      const secret = getSupabaseJwtSecret();
+      if (secret) {
+        try {
+          const decoded = jwt.verify(supaToken, secret) as { sub?: string };
+          if (decoded.sub) {
+            const user = await storage.getSomaUserById(decoded.sub);
+            if (user && (user.role === "tutor" || user.role === "super_admin")) {
+              return res.json({ authenticated: true });
+            }
+          }
+        } catch {}
+      }
+    }
+    res.json({ authenticated: false });
   });
 
   app.post("/api/admin/logout", async (req, res) => {

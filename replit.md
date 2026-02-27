@@ -27,7 +27,7 @@ A full-stack educational assessment platform (SOMA). Students take interactive M
 - `server/storage.ts` - Storage layer (DatabaseStorage + MemoryStorage implementing IStorage)
 - `server/routes.ts` - All API routes including AI endpoints
 - `server/seed.ts` - Database seeding with sample soma quizzes
-- `client/src/pages/builder.tsx` - Quiz builder: AI copilot creates soma quizzes. Mobile-first responsive layout. Copilot auto-creates quiz and saves questions to soma_questions. Supports create (`/admin/builder`) and edit (`/admin/builder/:id`) modes.
+- `client/src/pages/builder.tsx` - Quiz builder: AI copilot creates soma quizzes. Mobile-first responsive layout. Copilot auto-creates quiz and saves questions to soma_questions. Supports create (`/admin/builder`) and edit (`/admin/builder/:id`) modes. Dual-auth: accepts legacy admin cookie OR Supabase JWT (tutor/super_admin). Sends `Authorization: Bearer <supabase_access_token>` header when using Supabase auth.
 - `client/src/lib/subjectColors.ts` - Shared subject color & icon utility.
 - `client/src/pages/StudentDashboard.tsx` - Student dashboard: available quizzes via auth-gated `/api/quizzes/available`, completed items (soma reports only), subject donut charts, AI analysis.
 - `client/src/pages/StudentAuth.tsx` - Student login/signup with Supabase Auth (glassmorphism UI)

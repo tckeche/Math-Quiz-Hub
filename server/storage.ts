@@ -10,7 +10,7 @@ import {
   tutorStudents, quizAssignments, tutorComments,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ne, notInArray, inArray, or, isNull, sql, count, avg, sum } from "drizzle-orm";
+import { eq, and, ne, inArray, or, isNull, sql, count, avg, sum } from "drizzle-orm";
 
 function sanitizeName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
@@ -229,22 +229,17 @@ class DatabaseStorage implements IStorage {
   }
 
   async getAvailableStudents(tutorId: string): Promise<SomaUser[]> {
-    const adopted = await this.database
-      .select({ studentId: tutorStudents.studentId })
-      .from(tutorStudents)
-      .where(eq(tutorStudents.tutorId, tutorId));
-    const adoptedIds = adopted.map((a) => a.studentId);
-    const roleFilter = or(eq(somaUsers.role, "student"), isNull(somaUsers.role));
-    if (adoptedIds.length === 0) {
-      return this.database.select().from(somaUsers)
-        .where(and(roleFilter, ne(somaUsers.id, tutorId)));
-    }
-    return this.database.select().from(somaUsers)
-      .where(and(
-        roleFilter,
-        ne(somaUsers.id, tutorId),
-        notInArray(somaUsers.id, adoptedIds),
-      ));
+    const adopted = await this.getAdoptedStudents(tutorId);
+    const adoptedIds = new Set(adopted.map((s) => s.id));
+    const allStudents = await this.database.select().from(somaUsers)
+      .where(
+        and(
+          or(eq(somaUsers.role, "student"), isNull(somaUsers.role)),
+          ne(somaUsers.id, tutorId),
+        )
+      );
+    if (adoptedIds.size === 0) return allStudents;
+    return allStudents.filter((s) => !adoptedIds.has(s.id));
   }
 
   async createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]> {

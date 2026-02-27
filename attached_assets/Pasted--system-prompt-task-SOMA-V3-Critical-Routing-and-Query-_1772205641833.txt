@@ -1,0 +1,27 @@
+{
+  "system_prompt": {
+    "task": "SOMA V3 - Critical Routing and Query Repairs",
+    "role": "Lead Systems Debugger",
+    "objective": "Fix two critical blockers: 1) The Quiz Builder is improperly redirecting Tutors to the legacy `/admin` login. 2) The 'Add Students' global directory is returning an empty array due to a flawed Drizzle ORM query.",
+    "execution_instructions": "Read the exact diagnosis below. Rewrite the frontend routing for the builder and rewrite the database storage query for the students using the foolproof methods provided. Output the exact code blocks changed."
+  },
+  "repair_targets": {
+    "1_quiz_builder_admin_redirect_fix": {
+      "target_files": [
+        "client/src/pages/TutorDashboard.tsx", 
+        "client/src/components/AdminQuizBuilder.tsx", 
+        "client/src/App.tsx"
+      ],
+      "diagnostic": "The 'Create Assessment' button is likely pointing to a legacy route (e.g., `/admin/builder`) that is wrapped in a legacy auth guard, causing a redirect to `/login` or requiring an admin session.",
+      "repair_action": "1. Ensure the 'Create Assessment' button routes to a tutor-owned path (e.g., `/tutor/assessments/new`). 2. Move the `AdminQuizBuilder` (rename it to `TutorQuizBuilder`) so it sits inside the `TutorLayout`, NOT the old admin layout. 3. Verify that the API calls made inside the builder (e.g., POSTing the new quiz) use `authFetch` with the Supabase JWT, NOT the old admin endpoints."
+    },
+    "2_foolproof_available_students_query": {
+      "target_files": [
+        "server/storage.ts", 
+        "server/routes.ts"
+      ],
+      "diagnostic": "The `getAvailableStudents` query is failing either because Drizzle's `notInArray` crashes on empty arrays, or the `LEFT JOIN` logic is filtering out everyone.",
+      "repair_action": "Rewrite the storage method using this foolproof two-step logic:\nStep 1: Fetch ALL adopted student IDs for this tutor: `const adopted = await this.getAdoptedStudents(tutorId); const adoptedIds = adopted.map(s => s.id);`\nStep 2: Fetch all users where `(role === 'student' OR role IS NULL)`. Use Drizzle's `or(eq(users.role, 'student'), isNull(users.role))`.\nStep 3: If `adoptedIds.length > 0`, explicitly filter them out in memory or using a safe `notInArray(users.id, adoptedIds)`. Return the final list. Do not use complex joins."
+    }
+  }
+}

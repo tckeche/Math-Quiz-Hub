@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { SomaQuiz, SomaQuestion } from "@shared/schema";
@@ -19,6 +19,8 @@ import 'katex/dist/katex.min.css';
 import { renderLatex, unescapeLatex } from '@/lib/render-latex';
 import SomaQuizEngine from "./soma-quiz";
 import type { StudentQuestion } from "./soma-quiz";
+import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 
 const LEVEL_OPTIONS = ["University", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "IGCSE", "AS", "A2", "Other"];
 
@@ -60,18 +62,73 @@ export default function BuilderPage() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const [supaSession, setSupaSession] = useState<Session | null>(null);
+  const [supaLoading, setSupaLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSupaSession(s);
+      setSupaLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSupaSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const tutorUserId = supaSession?.user?.id;
+  const supaAccessToken = supaSession?.access_token;
+  const isTutorAuth = !!tutorUserId;
+  const backLink = isTutorAuth ? "/tutor/assessments" : "/admin";
+
+  const authHeaders = useCallback((): Record<string, string> => {
+    if (supaAccessToken) return { "Authorization": `Bearer ${supaAccessToken}` };
+    return {};
+  }, [supaAccessToken]);
+
+  const authFetch = useCallback(async (url: string, opts: RequestInit = {}): Promise<Response> => {
+    const headers = { ...authHeaders(), ...(opts.headers || {}) };
+    return fetch(url, { ...opts, headers, credentials: "include" });
+  }, [authHeaders]);
+
+  const authApiRequest = useCallback(async (method: string, url: string, data?: unknown): Promise<Response> => {
+    const headers: Record<string, string> = { ...authHeaders() };
+    if (data) headers["Content-Type"] = "application/json";
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      try {
+        const json = JSON.parse(text);
+        throw new Error(json.message || text);
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+        throw new Error(text || res.statusText);
+      }
+    }
+    return res;
+  }, [authHeaders]);
+
   const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
-    queryKey: ["/api/admin/session"],
+    queryKey: ["/api/admin/session", tutorUserId],
     queryFn: async () => {
-      const res = await fetch("/api/admin/session", { credentials: "include" });
+      const res = await authFetch("/api/admin/session");
       return res.json();
     },
+    enabled: !supaLoading,
   });
 
   const authenticated = adminSession?.authenticated === true;
 
   const { data: quizData, isLoading: quizLoading } = useQuery<SomaQuiz & { questions: SomaQuestion[] }>({
     queryKey: ["/api/admin/quizzes", activeQuizId],
+    queryFn: async () => {
+      const res = await authFetch(`/api/admin/quizzes/${activeQuizId}`);
+      if (!res.ok) throw new Error("Failed to load quiz");
+      return res.json();
+    },
     enabled: authenticated && activeQuizId !== null,
   });
 
@@ -103,7 +160,7 @@ export default function BuilderPage() {
   const ensureQuizExists = async (): Promise<number> => {
     if (activeQuizId) return activeQuizId;
     if (!title.trim()) throw new Error("Please fill in a quiz title before generating questions.");
-    const quizRes = await apiRequest("POST", "/api/admin/quizzes", {
+    const quizRes = await authApiRequest("POST", "/api/admin/quizzes", {
       title: title.trim(),
       topic: title.trim(),
       syllabus: syllabus || "IEB",
@@ -143,7 +200,7 @@ export default function BuilderPage() {
       const docIds = docContext.map((d) => d.fileId);
 
       animatePipeline(2);
-      const res = await apiRequest("POST", "/api/admin/copilot-chat", {
+      const res = await authApiRequest("POST", "/api/admin/copilot-chat", {
         message: enrichedMessage,
         documentIds: docIds.length > 0 ? docIds : undefined,
       });
@@ -159,7 +216,7 @@ export default function BuilderPage() {
         const quizId = await ensureQuizExists();
 
         animatePipeline(4);
-        await apiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions: data.drafts });
+        await authApiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions: data.drafts });
 
         await queryClient.refetchQueries({ queryKey: ["/api/admin/quizzes", quizId] });
         queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
@@ -194,7 +251,7 @@ export default function BuilderPage() {
     mutationFn: async () => {
       if (!activeQuizId) throw new Error("No quiz to update");
       if (!title.trim()) throw new Error("Title is required");
-      await apiRequest("PUT", `/api/admin/quizzes/${activeQuizId}`, {
+      await authApiRequest("PUT", `/api/admin/quizzes/${activeQuizId}`, {
         title: title.trim(),
         syllabus: syllabus || null,
         level: level || null,
@@ -212,7 +269,7 @@ export default function BuilderPage() {
 
   const deleteQuestionMutation = useMutation({
     mutationFn: async (questionId: number) =>
-      apiRequest("DELETE", `/api/admin/questions/${questionId}`),
+      authApiRequest("DELETE", `/api/admin/questions/${questionId}`),
     onSuccess: (_data, questionId) => {
       setSavedQuestions((prev) => prev.filter((q) => q.id !== questionId));
       queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
@@ -227,10 +284,9 @@ export default function BuilderPage() {
     try {
       const uploadForm = new FormData();
       uploadForm.append("pdf", file);
-      const uploadRes = await fetch("/api/admin/upload-supporting-doc", {
+      const uploadRes = await authFetch("/api/admin/upload-supporting-doc", {
         method: "POST",
         body: uploadForm,
-        credentials: "include",
       });
       let fileId: string | null = null;
       if (uploadRes.ok) {
@@ -271,7 +327,7 @@ export default function BuilderPage() {
       marks: q.marks,
     } as StudentQuestion)), [savedQuestions, activeQuizId]);
 
-  if (sessionLoading) {
+  if (supaLoading || sessionLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
@@ -279,15 +335,15 @@ export default function BuilderPage() {
     );
   }
 
-  if (sessionError) {
-    return <div className="min-h-screen bg-background p-4 md:p-6 text-red-400">Failed to verify admin session.</div>;
+  if (sessionError && !isTutorAuth) {
+    return <div className="min-h-screen bg-background p-4 md:p-6 text-red-400">Failed to verify session.</div>;
   }
 
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="glass-card p-8 text-center">
-          <p className="text-slate-300">Please log in via <Link href="/admin" className="text-violet-400 underline">/admin</Link> first.</p>
+          <p className="text-slate-300">Please <Link href="/login" className="text-violet-400 underline">log in</Link> to access the builder.</p>
         </div>
       </div>
     );
@@ -315,7 +371,7 @@ export default function BuilderPage() {
       <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
-            <Link href="/admin">
+            <Link href={backLink}>
               <Button className="glow-button-outline min-h-[44px] md:min-h-0" size="sm" data-testid="button-back-admin">
                 <ArrowLeft className="w-4 h-4 md:mr-1" />
                 <span className="hidden md:inline">Back</span>
