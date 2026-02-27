@@ -20,6 +20,14 @@ function sanitizeName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+type SomaQuizBundleQuestionInput = {
+  stem: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
+  marks?: number;
+};
+
 export interface IStorage {
   createQuiz(quiz: InsertQuiz): Promise<Quiz>;
   getQuizzes(): Promise<Quiz[]>;
@@ -45,6 +53,11 @@ export interface IStorage {
   upsertSomaUser(user: InsertSomaUser): Promise<SomaUser>;
 
   createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz>;
+  createSomaQuizBundle(input: {
+    quiz: InsertSomaQuiz;
+    questions: SomaQuizBundleQuestionInput[];
+    assignedStudentIds?: string[];
+  }): Promise<{ quiz: SomaQuiz; questions: SomaQuestion[]; assignments: QuizAssignment[] }>;
   getSomaQuizzes(): Promise<SomaQuiz[]>;
   getSomaQuiz(id: number): Promise<SomaQuiz | undefined>;
   createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]>;
@@ -204,6 +217,30 @@ class DatabaseStorage implements IStorage {
   async createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz> {
     const [result] = await this.database.insert(somaQuizzes).values(quiz).returning();
     return result;
+  }
+
+  async createSomaQuizBundle(input: {
+    quiz: InsertSomaQuiz;
+    questions: SomaQuizBundleQuestionInput[];
+    assignedStudentIds?: string[];
+  }): Promise<{ quiz: SomaQuiz; questions: SomaQuestion[]; assignments: QuizAssignment[] }> {
+    return this.database.transaction(async (tx) => {
+      const [quiz] = await tx.insert(somaQuizzes).values(input.quiz).returning();
+      const questions = input.questions.length === 0
+        ? []
+        : await tx.insert(somaQuestions).values(
+          input.questions.map((q) => ({ ...q, quizId: quiz.id }))
+        ).returning();
+
+      const uniqueStudentIds = Array.from(new Set(input.assignedStudentIds ?? []));
+      const assignments = uniqueStudentIds.length === 0
+        ? []
+        : await tx.insert(quizAssignments).values(
+          uniqueStudentIds.map((studentId) => ({ quizId: quiz.id, studentId, status: "pending" }))
+        ).onConflictDoNothing().returning();
+
+      return { quiz, questions, assignments };
+    });
   }
 
   async getSomaQuizzes(): Promise<SomaQuiz[]> {
@@ -526,6 +563,17 @@ class MemoryStorage implements IStorage {
     };
     this.somaQuizzesList.push(created);
     return created;
+  }
+
+  async createSomaQuizBundle(input: {
+    quiz: InsertSomaQuiz;
+    questions: SomaQuizBundleQuestionInput[];
+    assignedStudentIds?: string[];
+  }): Promise<{ quiz: SomaQuiz; questions: SomaQuestion[]; assignments: QuizAssignment[] }> {
+    const quiz = await this.createSomaQuiz(input.quiz);
+    const questions = await this.createSomaQuestions(input.questions.map((q) => ({ ...q, quizId: quiz.id })));
+    const assignments = await this.createQuizAssignments(quiz.id, Array.from(new Set(input.assignedStudentIds ?? [])));
+    return { quiz, questions, assignments };
   }
 
   async getSomaQuizzes(): Promise<SomaQuiz[]> { return [...this.somaQuizzesList]; }
