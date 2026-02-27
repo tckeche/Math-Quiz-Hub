@@ -394,7 +394,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
         <Button
           size="sm"
           className="hover:bg-slate-800 bg-transparent text-slate-400 transition-colors px-4 py-2 rounded-lg flex items-center gap-2 min-h-[44px]"
-          onClick={() => { (props as PreviewProps).onExitPreview(); setLocation("/admin"); }}
+          onClick={() => { (props as PreviewProps).onExitPreview(); setLocation("/tutor/assessments"); }}
           data-testid="button-preview-to-dashboard"
         >
           <Home className="w-4 h-4" />

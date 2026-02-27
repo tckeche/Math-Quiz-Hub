@@ -157,7 +157,7 @@ export default function TutorAssessments() {
           <div className={`${CARD_CLASS} text-center py-12`}>
             <BookOpen className="w-12 h-12 mx-auto text-slate-600 mb-4" />
             <p className="text-sm text-slate-400">No assessments created yet</p>
-            <p className="text-xs text-slate-500 mt-1">Use the Admin panel to generate assessments through the Copilot</p>
+            <p className="text-xs text-slate-500 mt-1">Use the Create Assessment button on your Dashboard to generate assessments with the AI Copilot</p>
           </div>
         ) : (
           <div className="grid gap-3">
