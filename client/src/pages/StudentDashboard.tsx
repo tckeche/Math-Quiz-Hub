@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import { supabase, authFetch } from "@/lib/supabase";
 import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
 import DOMPurify from "dompurify";
-import type { Quiz, SomaQuiz } from "@shared/schema";
+import type { SomaQuiz } from "@shared/schema";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import {
@@ -27,15 +27,6 @@ interface ReportWithQuiz {
   quiz: SomaQuiz;
 }
 
-interface SubmissionWithQuiz {
-  id: number;
-  studentId: number;
-  quizId: number;
-  totalScore: number;
-  maxPossibleScore: number;
-  submittedAt: string;
-  quiz: Quiz;
-}
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
 const SECTION_LABEL = "text-slate-400 text-xs font-semibold tracking-wider uppercase";
@@ -165,11 +156,6 @@ export default function StudentDashboard() {
   const userId = session?.user?.id;
   const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
 
-  const { data: quizzes, isLoading: quizzesLoading } = useQuery<Quiz[]>({
-    queryKey: ["/api/quizzes"],
-  });
-
-  // Fetch only quizzes explicitly assigned to this student (server-side JWT auth)
   const { data: somaQuizzes, isLoading: somaLoading } = useQuery<SomaQuiz[]>({
     queryKey: ["/api/quizzes/available", userId],
     queryFn: async () => {
@@ -192,23 +178,6 @@ export default function StudentDashboard() {
     enabled: !!userId,
   });
 
-  const { data: submissions = [], isLoading: subsLoading } = useQuery<SubmissionWithQuiz[]>({
-    queryKey: ["/api/student/submissions", userId],
-    queryFn: async () => {
-      if (!userId) return [];
-      const res = await authFetch("/api/student/submissions");
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!userId,
-  });
-
-  const completedQuizIds = useMemo(() => {
-    const ids = new Set<number>();
-    submissions.forEach((s) => ids.add(s.quizId));
-    return ids;
-  }, [submissions]);
-
   const completedSomaQuizIds = useMemo(() => {
     const ids = new Set<number>();
     reports.forEach((r) => ids.add(r.quizId));
@@ -217,18 +186,8 @@ export default function StudentDashboard() {
 
   const subjectStats = useMemo(() => {
     const map: Record<string, { total: number; earned: number }> = {};
-    // Only use admin-assigned subjects from regular quizzes
-    submissions.forEach((s) => {
-      const subj = s.quiz.subject;
-      if (!subj) return; // skip quizzes without an admin-assigned subject
-      if (!map[subj]) map[subj] = { total: 0, earned: 0 };
-      map[subj].total += s.maxPossibleScore;
-      map[subj].earned += s.totalScore;
-    });
-    // Group soma reports under their quiz's topic only if it matches an admin subject
     reports.forEach((r) => {
-      const subj = r.quiz.topic;
-      if (!subj) return;
+      const subj = r.quiz.topic || r.quiz.subject || "General";
       if (!map[subj]) map[subj] = { total: 0, earned: 0 };
       map[subj].total += 100;
       map[subj].earned += r.score;
@@ -237,7 +196,7 @@ export default function StudentDashboard() {
       subject,
       percentage: total > 0 ? (earned / total) * 100 : 0,
     }));
-  }, [submissions, reports]);
+  }, [reports]);
 
   const bestSubject = useMemo(() => {
     if (!subjectStats.length) return null;
