@@ -130,6 +130,14 @@ export const quizAssignments = pgTable("quiz_assignments", {
   uniqueIndex("quiz_assignment_unique_idx").on(table.quizId, table.studentId),
 ]);
 
+export const tutorComments = pgTable("tutor_comments", {
+  id: serial("id").primaryKey(),
+  tutorId: uuid("tutor_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
+  comment: text("comment").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const somaQuizzesRelations = relations(somaQuizzes, ({ one, many }) => ({
   questions: many(somaQuestions),
   reports: many(somaReports),
@@ -210,3 +218,7 @@ export type TutorStudent = typeof tutorStudents.$inferSelect;
 export type InsertTutorStudent = z.infer<typeof insertTutorStudentSchema>;
 export type QuizAssignment = typeof quizAssignments.$inferSelect;
 export type InsertQuizAssignment = z.infer<typeof insertQuizAssignmentSchema>;
+
+export const insertTutorCommentSchema = createInsertSchema(tutorComments).omit({ id: true, createdAt: true });
+export type TutorComment = typeof tutorComments.$inferSelect;
+export type InsertTutorComment = z.infer<typeof insertTutorCommentSchema>;

@@ -31,6 +31,10 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `client/src/pages/quiz.tsx` - Student quiz interface (entry gate, exam view, timer, submission, single-attempt enforcement)
 - `client/src/pages/StudentAuth.tsx` - Student login/signup with Supabase Auth (glassmorphism UI)
 - `client/src/components/ProtectedRoute.tsx` - Auth-gated route wrapper using supabase.auth.onAuthStateChange
+- `client/src/pages/TutorDashboard.tsx` - Tutor analytics dashboard with cohort donut charts, stat cards, recent submissions feed. Multi-page nav: Dashboard (active), Students, Assessments.
+- `client/src/pages/TutorStudents.tsx` - Tutor student roster with adopt/remove, search, clickable drill-down links to `/tutor/students/:id`
+- `client/src/pages/TutorStudentDetail.tsx` - Student drill-down: assessment history with scores, private tutor notes/comments system
+- `client/src/pages/TutorAssessments.tsx` - Tutor assessment management with assign-to-students modal
 
 ### API Endpoints
 - `GET /api/quizzes` - List all quizzes
@@ -88,3 +92,4 @@ A full-stack Mathematics MCQ Quiz Generation and Assessment Platform. Students c
 - `soma_quizzes` - id, title, topic, syllabus (default 'IEB'), level (default 'Grade 6-12'), subject, curriculum_context, status (draft/published), is_archived (default false), created_at
 - `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation (NOT NULL), marks
 - `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status (default: 'pending'), ai_feedback_html, answers_json (jsonb, student's submitted answers), created_at
+- `tutor_comments` - id, tutor_id (uuid FK → soma_users), student_id (uuid FK → soma_users), comment (text), created_at

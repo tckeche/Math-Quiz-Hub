@@ -9,9 +9,10 @@ import {
   type SomaReport, type InsertSomaReport,
   type TutorStudent, type InsertTutorStudent,
   type QuizAssignment, type InsertQuizAssignment,
+  type TutorComment, type InsertTutorComment,
   quizzes, questions, students, submissions,
   somaQuizzes, somaQuestions, somaUsers, somaReports,
-  tutorStudents, quizAssignments,
+  tutorStudents, quizAssignments, tutorComments,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, ne, notInArray, inArray } from "drizzle-orm";
@@ -86,6 +87,10 @@ export interface IStorage {
 
   // Multi-tenant: Tutor quiz management
   getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]>;
+
+  // Tutor comments
+  addTutorComment(comment: InsertTutorComment): Promise<TutorComment>;
+  getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -432,6 +437,17 @@ class DatabaseStorage implements IStorage {
       .orderBy(somaQuizzes.createdAt);
   }
 
+  async addTutorComment(comment: InsertTutorComment): Promise<TutorComment> {
+    const [result] = await this.database.insert(tutorComments).values(comment).returning();
+    return result;
+  }
+
+  async getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]> {
+    return this.database.select().from(tutorComments)
+      .where(and(eq(tutorComments.tutorId, tutorId), eq(tutorComments.studentId, studentId)))
+      .orderBy(tutorComments.createdAt);
+  }
+
 }
 
 class MemoryStorage implements IStorage {
@@ -727,6 +743,16 @@ class MemoryStorage implements IStorage {
 
   async getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]> {
     return this.somaQuizzesList.filter((q) => q.authorId === authorId);
+  }
+
+  private tutorCommentsList: TutorComment[] = [];
+  async addTutorComment(comment: InsertTutorComment): Promise<TutorComment> {
+    const tc: TutorComment = { id: this.tutorCommentsList.length + 1, ...comment, createdAt: new Date() };
+    this.tutorCommentsList.push(tc);
+    return tc;
+  }
+  async getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]> {
+    return this.tutorCommentsList.filter((c) => c.tutorId === tutorId && c.studentId === studentId);
   }
 
 }

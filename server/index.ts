@@ -94,6 +94,7 @@ httpServer.listen(
           await client.query(`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS syllabus TEXT`);
           await client.query(`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS level TEXT`);
           await client.query(`ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS subject TEXT`);
+          await client.query(`CREATE TABLE IF NOT EXISTS tutor_comments (id SERIAL PRIMARY KEY, tutor_id UUID NOT NULL REFERENCES soma_users(id) ON DELETE CASCADE, student_id UUID NOT NULL REFERENCES soma_users(id) ON DELETE CASCADE, comment TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`);
           log("schema migrations applied", "bootstrap");
         } finally {
           client.release();

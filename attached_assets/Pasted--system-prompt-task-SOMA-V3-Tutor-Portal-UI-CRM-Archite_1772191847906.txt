@@ -1,0 +1,34 @@
+{
+  "system_prompt": {
+    "task": "SOMA V3 - Tutor Portal UI & CRM Architecture",
+    "role": "Lead Frontend Architect & Full-Stack Developer",
+    "objective": "Build a comprehensive, multi-page Tutor Portal that visually mirrors the Student Dashboard's glassmorphism aesthetic but provides cohort-level analytics, student adoption workflows, and manual commenting.",
+    "execution_instructions": "Read the JSON blueprint below. Scaffold the new pages, update the navigation router, and wire up the database queries for the Tutor CRM. Provide a summary of created files."
+  },
+  "architecture_updates": {
+    "1_tutor_navigation_and_layout": {
+      "target_files": ["client/src/components/TutorLayout.tsx", "App.tsx"],
+      "action": "Create a unified Tutor layout with a sidebar or top-nav matching the Student UI. The nav must include: Dashboard, Student Management, and Quiz Builder."
+    },
+    "2_tutor_dashboard_view": {
+      "target_files": ["client/src/pages/TutorDashboard.tsx"],
+      "ui_components": "Re-use the Recharts Donut components, but map the data to 'Cohort Averages' by subject. Add a 'Recent Submissions' feed displaying 'Student Name completed [Quiz] - Score: X%'.",
+      "styling": "Enforce the dark glassmorphism theme ('bg-slate-900/80 backdrop-blur-md')."
+    },
+    "3_student_management_and_adoption": {
+      "target_files": ["client/src/pages/TutorStudents.tsx", "server/routes.ts"],
+      "global_directory_modal": "Create an 'Add Students' button that opens a searchable modal. Fetch all users where 'role === student'. Display a list with 'Adopt' buttons. Clicking 'Adopt' inserts a row into the 'TutorStudents' table.",
+      "roster_view": "Display a data table or grid of currently adopted students.",
+      "student_drill_down": "When a tutor clicks an adopted student, show a detailed view of their past quizzes and their 'Global AI Tutor' weaknesses."
+    },
+    "4_tutor_comments_database_update": {
+      "target_files": ["schema.ts", "client/src/pages/StudentDetail.tsx"],
+      "schema_change": "Add a 'TutorComments' table linked to 'student_id' and 'tutor_id', OR add a 'tutor_notes' text field to the 'QuizAssignments' table.",
+      "ui_implementation": "In the student drill-down view, add a text area for the tutor to leave private notes about the student's progress."
+    },
+    "5_quiz_assignment_enforcement": {
+      "target_files": ["client/src/components/AdminQuizBuilder.tsx"],
+      "action": "Ensure the Quiz Builder includes a 'Select Students' dropdown that strictly maps over the Tutor's adopted roster, so the quiz is instantly assigned upon Copilot generation."
+    }
+  }
+}

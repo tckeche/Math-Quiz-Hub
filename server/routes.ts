@@ -458,6 +458,106 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/tutor/students/:studentId/comments", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const { studentId } = req.params;
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
+      const comments = await storage.getTutorComments(tutorId, studentId);
+      res.json(comments);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/tutor/students/:studentId/comments", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const { studentId } = req.params;
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
+      const { comment } = req.body;
+      if (!comment?.trim()) return res.status(400).json({ message: "Comment is required" });
+      const result = await storage.addTutorComment({ tutorId, studentId, comment: comment.trim() });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to add comment" });
+    }
+  });
+
+  app.get("/api/tutor/students/:studentId/performance", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const { studentId } = req.params;
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
+      const [reports, submissions] = await Promise.all([
+        storage.getSomaReportsByStudentId(studentId),
+        storage.getSubmissionsByStudentUserId(studentId),
+      ]);
+
+      const reportsWithMax = await Promise.all(reports.map(async (r) => {
+        const questions = await storage.getSomaQuestionsByQuizId(r.quizId);
+        const maxScore = questions.reduce((s, q) => s + q.marks, 0);
+        return { ...r, maxScore };
+      }));
+
+      res.json({ reports: reportsWithMax, submissions });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch performance" });
+    }
+  });
+
+  app.get("/api/tutor/dashboard-stats", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const adoptedStudents = await storage.getAdoptedStudents(tutorId);
+      const tutorQuizzes = await storage.getSomaQuizzesByAuthor(tutorId);
+
+      const allReports: { studentName: string; score: number; quizTitle: string; subject: string | null; createdAt: string }[] = [];
+      const subjectScores: Record<string, { total: number; max: number; count: number }> = {};
+
+      for (const student of adoptedStudents) {
+        const reports = await storage.getSomaReportsByStudentId(student.id);
+        for (const r of reports) {
+          const maxScore = r.quiz ? (await storage.getSomaQuestionsByQuizId(r.quizId)).reduce((s, q) => s + q.marks, 0) : 0;
+          const subject = r.quiz?.subject || "General";
+          if (!subjectScores[subject]) subjectScores[subject] = { total: 0, max: 0, count: 0 };
+          subjectScores[subject].total += r.score;
+          subjectScores[subject].max += maxScore;
+          subjectScores[subject].count += 1;
+          allReports.push({
+            studentName: r.studentName,
+            score: maxScore > 0 ? Math.round((r.score / maxScore) * 100) : 0,
+            quizTitle: r.quiz?.title || "Unknown",
+            subject,
+            createdAt: r.createdAt.toISOString(),
+          });
+        }
+      }
+
+      const cohortAverages = Object.entries(subjectScores).map(([subject, data]) => ({
+        subject,
+        average: data.max > 0 ? Math.round((data.total / data.max) * 100) : 0,
+        count: data.count,
+      }));
+
+      const recentSubmissions = allReports
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 10);
+
+      res.json({
+        totalStudents: adoptedStudents.length,
+        totalQuizzes: tutorQuizzes.length,
+        cohortAverages,
+        recentSubmissions,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch stats" });
+    }
+  });
+
   // ─── Student Routes ──────────────────────────────────────────────
 
   app.get("/api/student/reports", async (req, res) => {
