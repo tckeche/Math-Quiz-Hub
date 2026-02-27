@@ -923,18 +923,22 @@ RULES:
     }
   });
 
-  // Row-level security: Only return quizzes explicitly assigned to this authenticated student
   app.get("/api/quizzes/available", requireSupabaseAuth, async (req, res) => {
     try {
       const studentId = (req as any).authUser.id;
+      const allQuizzes = await storage.getSomaQuizzes();
       const assignments = await storage.getQuizAssignmentsForStudent(studentId);
-      const unique = new Map<number, any>();
-      for (const assignment of assignments) {
-        const quiz = assignment.quiz;
-        if (quiz.isArchived || quiz.status !== "published") continue;
-        unique.set(quiz.id, { ...quiz, dueDate: assignment.dueDate || null });
+      const assignmentMap = new Map<number, any>();
+      for (const a of assignments) {
+        assignmentMap.set(a.quizId, a);
       }
-      res.json(Array.from(unique.values()));
+      const available = allQuizzes
+        .filter(q => !q.isArchived && q.status === "published")
+        .map(q => ({
+          ...q,
+          dueDate: assignmentMap.get(q.id)?.dueDate || null,
+        }));
+      res.json(available);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });
     }
