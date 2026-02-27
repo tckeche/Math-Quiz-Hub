@@ -953,18 +953,13 @@ RULES:
         assignmentMap.set(a.quizId, a);
       }
       const available = allQuizzes
-        .filter(q => !q.isArchived && q.status === "published")
+        .filter(q => !q.isArchived && q.status === "published" && assignmentMap.has(q.id))
         .map(q => ({
           ...q,
-          isAssigned: assignmentMap.has(q.id),
+          isAssigned: true,
           assignmentStatus: assignmentMap.get(q.id)?.status || null,
           dueDate: assignmentMap.get(q.id)?.dueDate || null,
         }));
-      available.sort((a, b) => {
-        if (a.isAssigned && !b.isAssigned) return -1;
-        if (!a.isAssigned && b.isAssigned) return 1;
-        return 0;
-      });
       res.json(available);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });

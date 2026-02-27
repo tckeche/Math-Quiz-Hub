@@ -354,7 +354,7 @@ export default function StudentDashboard() {
             <div className="grid md:grid-cols-2 gap-6">
               <section className={CARD_CLASS}>
                 <h2 className="text-3xl font-bold tracking-wide text-slate-200" data-testid="text-section-available">
-                  Available Quizzes
+                  Your Assessments
                 </h2>
 
                 <div className="mt-4 mb-2 overflow-x-auto pb-2 -mx-1 px-1" data-testid="filter-bar">
@@ -384,7 +384,8 @@ export default function StudentDashboard() {
                   {filteredQuizzes.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-                      <p className="text-sm text-slate-400">No available quizzes</p>
+                      <p className="text-sm text-slate-400">No quizzes assigned to you yet</p>
+                      <p className="text-xs text-slate-500 mt-1">Your tutor will assign assessments when they're ready</p>
                     </div>
                   ) : (
                     <>
