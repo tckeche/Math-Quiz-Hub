@@ -563,6 +563,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Quiz not found" });
       }
 
+      await storage.deleteQuizAssignment(quizId, studentId);
+      return res.json({ success: true, message: "Student unassigned" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to unassign student" });
+    }
+  });
+
   // Get comprehensive details for quiz management (including student progress)
   app.get("/api/tutor/quizzes/:quizId/details", requireTutor, async (req, res) => {
     try {
@@ -582,6 +589,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         allReports = await db.select().from(somaReports).where(eq(somaReports.quizId, quizId));
       }
 
+      // Calculate actual max grade from question marks
+      const questions = await storage.getSomaQuestionsByQuizId(quizId);
+      const maxGrade = questions.reduce((sum, q) => sum + q.marks, 0) || 100;
+
       // Map assignments with their submission status and grades
       const studentDetails = assignments.map((assignment) => {
         const report = (allReports as any[]).find((r) => r.studentId === assignment.student.id);
@@ -592,11 +603,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           studentEmail: assignment.student.email,
           assignmentStatus: assignment.status,
           status: report ? (report.status === "completed" ? "Submitted" : report.status === "failed" ? "Failed" : "In Progress") : "Not Started",
-          startTime: report?.createdAt || null,
-          submissionTime: report?.createdAt || null,
-          finalGrade: report?.score || null,
-          maxGrade: 100,
+          startTime: report?.startedAt || report?.createdAt || null,
+          submissionTime: report?.completedAt || null,
+          finalGrade: report?.score ?? null,
+          maxGrade,
           reportId: report?.id || null,
+          dueDate: assignment.dueDate || null,
         };
       });
 
@@ -659,31 +671,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ─── Student Routes ──────────────────────────────────────────────
-
-      await storage.deleteQuizAssignment(quizId, studentId);
-      return res.json({ success: true, message: "Student unassigned" });
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to unassign student" });
-    }
-  });
-
-  // Delete an entire assessment (tutor must be the author)
-  app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
+  // Toggle archive status for a quiz
+  app.patch("/api/tutor/quizzes/:quizId/archive", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
       const quizId = parseInt(String(req.params.quizId));
       const quiz = await storage.getSomaQuiz(quizId);
-      if (!quiz) {
-        return res.status(404).json({ message: "Quiz not found" });
-      }
-      if (quiz.authorId !== tutorId) {
-        return res.status(403).json({ message: "Only the author can delete this assessment" });
-      }
-      await storage.deleteSomaQuiz(quizId);
-      return res.json({ success: true, message: "Assessment deleted" });
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      if (quiz.authorId !== tutorId) return res.status(403).json({ message: "Access denied" });
+      const updated = await storage.updateSomaQuiz(quizId, { isArchived: !quiz.isArchived });
+      return res.json({ success: true, isArchived: updated.isArchived });
     } catch (err: any) {
-      return res.status(500).json({ message: err.message || "Failed to delete assessment" });
+      return res.status(500).json({ message: err.message || "Failed to toggle archive" });
+    }
+  });
+
+  // Update due date for all assignments on a quiz
+  app.patch("/api/tutor/quizzes/:quizId/due-date", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const { dueDate } = req.body;
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      if (quiz.authorId !== tutorId) return res.status(403).json({ message: "Access denied" });
+      const parsedDate = dueDate ? new Date(dueDate) : null;
+      if (parsedDate && isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: "Invalid date format" });
+      }
+      const updated = await storage.updateQuizAssignmentsDueDate(quizId, parsedDate);
+      return res.json({ success: true, updated });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to update due date" });
     }
   });
 
