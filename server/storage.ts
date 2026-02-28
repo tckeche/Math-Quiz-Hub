@@ -60,6 +60,7 @@ export interface IStorage {
   updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void>;
   deleteQuizAssignment(quizId: number, studentId: string): Promise<void>;
   extendQuizAssignmentDeadlines(quizId: number, hours: number): Promise<number>;
+  updateQuizAssignmentsDueDate(quizId: number, dueDate: Date | null): Promise<number>;
 
   getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]>;
 
@@ -299,6 +300,14 @@ class DatabaseStorage implements IStorage {
     const result = await this.database.update(quizAssignments)
       .set({ dueDate: sql`coalesce(${quizAssignments.dueDate}, now()) + interval '1 hour' * ${hours}` })
       .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.status, "pending")))
+      .returning();
+    return result.length;
+  }
+
+  async updateQuizAssignmentsDueDate(quizId: number, dueDate: Date | null): Promise<number> {
+    const result = await this.database.update(quizAssignments)
+      .set({ dueDate })
+      .where(eq(quizAssignments.quizId, quizId))
       .returning();
     return result.length;
   }
@@ -663,6 +672,17 @@ class MemoryStorage implements IStorage {
       if (a.quizId === quizId && a.status === "pending") {
         const base = a.dueDate ? new Date(a.dueDate) : new Date();
         a.dueDate = new Date(base.getTime() + hours * 60 * 60 * 1000);
+        count++;
+      }
+    }
+    return count;
+  }
+
+  async updateQuizAssignmentsDueDate(quizId: number, dueDate: Date | null): Promise<number> {
+    let count = 0;
+    for (const a of this.quizAssignmentsList) {
+      if (a.quizId === quizId) {
+        a.dueDate = dueDate;
         count++;
       }
     }
