@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate } from "wouter";
+import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import {
   AlertDialog,
@@ -16,6 +16,7 @@ import type { SomaQuiz, SomaUser } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, UserPlus, X,
   Loader2, Check, ChevronDown, Sparkles, AlertTriangle, Trash2, Eye,
+  LayoutDashboard, ChevronRight, Timer, Clock, Send, Award,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@supabase/supabase-js";
@@ -395,34 +396,11 @@ export default function TutorDashboard() {
                           </Link>
                         </div>
                       </div>
-                      <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} | {quiz.level}</p>
-                    </div>
-                    <div className="flex items-center gap-2 ml-3">
-                      <Link href={`/tutor/assessment/${quiz.id}`}>
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition-all">
-                          <Eye className="w-3 h-3" />
-                          Details
-                        </button>
-                      </Link>
-                      <button
-                        onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Assign
-                      </button>
-                      <button
-                        onClick={() => setDeleteQuizId(quiz.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 transition-all"
-                        title="Delete quiz"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
             <section>
               <div className="flex items-center justify-between mb-4">
