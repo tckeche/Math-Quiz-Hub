@@ -25,6 +25,10 @@ import {
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
 
+function toProperCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface AssignmentRow {
   assignmentId: number;
   quizId: number;
@@ -156,7 +160,7 @@ export default function TutorStudentDetail() {
   const student = report?.student;
   const stats = report?.stats;
   const assignments = report?.assignments || [];
-  const displayName = student?.displayName || student?.email?.split("@")[0] || "Student";
+  const displayName = toProperCase(student?.displayName || student?.email?.split("@")[0] || "Student");
   const initials = displayName.split(" ").map((n: string) => n[0]).filter(Boolean).join("").toUpperCase().slice(0, 2);
 
   return (
@@ -297,7 +301,7 @@ export default function TutorStudentDetail() {
                                       </button>
                                     </Link>
                                     <Link href={`/soma/review/${a.reportId}`}>
-                                      <button className="p-1.5 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg transition-colors" title="AI Diagnostic Report">
+                                      <button className="p-1.5 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg transition-colors" title="Diagnostic Report">
                                         <FileText className="w-3.5 h-3.5" />
                                       </button>
                                     </Link>

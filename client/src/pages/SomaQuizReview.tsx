@@ -177,7 +177,7 @@ export default function SomaQuizReview() {
                     {idx + 1}
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs text-slate-400 uppercase tracking-wider">Question {idx + 1}</p>
+                    <p className="text-xs text-slate-400 uppercase tracking-wider">Q{idx + 1}</p>
                   </div>
                   <Badge className={`text-xs ${isCorrect ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : studentAnswer ? "bg-red-500/10 text-red-400 border-red-500/30" : "bg-slate-500/10 text-slate-400 border-slate-500/30"}`}>
                     {isCorrect ? "Correct" : studentAnswer ? "Incorrect" : "Skipped"} [{q.marks}]
@@ -249,7 +249,7 @@ export default function SomaQuizReview() {
                       isCorrect ? "text-blue-400" : "text-amber-400"
                     }`}>
                       <Lightbulb className="w-4 h-4" />
-                      AI Mini-Lesson
+                      SOMA Tutor Insights
                     </p>
                     <div className="text-sm text-slate-200 leading-relaxed">
                       <MarkdownRenderer content={q.explanation} />

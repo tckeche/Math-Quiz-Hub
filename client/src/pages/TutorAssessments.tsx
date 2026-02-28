@@ -242,7 +242,7 @@ function ReportDetailModal({ report, questions, maxScore, onClose }: {
             <div className="mt-4">
               <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-3">
                 <Award className="w-4 h-4 text-violet-400" />
-                AI Analysis Report
+                Diagnostic Report
               </h4>
               <div
                 className="prose prose-sm prose-invert max-w-none bg-slate-800/40 rounded-xl p-4 border border-slate-700/50 text-slate-300 [&_h3]:text-violet-300 [&_strong]:text-slate-200 [&_li]:text-slate-300"
@@ -255,7 +255,7 @@ function ReportDetailModal({ report, questions, maxScore, onClose }: {
           {report.status === "pending" && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
               <Loader2 className="w-4 h-4 animate-spin" />
-              AI analysis is still being generated...
+              Diagnostic report is still being generated...
             </div>
           )}
         </div>

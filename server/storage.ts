@@ -437,6 +437,21 @@ class DatabaseStorage implements IStorage {
   }
 
   async deleteSomaUser(userId: string): Promise<void> {
+    // Cascade: remove tutor-student relationships
+    await this.database.delete(tutorStudents).where(
+      or(eq(tutorStudents.tutorId, userId), eq(tutorStudents.studentId, userId))
+    );
+    // Cascade: remove tutor comments
+    await this.database.delete(tutorComments).where(
+      or(eq(tutorComments.tutorId, userId), eq(tutorComments.studentId, userId))
+    );
+    // Cascade: remove quiz assignments
+    await this.database.delete(quizAssignments).where(eq(quizAssignments.studentId, userId));
+    // Cascade: remove reports (submissions)
+    await this.database.delete(somaReports).where(eq(somaReports.studentId, userId));
+    // Set authored quizzes to null author (don't delete quizzes)
+    await this.database.update(somaQuizzes).set({ authorId: null }).where(eq(somaQuizzes.authorId, userId));
+    // Finally delete the user
     await this.database.delete(somaUsers).where(eq(somaUsers.id, userId));
   }
 

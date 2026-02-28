@@ -400,6 +400,7 @@ export default function TutorDashboard() {
                   })}
                 </div>
               )}
+            </section>
 
             <section>
               <div className="flex items-center justify-between mb-4">
