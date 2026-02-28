@@ -12,13 +12,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { SomaQuiz } from "@shared/schema";
+import type { SomaQuiz, SomaUser } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, UserPlus, X,
   Loader2, Check, ChevronDown, Sparkles, AlertTriangle, Trash2, Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@supabase/supabase-js";
+import { format } from "date-fns";
+import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
 const SECTION_LABEL = "text-slate-400 text-xs font-semibold tracking-wider uppercase";
@@ -133,6 +136,7 @@ export default function TutorDashboard() {
   const [showAssignModal, setShowAssignModal] = useState<number | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [deleteQuizId, setDeleteQuizId] = useState<number | null>(null);
+  const [dueDate, setDueDate] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -226,11 +230,6 @@ export default function TutorDashboard() {
       return next;
     });
   }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setLocation("/login");
-  };
 
   const overallAvg = useMemo(() => {
     if (!stats?.cohortAverages?.length) return null;
@@ -425,6 +424,10 @@ export default function TutorDashboard() {
                 ))}
               </div>
 
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={SECTION_LABEL}>Recent Submissions</h3>
+              </div>
               {(stats?.recentSubmissions?.length ?? 0) === 0 ? (
                 <div className={`${CARD_CLASS} text-center py-10`}>
                   <Sparkles className="w-10 h-10 mx-auto text-slate-600 mb-3" />

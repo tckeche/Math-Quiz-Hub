@@ -653,7 +653,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const quizId = parseInt(req.params.quizId);
+      const quizId = parseInt(req.params.quizId as string);
       const quiz = await storage.getSomaQuiz(quizId);
       if (!quiz) {
         return res.status(404).json({ message: "Quiz not found" });
@@ -661,10 +661,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (quiz.authorId !== tutorId) {
         return res.status(403).json({ message: "You can only delete your own quizzes" });
       }
-      // Delete quiz (cascade will handle questions and assignments)
-      if (db) {
-        await db.delete(somaQuizzes).where(eq(somaQuizzes.id, quizId));
-      }
+      await storage.deleteSomaQuiz(quizId);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to delete quiz" });
