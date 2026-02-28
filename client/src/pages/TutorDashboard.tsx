@@ -2,10 +2,20 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { SomaQuiz } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, UserPlus, X,
-  Loader2, Check, ChevronDown, Sparkles,
+  Loader2, Check, ChevronDown, Sparkles, AlertTriangle, Trash2,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 
@@ -34,6 +44,7 @@ export default function TutorDashboard() {
   const [showAdoptModal, setShowAdoptModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState<number | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [deleteQuizId, setDeleteQuizId] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
@@ -131,6 +142,22 @@ export default function TutorDashboard() {
     onSuccess: () => {
       setShowAssignModal(null);
       setSelectedStudentIds(new Set());
+    },
+  });
+
+  // Delete quiz mutation
+  const deleteQuizMutation = useMutation({
+    mutationFn: async (quizId: number) => {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
+      setDeleteQuizId(null);
     },
   });
 
@@ -309,13 +336,22 @@ export default function TutorDashboard() {
                       <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
                       <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} | {quiz.level}</p>
                     </div>
-                    <button
-                      onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all ml-3"
-                    >
-                      <Plus className="w-3 h-3" />
-                      Assign
-                    </button>
+                    <div className="flex items-center gap-2 ml-3">
+                      <button
+                        onClick={() => { setShowAssignModal(quiz.id); setSelectedStudentIds(new Set()); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition-all"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Assign
+                      </button>
+                      <button
+                        onClick={() => setDeleteQuizId(quiz.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 transition-all"
+                        title="Delete quiz"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -441,6 +477,41 @@ export default function TutorDashboard() {
           </div>
         </div>
       )}
+
+      {/* Delete Quiz Confirmation Dialog */}
+      <AlertDialog open={deleteQuizId !== null}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <AlertDialogTitle className="text-red-300">Delete Quiz</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-slate-400">
+              This action cannot be undone. All quiz data and student assignments will be deleted permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteQuizId) deleteQuizMutation.mutate(deleteQuizId);
+              }}
+              disabled={deleteQuizMutation.isPending}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deleteQuizMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

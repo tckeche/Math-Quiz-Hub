@@ -431,6 +431,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Delete a quiz (tutor only)
+  app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(req.params.quizId);
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      if (quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "You can only delete your own quizzes" });
+      }
+      // Delete quiz (cascade will handle questions and assignments)
+      if (db) {
+        await db.delete(somaQuizzes).where(eq(somaQuizzes.id, quizId));
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete quiz" });
+    }
+  });
+
   // ─── Student Routes ──────────────────────────────────────────────
 
   app.get("/api/student/reports", async (req, res) => {
@@ -970,6 +992,7 @@ RULES:
 - "correct_answer" MUST be the full text of the correct option, NOT a letter like "A" or "B".
 - "prompt_text" is the question text. Do NOT use "question" or "stem" as the key name.
 - Every question MUST have all 5 fields: prompt_text, options, correct_answer, marks_worth, explanation.
+- "explanation" MUST be 2-3 sentences that explain the underlying concept and why the correct answer is right. Make it educational and focused on learning, not just confirming correctness.
 - Generate ONLY multiple-choice questions. NEVER generate open-ended, essay, or free-response questions.
 - Include 1 correct answer and 3 calculated distractors based on common student errors.
 - You may include a brief plain-text discussion before the JSON block.`;
