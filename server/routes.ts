@@ -809,6 +809,74 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Comprehensive student report: assignments joined with quizzes and reports
+  app.get("/api/tutor/students/:studentId/report", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const studentId = String(req.params.studentId);
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const student = await storage.getSomaUserById(studentId);
+      if (!student) return res.status(404).json({ message: "Student not found" });
+
+      // Get all assignments for this student
+      const assignments = await storage.getQuizAssignmentsForStudent(studentId);
+
+      // Get all reports for this student
+      const allReports = await storage.getSomaReportsByStudentId(studentId);
+
+      // Build detailed assignment rows
+      const assignmentRows = await Promise.all(assignments.map(async (a) => {
+        const quiz = a.quiz;
+        const report = allReports.find((r) => r.quizId === a.quizId);
+        const questions = await storage.getSomaQuestionsByQuizId(a.quizId);
+        const maxScore = questions.reduce((sum, q) => sum + q.marks, 0);
+
+        return {
+          assignmentId: a.id,
+          quizId: a.quizId,
+          quizTitle: quiz?.title || "Untitled",
+          quizSubject: quiz?.subject || null,
+          quizLevel: quiz?.level || null,
+          assignmentStatus: a.status,
+          dueDate: a.dueDate || null,
+          assignedAt: a.createdAt,
+          reportId: report?.id || null,
+          reportStatus: report?.status || null,
+          score: report?.score ?? null,
+          maxScore,
+          startedAt: report?.startedAt || null,
+          completedAt: report?.completedAt || null,
+        };
+      }));
+
+      // Calculate aggregates
+      const completedAssignments = assignmentRows.filter((a) => a.assignmentStatus === "completed");
+      const gradedAssignments = assignmentRows.filter((a) => a.score !== null && a.maxScore > 0);
+      const avgScore = gradedAssignments.length > 0
+        ? Math.round(gradedAssignments.reduce((sum, a) => sum + ((a.score! / a.maxScore) * 100), 0) / gradedAssignments.length)
+        : null;
+      const totalCorrect = gradedAssignments.reduce((sum, a) => sum + (a.score || 0), 0);
+      const totalPossible = gradedAssignments.reduce((sum, a) => sum + a.maxScore, 0);
+      const accuracy = totalPossible > 0 ? Math.round((totalCorrect / totalPossible) * 100) : null;
+
+      res.json({
+        student: { id: student.id, email: student.email, displayName: student.displayName },
+        assignments: assignmentRows,
+        stats: {
+          totalAssigned: assignmentRows.length,
+          totalCompleted: completedAssignments.length,
+          avgScore,
+          accuracy,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch student report" });
+    }
+  });
+
   app.get("/api/tutor/dashboard-stats", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
