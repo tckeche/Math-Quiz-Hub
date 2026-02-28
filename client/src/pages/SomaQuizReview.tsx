@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ArrowLeft, Home, AlertCircle, Loader2, CheckCircle2, XCircle, BookOpen, Award,
+  ArrowLeft, Home, AlertCircle, Loader2, CheckCircle2, XCircle, BookOpen, Award, Lightbulb,
 } from "lucide-react";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 
@@ -236,13 +236,22 @@ export default function SomaQuizReview() {
                   })}
                 </div>
 
-                {!isCorrect && studentAnswer && q.explanation && (
-                  <div className="mt-4 p-4 rounded-r-xl bg-red-500/10 border-l-4 border-red-500" data-testid={`review-explanation-${idx + 1}`}>
-                    <p className="text-xs font-semibold text-red-400 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      Why this was wrong
+                {q.explanation && (
+                  <div
+                    className={`mt-5 p-4 rounded-xl border-l-4 ${
+                      isCorrect
+                        ? "bg-blue-500/10 border-l-blue-500"
+                        : "bg-amber-500/10 border-l-amber-500"
+                    }`}
+                    data-testid={`review-explanation-${idx + 1}`}
+                  >
+                    <p className={`text-xs font-semibold mb-2 uppercase tracking-wider flex items-center gap-2 ${
+                      isCorrect ? "text-blue-400" : "text-amber-400"
+                    }`}>
+                      <Lightbulb className="w-4 h-4" />
+                      AI Mini-Lesson
                     </p>
-                    <div className="text-sm text-slate-300 leading-relaxed">
+                    <div className="text-sm text-slate-200 leading-relaxed">
                       <MarkdownRenderer content={q.explanation} />
                     </div>
                   </div>
