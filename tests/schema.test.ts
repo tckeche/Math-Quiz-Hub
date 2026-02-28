@@ -166,7 +166,7 @@ describe("insertSomaQuizSchema", () => {
     const result = insertSomaQuizSchema.safeParse({
       title: "Calculus Quiz",
       topic: "Derivatives",
-      status: "draft",
+      status: "published",
     });
     expect(result.success).toBe(true);
   });
@@ -182,12 +182,12 @@ describe("insertSomaQuizSchema", () => {
   });
 
   it("rejects missing title", () => {
-    const result = insertSomaQuizSchema.safeParse({ topic: "Derivatives", status: "draft" });
+    const result = insertSomaQuizSchema.safeParse({ topic: "Derivatives", status: "published" });
     expect(result.success).toBe(false);
   });
 
   it("rejects missing topic", () => {
-    const result = insertSomaQuizSchema.safeParse({ title: "My Quiz", status: "draft" });
+    const result = insertSomaQuizSchema.safeParse({ title: "My Quiz", status: "published" });
     expect(result.success).toBe(false);
   });
 });
