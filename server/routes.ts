@@ -562,6 +562,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!quiz) {
         return res.status(404).json({ message: "Quiz not found" });
       }
+      if (quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
 
       await storage.deleteQuizAssignment(quizId, studentId);
       return res.json({ success: true, message: "Student unassigned" });
