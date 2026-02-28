@@ -13,6 +13,7 @@ import TutorDashboard from "@/pages/TutorDashboard";
 import TutorStudents from "@/pages/TutorStudents";
 import TutorStudentDetail from "@/pages/TutorStudentDetail";
 import TutorAssessments from "@/pages/TutorAssessments";
+import TutorAssessmentDetails from "@/pages/TutorAssessmentDetails";
 import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
 import SomaChatPage from "@/pages/soma-chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -28,11 +29,13 @@ function Router() {
       <Route path="/portal">{() => <RoleRouter studentComponent={StudentDashboard} tutorComponent={TutorDashboard} />}</Route>
       <Route path="/super-admin">{() => <ProtectedRoute component={SuperAdminDashboard} />}</Route>
       <Route path="/tutor">{() => <ProtectedRoute component={TutorDashboard} />}</Route>
+      <Route path="/tutor/assessment/:quizId">{(params) => <ProtectedRoute component={TutorAssessmentDetails} params={params} />}</Route>
       <Route path="/tutor/students/:id">{(params) => <ProtectedRoute component={TutorStudentDetail} params={params} />}</Route>
       <Route path="/tutor/students">{() => <ProtectedRoute component={TutorStudents} />}</Route>
       <Route path="/tutor/assessments/edit/:id">{(params) => <ProtectedRoute component={BuilderPage} params={params} />}</Route>
       <Route path="/tutor/assessments/new">{() => <ProtectedRoute component={BuilderPage} />}</Route>
       <Route path="/tutor/assessments">{() => <ProtectedRoute component={TutorAssessments} />}</Route>
+      <Route path="/super-admin">{() => <ProtectedRoute component={SuperAdminDashboard} />}</Route>
       <Route path="/admin/:rest*">{() => <Redirect to="/login" />}</Route>
       <Route path="/admin">{() => <Redirect to="/login" />}</Route>
       <Route path="/soma/quiz/:id">{(params) => <ProtectedRoute component={SomaQuizEngine} params={params} />}</Route>

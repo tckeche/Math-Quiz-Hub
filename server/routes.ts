@@ -563,6 +563,80 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Quiz not found" });
       }
 
+  // Get comprehensive details for quiz management (including student progress)
+  app.get("/api/tutor/quizzes/:quizId/details", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(req.params.quizId);
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz || quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Get all assignments for this quiz with student details
+      const assignments = await storage.getQuizAssignmentsForQuiz(quizId);
+
+      // Get all reports (submissions) for this quiz
+      let allReports: any[] = [];
+      if (db) {
+        allReports = await db.select().from(somaReports).where(eq(somaReports.quizId, quizId));
+      }
+
+      // Map assignments with their submission status and grades
+      const studentDetails = assignments.map((assignment) => {
+        const report = (allReports as any[]).find((r) => r.studentId === assignment.student.id);
+        return {
+          assignmentId: assignment.id,
+          studentId: assignment.student.id,
+          studentName: assignment.student.displayName || assignment.student.email,
+          studentEmail: assignment.student.email,
+          assignmentStatus: assignment.status,
+          status: report ? (report.status === "completed" ? "Submitted" : report.status === "failed" ? "Failed" : "In Progress") : "Not Started",
+          startTime: report?.createdAt || null,
+          submissionTime: report?.createdAt || null,
+          finalGrade: report?.score || null,
+          maxGrade: 100,
+          reportId: report?.id || null,
+        };
+      });
+
+      res.json({
+        quiz,
+        assignments: studentDetails,
+        totalAssigned: studentDetails.length,
+        totalSubmitted: studentDetails.filter((s) => s.status === "Submitted").length,
+      });
+    } catch (err: any) {
+      console.error("Failed to fetch quiz details:", err);
+      res.status(500).json({ message: err.message || "Failed to fetch quiz details" });
+    }
+  });
+
+  // Revoke a student's quiz assignment
+  app.delete("/api/tutor/quizzes/:quizId/assignments/:studentId", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(req.params.quizId);
+      const studentId = req.params.studentId;
+
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz || quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Delete the assignment
+      if (db) {
+        await db.delete(quizAssignments).where(
+          and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId))
+        );
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to revoke assignment" });
+    }
+  });
+
   // Delete a quiz (tutor only)
   app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
     try {
