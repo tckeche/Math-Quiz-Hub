@@ -532,7 +532,7 @@ class MemoryStorage implements IStorage {
   }
 
   async createSomaReport(report: InsertSomaReport): Promise<SomaReport> {
-    const created: SomaReport = { id: this.somaReportId++, createdAt: new Date(), aiFeedbackHtml: null, answersJson: null, status: "pending", studentId: report.studentId ?? null, ...report };
+    const created: SomaReport = { id: this.somaReportId++, createdAt: new Date(), aiFeedbackHtml: null, answersJson: null, status: "pending", studentId: report.studentId ?? null, startedAt: null, completedAt: null, ...report };
     this.somaReportsList.push(created);
     return created;
   }

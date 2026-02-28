@@ -213,7 +213,6 @@ export default function TutorDashboard() {
     return count > 0 ? Math.round(total / count) : null;
   }, [stats]);
 
-  const publishedQuizzes = useMemo(() => tutorQuizzes.filter(q => q.status === "published"), [tutorQuizzes]);
 
   return (
     <div className="min-h-screen">
@@ -325,7 +324,7 @@ export default function TutorDashboard() {
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
                 </div>
-              ) : publishedQuizzes.length === 0 ? (
+              ) : tutorQuizzes.length === 0 ? (
                 <div className={`${CARD_CLASS} text-center py-10`}>
                   <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
                   <p className="text-sm text-slate-400">No assessments yet</p>
@@ -333,7 +332,7 @@ export default function TutorDashboard() {
                 </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {publishedQuizzes.map((quiz) => {
+                  {tutorQuizzes.map((quiz) => {
                     const sc = getSubjectColor(quiz.subject);
                     const SubIcon = getSubjectIcon(quiz.subject);
                     return (

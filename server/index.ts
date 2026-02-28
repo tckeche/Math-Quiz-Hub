@@ -110,13 +110,6 @@ httpServer.listen(
       }
     }
 
-    const { seedDatabase } = await import("./seed");
-    try {
-      await seedDatabase();
-    } catch (error) {
-      log(`seed skipped due to database error: ${error instanceof Error ? error.message : String(error)}`, "bootstrap");
-    }
-
     await registerRoutes(httpServer, app);
 
     app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
