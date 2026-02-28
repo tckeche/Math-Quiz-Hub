@@ -34,6 +34,10 @@ interface SubmissionWithQuiz {
   quiz: { id: number; title: string; subject: string | null };
 }
 
+function toProperCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function SomaChatPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [, setLocation] = useLocation();
@@ -50,7 +54,7 @@ export default function SomaChatPage() {
   }, []);
 
   const userId = session?.user?.id;
-  const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
+  const displayName = toProperCase(session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student");
 
   const { data: reports = [], isLoading: reportsLoading } = useQuery<ReportWithQuiz[]>({
     queryKey: ["/api/student/reports", userId],
@@ -228,7 +232,7 @@ export default function SomaChatPage() {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-8 text-center max-w-md">
           <Sparkles className="w-12 h-12 mx-auto text-emerald-400 mb-4" />
-          <h2 className="text-xl font-bold text-slate-100 mb-2">Global AI Tutor</h2>
+          <h2 className="text-xl font-bold text-slate-100 mb-2">SOMA Tutor</h2>
           <p className="text-sm text-slate-400 mb-6">Please log in to access your personalized analysis.</p>
           <Link href="/login">
             <Button className="glow-button">Log In</Button>
@@ -251,7 +255,7 @@ export default function SomaChatPage() {
             </Link>
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-emerald-400" />
-              <h1 className="text-lg font-bold text-emerald-300">Global AI Tutor</h1>
+              <h1 className="text-lg font-bold text-emerald-300">SOMA Tutor</h1>
             </div>
           </div>
           <p className="text-sm text-slate-400">{displayName}</p>
@@ -285,7 +289,7 @@ export default function SomaChatPage() {
               <p className="text-2xl font-bold text-slate-100">
                 {reports.filter(r => r.aiFeedbackHtml && r.status !== "pending").length}
               </p>
-              <p className="text-xs text-slate-500 uppercase tracking-wider">AI Reports</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wider">SOMA Reports</p>
             </div>
             <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-5 text-center">
               <Target className="w-5 h-5 mx-auto text-amber-400 mb-2" />

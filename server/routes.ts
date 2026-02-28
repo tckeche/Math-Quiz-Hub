@@ -1159,7 +1159,20 @@ RULES:
     try {
       const studentId = (req as any).authUser.id;
       const reports = await storage.getSomaReportsByStudentId(studentId);
-      res.json(reports);
+
+      // Compute maxScore for each report from quiz questions
+      const quizIds = [...new Set(reports.map((r) => r.quizId))];
+      const maxScoreMap = new Map<number, number>();
+      for (const qId of quizIds) {
+        const questions = await storage.getSomaQuestionsByQuizId(qId);
+        maxScoreMap.set(qId, questions.reduce((sum, q) => sum + q.marks, 0));
+      }
+
+      const enriched = reports.map((r) => ({
+        ...r,
+        maxScore: maxScoreMap.get(r.quizId) || 0,
+      }));
+      res.json(enriched);
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch reports" });
     }
@@ -1625,10 +1638,13 @@ RULES:
 
         if (completedReports.length > 0) {
           hasStudentData = true;
-          const feedbackEntries = completedReports.map((r, i) => {
-            const scoreInfo = r.score !== null ? `Score: ${r.score}/100 (${r.score}%)` : "Score: N/A";
+          const feedbackEntries = await Promise.all(completedReports.map(async (r, i) => {
+            const questions = await storage.getSomaQuestionsByQuizId(r.quizId);
+            const maxScore = questions.reduce((s, q) => s + q.marks, 0);
+            const pct = maxScore > 0 ? Math.round((r.score / maxScore) * 100) : 0;
+            const scoreInfo = r.score !== null ? `Score: ${r.score}/${maxScore} (${pct}%)` : "Score: N/A";
             return `--- Quiz ${i + 1}: "${r.quiz.title}" | Topic: ${r.quiz.topic || "General"} | ${scoreInfo} ---\n${r.aiFeedbackHtml}`;
-          });
+          }));
           completedContext = feedbackEntries.join("\n\n");
         }
 

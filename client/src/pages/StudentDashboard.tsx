@@ -21,10 +21,15 @@ interface ReportWithQuiz {
   studentId: string | null;
   studentName: string;
   score: number;
+  maxScore: number;
   status: string;
   aiFeedbackHtml: string | null;
   createdAt: string;
   quiz: SomaQuiz;
+}
+
+function toProperCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 
@@ -113,7 +118,7 @@ export default function StudentDashboard() {
       return;
     }
 
-    const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
+    const displayName = toProperCase(session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student");
     const parts = displayName.split(" ");
     const firstName = parts[0] || "Student";
     const lastName = parts.slice(1).join(" ") || "User";
@@ -147,7 +152,7 @@ export default function StudentDashboard() {
   }, []);
 
   const userId = session?.user?.id;
-  const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
+  const displayName = toProperCase(session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student");
 
   const { data: somaQuizzes, isLoading: somaLoading } = useQuery<SomaQuiz[]>({
     queryKey: ["/api/quizzes/available", userId],
@@ -182,7 +187,7 @@ export default function StudentDashboard() {
     reports.forEach((r) => {
       const subj = r.quiz.topic || r.quiz.subject || "General";
       if (!map[subj]) map[subj] = { total: 0, earned: 0 };
-      map[subj].total += 100;
+      map[subj].total += r.maxScore || 1;
       map[subj].earned += r.score;
     });
     return Object.entries(map).map(([subject, { total, earned }]) => ({
@@ -236,7 +241,7 @@ export default function StudentDashboard() {
       title: r.quiz.title,
       subject: r.quiz.topic || r.quiz.subject || "General",
       score: r.score,
-      maxScore: 100,
+      maxScore: r.maxScore || 1,
       status: r.status,
       feedbackHtml: r.aiFeedbackHtml,
       date: r.createdAt,
@@ -516,7 +521,7 @@ export default function StudentDashboard() {
                                       Graded
                                     </span>
                                   )}
-                                  {/* AI analysis document icon — clickable */}
+                                  {/* Diagnostic report icon — clickable */}
                                   <button
                                     className={`p-0.5 rounded transition-colors ${
                                       isLoadingThis
@@ -527,7 +532,7 @@ export default function StudentDashboard() {
                                             ? "text-emerald-400 hover:text-emerald-300 cursor-pointer"
                                             : "text-amber-500 animate-pulse hover:text-amber-400 cursor-pointer"
                                     }`}
-                                    title={isLoadingThis ? "Your Report is being generated..." : hasAiAnalysis ? "View AI analysis" : "Generate AI analysis"}
+                                    title={isLoadingThis ? "Your Report is being generated..." : hasAiAnalysis ? "View Diagnostic Report" : "Generate Diagnostic Report"}
                                     data-testid={`icon-ai-status-${item.id}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -624,7 +629,7 @@ export default function StudentDashboard() {
                 onClick={() => setLocation("/soma/chat")}
               >
                 <Sparkles className="w-4.5 h-4.5 text-emerald-400 group-hover:animate-pulse" />
-                Consult Global AI Tutor
+                Consult SOMA Tutor
                 <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
               </button>
             </section>
@@ -632,7 +637,7 @@ export default function StudentDashboard() {
         )}
       </main>
 
-      {/* AI Analysis Popup Overlay */}
+      {/* Diagnostic Report Popup Overlay */}
       {analysisPopup && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
@@ -648,7 +653,7 @@ export default function StudentDashboard() {
             >
               &times;
             </button>
-            <h2 className="text-lg font-bold text-gray-800 mb-4 pr-8">{analysisPopup.title} — AI Analysis</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4 pr-8">{analysisPopup.title} — Diagnostic Report</h2>
             <div
               className="prose prose-sm max-w-none"
               dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysisPopup.html) }}

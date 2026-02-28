@@ -56,6 +56,10 @@ interface AdoptedStudent {
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
 
+function toProperCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function getStatusColor(status: StudentAssignment["status"]) {
   switch (status) {
     case "Submitted":
@@ -262,9 +266,12 @@ export default function TutorAssessmentDetails() {
   const { quiz, assignments } = details;
   const submittedCount = assignments.filter((a) => a.status === "Submitted").length;
   const graded = assignments.filter((a) => a.finalGrade !== null);
-  const avgGrade = graded.length > 0
-    ? graded.reduce((sum, a) => sum + (a.finalGrade || 0), 0) / graded.length
-    : 0;
+  const avgGradePct = graded.length > 0
+    ? Math.round(graded.reduce((sum, a) => {
+        const pct = a.maxGrade > 0 ? ((a.finalGrade || 0) / a.maxGrade) * 100 : 0;
+        return sum + pct;
+      }, 0) / graded.length)
+    : null;
   const currentDueDate = assignments.find((a) => a.dueDate)?.dueDate || null;
   const alreadyAssignedIds = new Set(assignments.map((a) => a.studentId));
   const availableForAssign = adoptedStudents.filter((s) => !alreadyAssignedIds.has(s.id));
@@ -365,7 +372,7 @@ export default function TutorAssessmentDetails() {
               <p className="text-xs text-slate-400 mt-1">Submitted</p>
             </div>
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-              <p className="text-2xl font-bold text-cyan-300">{graded.length > 0 ? avgGrade.toFixed(1) : "—"}</p>
+              <p className="text-2xl font-bold text-cyan-300">{avgGradePct !== null ? `${avgGradePct}%` : "—"}</p>
               <p className="text-xs text-slate-400 mt-1">Avg Grade</p>
             </div>
           </div>
@@ -417,7 +424,7 @@ export default function TutorAssessmentDetails() {
                             {getInitials(assignment.studentName)}
                           </div>
                           <div>
-                            <p className="font-medium text-slate-200">{assignment.studentName}</p>
+                            <p className="font-medium text-slate-200">{toProperCase(assignment.studentName)}</p>
                             <p className="text-xs text-slate-400">{assignment.studentEmail}</p>
                           </div>
                         </div>
@@ -433,12 +440,17 @@ export default function TutorAssessmentDetails() {
                       <td className="py-4 px-4 text-right">
                         {assignment.finalGrade !== null ? (
                           <div>
-                            <p className="font-semibold text-slate-200">
-                              {assignment.finalGrade}/{assignment.maxGrade}
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              {assignment.maxGrade > 0 ? ((assignment.finalGrade / assignment.maxGrade) * 100).toFixed(0) : 0}%
-                            </p>
+                            {(() => {
+                              const pct = assignment.maxGrade > 0 ? Math.round((assignment.finalGrade / assignment.maxGrade) * 100) : 0;
+                              return (
+                                <>
+                                  <p className={`text-sm font-bold ${pct >= 70 ? "text-emerald-400" : pct >= 40 ? "text-amber-400" : "text-red-400"}`}>
+                                    {pct}%
+                                  </p>
+                                  <p className="text-[10px] text-slate-500">{assignment.finalGrade}/{assignment.maxGrade}</p>
+                                </>
+                              );
+                            })()}
                           </div>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -450,7 +462,7 @@ export default function TutorAssessmentDetails() {
                             <Link href={`/soma/review/${assignment.reportId}`}>
                               <button
                                 className="p-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors"
-                                title="View AI Analysis"
+                                title="View Diagnostic Report"
                               >
                                 <FileText className="w-4 h-4" />
                               </button>
