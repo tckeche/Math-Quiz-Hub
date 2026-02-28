@@ -577,20 +577,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/tutor/quizzes/:quizId/details", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const quizId = parseInt(req.params.quizId);
+      const quizId = parseInt(req.params.quizId as string);
       const quiz = await storage.getSomaQuiz(quizId);
       if (!quiz || quiz.authorId !== tutorId) {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Get all assignments for this quiz with student details
       const assignments = await storage.getQuizAssignmentsForQuiz(quizId);
-
-      // Get all reports (submissions) for this quiz
-      let allReports: any[] = [];
-      if (db) {
-        allReports = await db.select().from(somaReports).where(eq(somaReports.quizId, quizId));
-      }
+      const allReports = await storage.getSomaReportsByQuizId(quizId);
 
       // Calculate actual max grade from question marks
       const questions = await storage.getSomaQuestionsByQuizId(quizId);
@@ -631,20 +625,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/tutor/quizzes/:quizId/assignments/:studentId", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const quizId = parseInt(req.params.quizId);
-      const studentId = req.params.studentId;
+      const quizId = parseInt(req.params.quizId as string);
+      const studentId = req.params.studentId as string;
 
       const quiz = await storage.getSomaQuiz(quizId);
       if (!quiz || quiz.authorId !== tutorId) {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Delete the assignment
-      if (db) {
-        await db.delete(quizAssignments).where(
-          and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId))
-        );
-      }
+      await storage.deleteQuizAssignment(quizId, studentId);
 
       res.json({ success: true });
     } catch (err: any) {
@@ -680,7 +669,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!quiz) return res.status(404).json({ message: "Quiz not found" });
       if (quiz.authorId !== tutorId) return res.status(403).json({ message: "Access denied" });
       const updated = await storage.updateSomaQuiz(quizId, { isArchived: !quiz.isArchived });
-      return res.json({ success: true, isArchived: updated.isArchived });
+      return res.json({ success: true, isArchived: updated?.isArchived });
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to toggle archive" });
     }

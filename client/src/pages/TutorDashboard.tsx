@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate } from "wouter";
+import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import {
   AlertDialog,
@@ -16,6 +16,7 @@ import type { SomaQuiz, SomaUser } from "@shared/schema";
 import {
   LogOut, Users, BookOpen, Plus, UserPlus, X,
   Loader2, Check, ChevronDown, Sparkles, AlertTriangle, Trash2, Eye,
+  LayoutDashboard, ChevronRight, Timer, Clock, Send, Award,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@supabase/supabase-js";
