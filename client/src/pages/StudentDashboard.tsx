@@ -1,16 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { supabase } from "@/lib/supabase";
+import { supabase, authFetch } from "@/lib/supabase";
 import { getSubjectColor, getSubjectIcon } from "@/lib/subjectColors";
 import DOMPurify from "dompurify";
-import type { Quiz, SomaQuiz } from "@shared/schema";
+import type { SomaQuiz } from "@shared/schema";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import {
   LogOut, BookOpen, Clock, ArrowRight, CheckCircle2,
   Loader2, AlertTriangle, Sparkles,
-  Eye, FileText,
+  Eye, FileText, Calendar,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Session } from "@supabase/supabase-js";
@@ -27,15 +27,6 @@ interface ReportWithQuiz {
   quiz: SomaQuiz;
 }
 
-interface SubmissionWithQuiz {
-  id: number;
-  studentId: number;
-  quizId: number;
-  totalScore: number;
-  maxPossibleScore: number;
-  submittedAt: string;
-  quiz: Quiz;
-}
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
 const SECTION_LABEL = "text-slate-400 text-xs font-semibold tracking-wider uppercase";
@@ -114,14 +105,8 @@ export default function StudentDashboard() {
   const [analysisPopup, setAnalysisPopup] = useState<{ title: string; html: string } | null>(null);
   const [loadingAnalysisId, setLoadingAnalysisId] = useState<string | null>(null);
 
-  // Get cached analysis from localStorage
-  const getCachedAnalysis = useCallback((quizId: number, type: string): string | null => {
-    try { return localStorage.getItem(`ai_analysis_${type}_${quizId}`); } catch { return null; }
-  }, []);
-
-  // Fetch AI analysis for a regular quiz submission
-  const fetchAnalysis = useCallback(async (item: { quizId: number; title: string; type: string }) => {
-    const cacheKey = `ai_analysis_${item.type}_${item.quizId}`;
+  const fetchAnalysis = useCallback(async (item: { quizId: number; title: string }) => {
+    const cacheKey = `ai_analysis_soma_${item.quizId}`;
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
       setAnalysisPopup({ title: item.title, html: cached });
@@ -133,7 +118,7 @@ export default function StudentDashboard() {
     const firstName = parts[0] || "Student";
     const lastName = parts.slice(1).join(" ") || "User";
 
-    setLoadingAnalysisId(`${item.type}-${item.quizId}`);
+    setLoadingAnalysisId(`soma-${item.quizId}`);
     try {
       const res = await fetch("/api/student/analyze-quiz", {
         method: "POST",
@@ -150,7 +135,6 @@ export default function StudentDashboard() {
         setAnalysisPopup({ title: item.title, html: data.analysis });
       }
     } catch {
-      // Could not generate analysis — will remain orange
     } finally {
       setLoadingAnalysisId(null);
     }
@@ -165,16 +149,11 @@ export default function StudentDashboard() {
   const userId = session?.user?.id;
   const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
 
-  const { data: quizzes, isLoading: quizzesLoading } = useQuery<Quiz[]>({
-    queryKey: ["/api/quizzes"],
-  });
-
-  // Fetch only quizzes explicitly assigned to this student (row-level security)
   const { data: somaQuizzes, isLoading: somaLoading } = useQuery<SomaQuiz[]>({
     queryKey: ["/api/quizzes/available", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const res = await fetch(`/api/quizzes/available?studentId=${userId}`);
+      const res = await authFetch("/api/quizzes/available");
       if (!res.ok) return [];
       return res.json();
     },
@@ -185,29 +164,12 @@ export default function StudentDashboard() {
     queryKey: ["/api/student/reports", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const res = await fetch(`/api/student/reports?studentId=${userId}`);
+      const res = await authFetch("/api/student/reports");
       if (!res.ok) return [];
       return res.json();
     },
     enabled: !!userId,
   });
-
-  const { data: submissions = [], isLoading: subsLoading } = useQuery<SubmissionWithQuiz[]>({
-    queryKey: ["/api/student/submissions", userId],
-    queryFn: async () => {
-      if (!userId) return [];
-      const res = await fetch(`/api/student/submissions?studentId=${userId}`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!userId,
-  });
-
-  const completedQuizIds = useMemo(() => {
-    const ids = new Set<number>();
-    submissions.forEach((s) => ids.add(s.quizId));
-    return ids;
-  }, [submissions]);
 
   const completedSomaQuizIds = useMemo(() => {
     const ids = new Set<number>();
@@ -217,18 +179,8 @@ export default function StudentDashboard() {
 
   const subjectStats = useMemo(() => {
     const map: Record<string, { total: number; earned: number }> = {};
-    // Only use admin-assigned subjects from regular quizzes
-    submissions.forEach((s) => {
-      const subj = s.quiz.subject;
-      if (!subj) return; // skip quizzes without an admin-assigned subject
-      if (!map[subj]) map[subj] = { total: 0, earned: 0 };
-      map[subj].total += s.maxPossibleScore;
-      map[subj].earned += s.totalScore;
-    });
-    // Group soma reports under their quiz's topic only if it matches an admin subject
     reports.forEach((r) => {
-      const subj = r.quiz.topic;
-      if (!subj) return;
+      const subj = r.quiz.topic || r.quiz.subject || "General";
       if (!map[subj]) map[subj] = { total: 0, earned: 0 };
       map[subj].total += 100;
       map[subj].earned += r.score;
@@ -237,7 +189,7 @@ export default function StudentDashboard() {
       subject,
       percentage: total > 0 ? (earned / total) * 100 : 0,
     }));
-  }, [submissions, reports]);
+  }, [reports]);
 
   const bestSubject = useMemo(() => {
     if (!subjectStats.length) return null;
@@ -245,41 +197,17 @@ export default function StudentDashboard() {
   }, [subjectStats]);
 
   const availableQuizzes = useMemo(() => {
-    const regularAvailable = (quizzes || [])
-      .filter((q) => !completedQuizIds.has(q.id))
-      .map((q) => ({
+    // Backend already filters for published + pending assignments — no frontend filter needed
+    return (somaQuizzes || [])
+      .map((q: any) => ({
         id: q.id,
         title: q.title,
-        subject: q.subject || "General",
+        subject: q.topic || q.subject || "General",
         level: q.level || "",
-        dueDate: q.dueDate,
-        timeLimitMinutes: q.timeLimitMinutes,
-        type: "regular" as const,
+        isAssigned: q.isAssigned || false,
+        dueDate: q.dueDate || null,
       }));
-
-    const somaAvailable = (somaQuizzes || [])
-      .filter((q) => q.status === "published" && !completedSomaQuizIds.has(q.id))
-      .map((q) => ({
-        id: q.id,
-        title: q.title,
-        subject: q.topic || "General",
-        level: "",
-        dueDate: null as any,
-        timeLimitMinutes: null,
-        type: "soma" as const,
-      }));
-
-    const currentTime = new Date();
-    return [...regularAvailable, ...somaAvailable].sort((a, b) => {
-      const aOverdue = a.dueDate ? new Date(a.dueDate) < currentTime : false;
-      const bOverdue = b.dueDate ? new Date(b.dueDate) < currentTime : false;
-      if (aOverdue !== bOverdue) return aOverdue ? 1 : -1;
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    });
-  }, [quizzes, somaQuizzes, completedQuizIds, completedSomaQuizIds]);
+  }, [somaQuizzes, completedSomaQuizIds]);
 
   const allSubjects = useMemo(() => {
     const set = new Set<string>();
@@ -302,51 +230,18 @@ export default function StudentDashboard() {
   }, [availableQuizzes, subjectFilter, levelFilter]);
 
   const completedItems = useMemo(() => {
-    const items: {
-      id: number;
-      quizId: number;
-      title: string;
-      subject: string;
-      score: number;
-      maxScore: number;
-      status: string;
-      feedbackHtml: string | null;
-      date: string;
-      type: "regular" | "soma";
-    }[] = [];
-
-    submissions.forEach((s) => {
-      items.push({
-        id: s.id,
-        quizId: s.quizId,
-        title: s.quiz.title,
-        subject: s.quiz.subject || "General",
-        score: s.totalScore,
-        maxScore: s.maxPossibleScore,
-        status: "completed",
-        feedbackHtml: null,
-        date: s.submittedAt,
-        type: "regular",
-      });
-    });
-
-    reports.forEach((r) => {
-      items.push({
-        id: r.id,
-        quizId: r.quizId,
-        title: r.quiz.title,
-        subject: r.quiz.topic || "General",
-        score: r.score,
-        maxScore: 100,
-        status: r.status,
-        feedbackHtml: r.aiFeedbackHtml,
-        date: r.createdAt,
-        type: "soma",
-      });
-    });
-
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [submissions, reports]);
+    return reports.map((r) => ({
+      id: r.id,
+      quizId: r.quizId,
+      title: r.quiz.title,
+      subject: r.quiz.topic || r.quiz.subject || "General",
+      score: r.score,
+      maxScore: 100,
+      status: r.status,
+      feedbackHtml: r.aiFeedbackHtml,
+      date: r.createdAt,
+    })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [reports]);
 
   const retryMutation = useMutation({
     mutationFn: async (reportId: number) => {
@@ -367,7 +262,7 @@ export default function StudentDashboard() {
   const now = new Date();
   const avatarRingColor = bestSubject ? getSubjectColor(bestSubject.subject).hex : "#8B5CF6";
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
-  const isLoading = quizzesLoading || somaLoading || reportsLoading || subsLoading;
+  const isLoading = somaLoading || reportsLoading;
 
   const visibleAvailable = showAllAvailable ? filteredQuizzes : filteredQuizzes.slice(0, 4);
   const visibleCompleted = showAllCompleted ? completedItems : completedItems.slice(0, 5);
@@ -459,7 +354,7 @@ export default function StudentDashboard() {
             <div className="grid md:grid-cols-2 gap-6">
               <section className={CARD_CLASS}>
                 <h2 className="text-3xl font-bold tracking-wide text-slate-200" data-testid="text-section-available">
-                  Available Quizzes
+                  Your Assessments
                 </h2>
 
                 <div className="mt-4 mb-2 overflow-x-auto pb-2 -mx-1 px-1" data-testid="filter-bar">
@@ -489,29 +384,29 @@ export default function StudentDashboard() {
                   {filteredQuizzes.length === 0 ? (
                     <div className="bg-slate-800/30 rounded-xl p-8 text-center border border-slate-800/50">
                       <BookOpen className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-                      <p className="text-sm text-slate-400">No available quizzes</p>
+                      <p className="text-sm text-slate-400">No quizzes assigned to you yet</p>
+                      <p className="text-xs text-slate-500 mt-1">Your tutor will assign assessments when they're ready</p>
                     </div>
                   ) : (
                     <>
                       {visibleAvailable.map((q) => {
-                        const isOverdue = q.dueDate && new Date(q.dueDate) < now;
                         const sc = getSubjectColor(q.subject);
                         const SubjectIcon = getSubjectIcon(q.subject);
                         return (
                           <Link
-                            key={`${q.type}-${q.id}`}
-                            href={q.type === "soma" ? `/soma/quiz/${q.id}` : `/quiz/${q.id}`}
+                            key={q.id}
+                            href={`/soma/quiz/${q.id}`}
                           >
                             <div
-                              className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group"
-                              data-testid={`card-available-quiz-${q.type}-${q.id}`}
+                              className={`bg-slate-800/40 border rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-violet-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_24px_rgba(139,92,246,0.08)] group ${q.isAssigned ? "border-violet-500/40 shadow-[0_0_16px_rgba(139,92,246,0.06)]" : "border-slate-700/50"}`}
+                              data-testid={`card-available-quiz-${q.id}`}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className={`w-10 h-10 rounded-xl ${sc.bg} border ${sc.border} flex items-center justify-center shrink-0`}>
                                   <SubjectIcon className={`w-5 h-5 ${sc.label}`} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1.5">
+                                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.label}`}>
                                       {q.subject}
                                     </span>
@@ -520,27 +415,35 @@ export default function StudentDashboard() {
                                         {q.level}
                                       </span>
                                     )}
-                                    {isOverdue && (
-                                      <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]" data-testid={`badge-overdue-${q.id}`}>
-                                        <AlertTriangle className="w-3 h-3 mr-1" />
-                                        Overdue
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.type}-${q.id}`}>
-                                    {q.title}
-                                  </h3>
-                                  <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
-                                    {q.dueDate && (
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        Due {format(new Date(q.dueDate), "MMM d, yyyy")}
+                                    {q.isAssigned && (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/30"
+                                        data-testid={`badge-assigned-${q.id}`}
+                                      >
+                                        Assigned to you
                                       </span>
                                     )}
-                                    {q.timeLimitMinutes && (
-                                      <span>{q.timeLimitMinutes} min</span>
-                                    )}
+                                    {q.dueDate && (() => {
+                                      const due = new Date(q.dueDate);
+                                      const isOverdue = due.getTime() < Date.now();
+                                      return (
+                                        <span
+                                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                            isOverdue
+                                              ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                                              : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                          }`}
+                                          data-testid={`badge-due-${q.id}`}
+                                        >
+                                          <Calendar className="w-3 h-3" />
+                                          {isOverdue ? "Overdue" : `Due: ${format(due, "MMM d, h:mm a")}`}
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
+                                  <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-available-title-${q.id}`}>
+                                    {q.title}
+                                  </h3>
                                 </div>
                                 <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-violet-400 transition-colors mt-1 flex-shrink-0" />
                               </div>
@@ -580,15 +483,13 @@ export default function StudentDashboard() {
                         const pct = item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0;
                         const isPending = item.status === "pending";
                         const isFailed = item.status === "failed";
-                        const somaHasAnalysis = item.type === "soma" && !!item.feedbackHtml && !isPending;
-                        const regularHasCachedAnalysis = item.type === "regular" && !!getCachedAnalysis(item.quizId, "regular");
-                        const hasAiAnalysis = somaHasAnalysis || regularHasCachedAnalysis;
-                        const isLoadingThis = loadingAnalysisId === `${item.type}-${item.quizId}`;
+                        const hasAiAnalysis = !!item.feedbackHtml && !isPending;
+                        const isLoadingThis = loadingAnalysisId === `soma-${item.quizId}`;
                         return (
                           <div
-                            key={`${item.type}-${item.id}`}
+                            key={item.id}
                             className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-6 transition-all duration-300"
-                            data-testid={`card-completed-${item.type}-${item.id}`}
+                            data-testid={`card-completed-${item.id}`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className={`w-10 h-10 rounded-xl ${sc.bg} border ${sc.border} flex items-center justify-center shrink-0`}>
@@ -627,14 +528,14 @@ export default function StudentDashboard() {
                                             : "text-amber-500 animate-pulse hover:text-amber-400 cursor-pointer"
                                     }`}
                                     title={isLoadingThis ? "Your Report is being generated..." : hasAiAnalysis ? "View AI analysis" : "Generate AI analysis"}
-                                    data-testid={`icon-ai-status-${item.type}-${item.id}`}
+                                    data-testid={`icon-ai-status-${item.id}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (isLoadingThis) return;
-                                      if (somaHasAnalysis && item.feedbackHtml) {
+                                      if (hasAiAnalysis && item.feedbackHtml) {
                                         setAnalysisPopup({ title: item.title, html: item.feedbackHtml });
                                       } else {
-                                        fetchAnalysis({ quizId: item.quizId, title: item.title, type: item.type });
+                                        fetchAnalysis({ quizId: item.quizId, title: item.title });
                                       }
                                     }}
                                   >
@@ -645,7 +546,7 @@ export default function StudentDashboard() {
                                     )}
                                   </button>
                                 </div>
-                                <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.type}-${item.id}`}>
+                                <h3 className="text-sm font-medium text-slate-200 truncate" data-testid={`text-completed-title-${item.id}`}>
                                   {item.title}
                                 </h3>
                                 <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
@@ -656,7 +557,7 @@ export default function StudentDashboard() {
                                 <div
                                   className="text-2xl font-bold"
                                   style={{ color: pct >= 70 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#f43f5e", textShadow: `0 0 12px ${pct >= 70 ? "#10b98130" : pct >= 50 ? "#f59e0b30" : "#f43f5e30"}` }}
-                                  data-testid={`text-score-${item.type}-${item.id}`}
+                                  data-testid={`text-score-${item.id}`}
                                 >
                                   {pct}%
                                 </div>
@@ -666,11 +567,11 @@ export default function StudentDashboard() {
                                 <div className="flex items-center gap-2 mt-1.5 justify-end">
                                   {/* Eye icon to review quiz answers */}
                                   {(
-                                    <Link href={item.type === "soma" ? `/soma/review/${item.id}` : `/quiz/${item.quizId}`}>
+                                    <Link href={`/soma/review/${item.id}`}>
                                       <button
                                         className="text-cyan-400 hover:text-cyan-300 transition-colors p-0.5"
                                         title="Review answers"
-                                        data-testid={`button-review-quiz-${item.type}-${item.id}`}
+                                        data-testid={`button-review-quiz-${item.id}`}
                                       >
                                         <Eye className="w-4 h-4" />
                                       </button>
@@ -690,7 +591,7 @@ export default function StudentDashboard() {
                                         }
                                       }}
                                       className="text-[10px] text-violet-400 hover:text-violet-300 block transition-colors"
-                                      data-testid={`button-view-report-${item.type}-${item.id}`}
+                                      data-testid={`button-view-report-${item.id}`}
                                     >
                                       View Report →
                                     </button>

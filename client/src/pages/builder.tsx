@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Quiz, Question } from "@shared/schema";
+import type { SomaQuiz, SomaQuestion } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,13 +12,15 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Send, Loader2, Sparkles, FileStack, Upload, Trash2,
-  FileText, X, Pencil, BookOpen, Calendar,
-  Scan, Brain, Search, CheckCircle2, Eye, PartyPopper, LayoutDashboard, Clock
+  FileText, X, Pencil, BookOpen,
+  Scan, Brain, Search, CheckCircle2, Eye, PartyPopper, LayoutDashboard
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import { renderLatex, unescapeLatex } from '@/lib/render-latex';
 import SomaQuizEngine from "./soma-quiz";
 import type { StudentQuestion } from "./soma-quiz";
+import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 
 const LEVEL_OPTIONS = ["University", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "IGCSE", "AS", "A2", "Other"];
 
@@ -37,15 +39,13 @@ export default function BuilderPage() {
   const isEditMode = editId !== null;
 
   const [title, setTitle] = useState("");
-  const [timeLimit, setTimeLimit] = useState("60");
-  const [dueDate, setDueDate] = useState("");
   const [syllabus, setSyllabus] = useState("");
   const [level, setLevel] = useState("");
   const [subject, setSubject] = useState("");
 
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState<{ role: "user" | "ai"; text: string; metadata?: { provider: string; model: string; durationMs: number } }[]>([]);
-  const [savedQuestions, setSavedQuestions] = useState<Question[]>([]);
+  const [savedQuestions, setSavedQuestions] = useState<SomaQuestion[]>([]);
   const [populated, setPopulated] = useState(false);
   const [activeQuizId, setActiveQuizId] = useState<number | null>(editId);
 
@@ -61,28 +61,82 @@ export default function BuilderPage() {
   const [docContext, setDocContext] = useState<{ name: string; type: string; fileId: string }[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const dueDateRef = useRef<HTMLInputElement>(null);
 
-  const { data: adminSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
-    queryKey: ["/api/admin/session"],
+  const [supaSession, setSupaSession] = useState<Session | null>(null);
+  const [supaLoading, setSupaLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSupaSession(s);
+      setSupaLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSupaSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const tutorUserId = supaSession?.user?.id;
+  const supaAccessToken = supaSession?.access_token;
+  const isTutorAuth = !!tutorUserId;
+  const backLink = "/tutor/assessments";
+
+  const authHeaders = useCallback((): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (supaAccessToken) headers["Authorization"] = `Bearer ${supaAccessToken}`;
+    if (tutorUserId) headers["x-tutor-id"] = tutorUserId;
+    return headers;
+  }, [supaAccessToken, tutorUserId]);
+
+  const authFetch = useCallback(async (url: string, opts: RequestInit = {}): Promise<Response> => {
+    const headers = { ...authHeaders(), ...(opts.headers || {}) };
+    return fetch(url, { ...opts, headers, credentials: "include" });
+  }, [authHeaders]);
+
+  const authApiRequest = useCallback(async (method: string, url: string, data?: unknown): Promise<Response> => {
+    const headers: Record<string, string> = { ...authHeaders() };
+    if (data) headers["Content-Type"] = "application/json";
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      try {
+        const json = JSON.parse(text);
+        throw new Error(json.message || text);
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+        throw new Error(text || res.statusText);
+      }
+    }
+    return res;
+  }, [authHeaders]);
+
+  const { data: tutorSession, isLoading: sessionLoading, error: sessionError } = useQuery<{ authenticated: boolean }>({
+    queryKey: ["/api/tutor/session", tutorUserId],
     queryFn: async () => {
-      const res = await fetch("/api/admin/session", { credentials: "include" });
+      const res = await authFetch("/api/tutor/session");
       return res.json();
     },
+    enabled: !supaLoading && !!tutorUserId,
   });
 
-  const authenticated = adminSession?.authenticated === true;
+  const authenticated = tutorSession?.authenticated === true;
 
-  const { data: quizData, isLoading: quizLoading } = useQuery<Quiz & { questions: Question[] }>({
-    queryKey: ["/api/admin/quizzes", activeQuizId],
+  const { data: quizData, isLoading: quizLoading } = useQuery<SomaQuiz & { questions: SomaQuestion[] }>({
+    queryKey: ["/api/tutor/quizzes", activeQuizId],
+    queryFn: async () => {
+      const res = await authFetch(`/api/tutor/quizzes/${activeQuizId}/detail`);
+      if (!res.ok) throw new Error("Failed to load quiz");
+      return res.json();
+    },
     enabled: authenticated && activeQuizId !== null,
   });
 
   useEffect(() => {
     if (quizData && !populated) {
       setTitle(quizData.title);
-      setTimeLimit(String(quizData.timeLimitMinutes));
-      setDueDate(quizData.dueDate ? new Date(quizData.dueDate).toISOString().slice(0, 16) : "");
       setSyllabus(quizData.syllabus || "");
       setLevel(quizData.level || "");
       setSubject(quizData.subject || "");
@@ -108,15 +162,11 @@ export default function BuilderPage() {
   const ensureQuizExists = async (): Promise<number> => {
     if (activeQuizId) return activeQuizId;
     if (!title.trim()) throw new Error("Please fill in a quiz title before generating questions.");
-    if (!dueDate) throw new Error("Please set a due date before generating questions.");
-    const tl = parseInt(timeLimit);
-    if (isNaN(tl) || tl < 1) throw new Error("Time limit must be a positive number.");
-    const quizRes = await apiRequest("POST", "/api/admin/quizzes", {
+    const quizRes = await authApiRequest("POST", "/api/tutor/quizzes", {
       title: title.trim(),
-      timeLimitMinutes: tl,
-      dueDate,
-      syllabus: syllabus || null,
-      level: level || null,
+      topic: title.trim(),
+      syllabus: syllabus || "IEB",
+      level: level || "Grade 6-12",
       subject: subject || null,
     });
     const quiz = await quizRes.json();
@@ -152,7 +202,7 @@ export default function BuilderPage() {
       const docIds = docContext.map((d) => d.fileId);
 
       animatePipeline(2);
-      const res = await apiRequest("POST", "/api/admin/copilot-chat", {
+      const res = await authApiRequest("POST", "/api/tutor/copilot-chat", {
         message: enrichedMessage,
         documentIds: docIds.length > 0 ? docIds : undefined,
       });
@@ -168,12 +218,12 @@ export default function BuilderPage() {
         const quizId = await ensureQuizExists();
 
         animatePipeline(4);
-        await apiRequest("POST", `/api/admin/quizzes/${quizId}/questions`, { questions: data.drafts });
+        await authApiRequest("POST", `/api/tutor/quizzes/${quizId}/questions`, { questions: data.drafts });
 
-        await queryClient.refetchQueries({ queryKey: ["/api/admin/quizzes", quizId] });
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/tutor/quizzes", quizId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
 
-        const refetched = queryClient.getQueryData<Quiz & { questions: Question[] }>(["/api/admin/quizzes", quizId]);
+        const refetched = queryClient.getQueryData<SomaQuiz & { questions: SomaQuestion[] }>(["/api/tutor/quizzes", quizId]);
         if (refetched?.questions) {
           setSavedQuestions(refetched.questions);
         }
@@ -202,14 +252,9 @@ export default function BuilderPage() {
   const updateMetaMutation = useMutation({
     mutationFn: async () => {
       if (!activeQuizId) throw new Error("No quiz to update");
-      const tl = parseInt(timeLimit);
-      if (isNaN(tl) || tl < 1) throw new Error("Time limit must be a positive number");
       if (!title.trim()) throw new Error("Title is required");
-      if (!dueDate) throw new Error("Due date is required");
-      await apiRequest("PUT", `/api/admin/quizzes/${activeQuizId}`, {
+      await authApiRequest("PUT", `/api/tutor/quizzes/${activeQuizId}`, {
         title: title.trim(),
-        timeLimitMinutes: tl,
-        dueDate,
         syllabus: syllabus || null,
         level: level || null,
         subject: subject || null,
@@ -217,8 +262,8 @@ export default function BuilderPage() {
     },
     onSuccess: () => {
       setMetaDirty(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", activeQuizId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
       toast({ title: "Assessment details updated" });
     },
     onError: (err: Error) => toast({ title: "Failed to update", description: err.message, variant: "destructive" }),
@@ -226,10 +271,10 @@ export default function BuilderPage() {
 
   const deleteQuestionMutation = useMutation({
     mutationFn: async (questionId: number) =>
-      apiRequest("DELETE", `/api/admin/questions/${questionId}`),
+      authApiRequest("DELETE", `/api/tutor/questions/${questionId}`),
     onSuccess: (_data, questionId) => {
       setSavedQuestions((prev) => prev.filter((q) => q.id !== questionId));
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/quizzes", activeQuizId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes", activeQuizId] });
       toast({ title: "Question deleted" });
     },
     onError: (err: Error) => toast({ title: "Failed to delete question", description: err.message, variant: "destructive" }),
@@ -241,10 +286,9 @@ export default function BuilderPage() {
     try {
       const uploadForm = new FormData();
       uploadForm.append("pdf", file);
-      const uploadRes = await fetch("/api/admin/upload-supporting-doc", {
+      const uploadRes = await authFetch("/api/tutor/upload-doc", {
         method: "POST",
         body: uploadForm,
-        credentials: "include",
       });
       let fileId: string | null = null;
       if (uploadRes.ok) {
@@ -280,12 +324,12 @@ export default function BuilderPage() {
     savedQuestions.map((q) => ({
       id: q.id,
       quizId: activeQuizId || 0,
-      stem: unescapeLatex(q.promptText),
+      stem: unescapeLatex(q.stem),
       options: q.options,
-      marks: q.marksWorth,
+      marks: q.marks,
     } as StudentQuestion)), [savedQuestions, activeQuizId]);
 
-  if (sessionLoading) {
+  if (supaLoading || sessionLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
@@ -294,14 +338,14 @@ export default function BuilderPage() {
   }
 
   if (sessionError) {
-    return <div className="min-h-screen bg-background p-4 md:p-6 text-red-400">Failed to verify admin session.</div>;
+    return <div className="min-h-screen bg-background p-4 md:p-6 text-red-400">Failed to verify session.</div>;
   }
 
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="glass-card p-8 text-center">
-          <p className="text-slate-300">Please log in via <Link href="/admin" className="text-violet-400 underline">/admin</Link> first.</p>
+          <p className="text-slate-300">Please <Link href="/login" className="text-violet-400 underline">log in</Link> to access the builder.</p>
         </div>
       </div>
     );
@@ -329,7 +373,7 @@ export default function BuilderPage() {
       <header className="border-b border-white/5 bg-white/[0.02] backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
-            <Link href="/admin">
+            <Link href={backLink}>
               <Button className="glow-button-outline min-h-[44px] md:min-h-0" size="sm" data-testid="button-back-admin">
                 <ArrowLeft className="w-4 h-4 md:mr-1" />
                 <span className="hidden md:inline">Back</span>
@@ -359,7 +403,7 @@ export default function BuilderPage() {
               <Eye className="w-4 h-4 md:mr-1.5" />
               <span className="hidden md:inline">Preview</span>
             </Button>
-            <Link href="/admin">
+            <Link href="/tutor/assessments">
               <Button className="border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:border-red-500/30 transition-all min-h-[44px] md:min-h-0" size="sm" data-testid="button-exit-builder">
                 <X className="w-4 h-4 md:mr-1" />
                 <span className="hidden md:inline">Exit</span>
@@ -427,36 +471,6 @@ export default function BuilderPage() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-slate-400 text-xs flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> Due Date
-                </Label>
-                <div className="relative">
-                  <Input
-                    ref={dueDateRef}
-                    type="datetime-local"
-                    value={dueDate}
-                    onChange={(e) => { setDueDate(e.target.value); markMeta(); }}
-                    className="glass-input text-sm h-12 pl-9 cursor-pointer"
-                    onClick={() => { try { dueDateRef.current?.showPicker?.(); } catch {} }}
-                    data-testid="input-quiz-due"
-                  />
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-slate-400 text-xs flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Time (min)
-                </Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={timeLimit}
-                  onChange={(e) => { setTimeLimit(e.target.value); markMeta(); }}
-                  className="glass-input text-sm h-12"
-                  data-testid="input-quiz-time"
-                />
-              </div>
             </div>
             {metaDirty && activeQuizId && (
               <div className="mt-3 flex justify-end">
@@ -464,7 +478,7 @@ export default function BuilderPage() {
                   className="glow-button text-xs min-h-[44px]"
                   size="sm"
                   onClick={() => updateMetaMutation.mutate()}
-                  disabled={updateMetaMutation.isPending || !title.trim() || !dueDate}
+                  disabled={updateMetaMutation.isPending || !title.trim()}
                   data-testid="button-save-metadata"
                 >
                   {updateMetaMutation.isPending ? (
@@ -678,10 +692,10 @@ export default function BuilderPage() {
                   <div key={q.id} className="bg-white/[0.03] border border-white/5 rounded-lg p-3 flex items-start gap-2" data-testid={`card-saved-q-${q.id}`}>
                     <span className="text-xs font-mono text-emerald-400 font-medium mt-0.5 shrink-0 w-6">Q{idx + 1}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-slate-300 line-clamp-2">{renderLatex(unescapeLatex(q.promptText))}</div>
+                      <div className="text-xs text-slate-300 line-clamp-2">{renderLatex(unescapeLatex(q.stem))}</div>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.options.length} opts</Badge>
-                        <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.marksWorth}m</Badge>
+                        <Badge className="bg-white/5 text-slate-500 border-white/10 text-[10px]">{q.marks}m</Badge>
                       </div>
                     </div>
                     <button
@@ -725,10 +739,10 @@ export default function BuilderPage() {
                 <Eye className="w-4 h-4 mr-2" />
                 Preview Assessment
               </Button>
-              <Link href="/admin">
+              <Link href="/tutor/assessments">
                 <Button className="w-full glow-button-outline min-h-[48px]" data-testid="button-success-dashboard">
                   <LayoutDashboard className="w-4 h-4 mr-2" />
-                  Back to Dashboard
+                  Back to Assessments
                 </Button>
               </Link>
             </div>

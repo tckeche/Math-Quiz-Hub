@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import express from "express";
 import { createServer } from "http";
 import supertest from "supertest";
+import jwt from "jsonwebtoken";
 
 // ─── Mock DB so MemoryStorage is used ────────────────────────────────────────
 vi.mock("../server/db", () => ({ db: null }));
@@ -73,6 +74,15 @@ afterAll(() => {
   httpServer.close();
 });
 
+// Helper: create a Supabase-style JWT for a synced user (for requireSupabaseAuth routes)
+async function createAuthToken(userId: string, email: string): Promise<string> {
+  // Sync the user first
+  await request.post("/api/auth/sync").send({ id: userId, email, user_metadata: {} });
+  // Create a JWT matching what requireSupabaseAuth expects (sub = userId)
+  const secret = process.env.JWT_SECRET || "test-jwt-secret-for-testing-only-32chars";
+  return jwt.sign({ sub: userId, email, role: "authenticated" }, secret, { expiresIn: "1h" });
+}
+
 // Helper: login as admin and get cookie
 async function loginAsAdmin() {
   const res = await request
@@ -134,7 +144,7 @@ describe("POST /api/admin/login", () => {
   it("returns 401 with wrong password", async () => {
     const res = await request.post("/api/admin/login").send({ password: "wrongpassword" });
     expect(res.status).toBe(401);
-    expect(res.body.message).toMatch(/incorrect password/i);
+    expect(res.body.error.message).toMatch(/invalid admin credentials/i);
   });
 
   it("returns 401 with empty password", async () => {
@@ -511,7 +521,7 @@ describe("POST /api/submissions", () => {
       startTime: Date.now() + 60000, // 1 minute in future
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/invalid start time/i);
+    expect(res.body.error.message).toMatch(/invalid start time/i);
   });
 
   it("rejects submission with startTime exceeding time limit", async () => {
@@ -522,7 +532,7 @@ describe("POST /api/submissions", () => {
       startTime: Date.now() - (61 * 60 * 1000), // 61 minutes ago (limit is 60)
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/time limit/i);
+    expect(res.body.error.message).toMatch(/time limit/i);
   });
 
   it("returns 400 when studentId missing", async () => {
@@ -923,7 +933,7 @@ describe("POST /api/auth/sync", () => {
       email: "noid@example.com",
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/missing/i);
+    expect(res.body.error.message).toMatch(/missing/i);
   });
 
   it("returns 400 when email is missing", async () => {
@@ -931,34 +941,38 @@ describe("POST /api/auth/sync", () => {
       id: "550e8400-e29b-41d4-a716-446655440004",
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/missing/i);
+    expect(res.body.error.message).toMatch(/missing/i);
   });
 });
 
-// ─── STUDENT ENDPOINTS: Reports & Submissions ──────────────────────────────
+// ─── STUDENT ENDPOINTS: Reports & Submissions (JWT-protected) ────────────
 describe("GET /api/student/reports", () => {
-  it("returns 400 when studentId is missing", async () => {
+  it("returns 401 when no auth token provided", async () => {
     const res = await request.get("/api/student/reports");
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/studentId required/i);
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toMatch(/authentication required/i);
   });
 
-  it("returns empty array for unknown studentId", async () => {
-    const res = await request.get("/api/student/reports?studentId=nonexistent-id");
+  it("returns empty array for authenticated user with no reports", async () => {
+    const token = await createAuthToken("aaaaaaaa-0000-0000-0000-000000000001", "teststudent@example.com");
+    const res = await request.get("/api/student/reports")
+      .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
 });
 
 describe("GET /api/student/submissions", () => {
-  it("returns 400 when studentId is missing", async () => {
+  it("returns 401 when no auth token provided", async () => {
     const res = await request.get("/api/student/submissions");
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/studentId required/i);
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toMatch(/authentication required/i);
   });
 
-  it("returns empty array for unknown studentId", async () => {
-    const res = await request.get("/api/student/submissions?studentId=nonexistent-id");
+  it("returns empty array for authenticated user with no submissions", async () => {
+    const token = await createAuthToken("aaaaaaaa-0000-0000-0000-000000000002", "teststudent2@example.com");
+    const res = await request.get("/api/student/submissions")
+      .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -1306,7 +1320,7 @@ describe("Security: Additional hardening", () => {
       startTime: Infinity,
     });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/startTime/i);
+    expect(res.body.error.message).toMatch(/startTime/i);
   });
 
   it("submission with NaN startTime is rejected", async () => {

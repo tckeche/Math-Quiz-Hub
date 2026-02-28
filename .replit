@@ -46,6 +46,7 @@ waitForPort = 5000
 [userenv]
 
 [userenv.shared]
-SUPABASE_DB_URL = "postgresql://postgres.wwfdrhlknhlrxhgkookg:rxM3Az0A0fmnMuEF@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?sslmode=require"
-JWT_SECRET = "e3c4948dde0ad90d8759a1c983a84185afd46900c8a549328543a7d2d6f69853"
+JWT_SECRET = "1ARBq1xysHxkLujZBNPUnFqYeG8N99+DkA0hZO2CMaTKjYq7x4pApRQnyoQS7/G8K8LD7TBg85uvawwZyhXzmg=="
 ADMIN_PASSWORD = "Chomukamba"
+ADMIN_USERNAME = "admin.soma@melaniacalvin.com"
+SUPABASE_DB_URL = "postgresql://postgres.lwjauxauqvwnwoyqezvu:kCbFtnqhfhzPIaBr@aws-1-eu-central-1.pooler.supabase.com:6543/postgres"

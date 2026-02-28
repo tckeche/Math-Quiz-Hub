@@ -1,0 +1,35 @@
+{
+  "system_prompt": {
+    "task": "SOMA V3 - UI Diagnostic Fix & Legacy Codebase Purge",
+    "role": "Lead Full-Stack Debugger & Systems Architect",
+    "objective": "First, diagnose and fix a critical UI bug where AI explanations for incorrect answers are failing to render on the Student Review screen. Second, execute a comprehensive purge of all V1/V2 legacy code to secure the V3 architecture.",
+    "execution_instructions": "Execute Phase 1 to restore the AI explanations. Once verified, execute Phase 2 to delete the legacy codebase. Output a summary of the fixed explanation pipeline and the deleted legacy files."
+  },
+  "phase_1_explanation_diagnostic_and_fix": {
+    "diagnostic_targets": [
+      "AI Pipeline (Zod Schema): Verify that the AI generation prompt strictly requires an `explanation` string for every question.",
+      "Database Schema: Verify the `soma_questions` table actually has an `explanation` column and that it is being populated during quiz creation.",
+      "Frontend UI (`SomaQuizReview.tsx` or similar): Inspect the conditional rendering logic. It should look something like `{(!isCorrect && question.explanation) && <div className='bg-red-500/10'>...</div>}`. Ensure it is referencing the correct variable from the backend payload."
+    ],
+    "repair_action": "Trace the `explanation` data from the AI generation output, through the database insertion, to the frontend render. Fix the broken link in this chain so the short lesson displays prominently when a student reviews a wrong answer."
+  },
+  "phase_2_legacy_codebase_purge": {
+    "1_database_schema_purge": {
+      "target_file": "shared/schema.ts",
+      "action": "Delete the legacy `quizzes`, `questions`, and `submissions` table definitions entirely. DO NOT touch `somaQuizzes`, `somaQuestions`, `somaReports`, `somaUsers`, `quizAssignments`, `tutorStudents`, or `tutorComments`."
+    },
+    "2_storage_interface_purge": {
+      "target_files": ["server/storage.ts", "server/databaseStorage.ts"],
+      "action": "Delete all legacy interface methods (e.g., `getQuizzes`, `getQuestions`, `createSubmission`). Remove their implementations. Ensure ONLY `soma` and `tutor` prefixed methods remain."
+    },
+    "3_backend_api_purge": {
+      "target_file": "server/routes.ts",
+      "action": "Delete legacy Express route handlers: `GET /api/quizzes`, `GET /api/quizzes/:id`, `GET /api/questions`, and `POST /api/submissions`. Ensure the leaking global quiz pool is physically deleted."
+    },
+    "4_frontend_ui_and_routing_purge": {
+      "target_files": ["client/src/App.tsx", "client/src/pages/*"],
+      "action": "Delete any legacy frontend components used for V1 quizzes (e.g., `client/src/pages/Quiz.tsx`). In `App.tsx`, remove their obsolete routes. The app must strictly route students to `SomaQuiz` or `SomaQuizReview`."
+    }
+  },
+  "final_command": "Run `npx tsc --noEmit` after the purge to catch any broken imports caused by deleting the legacy files. Fix all TypeScript errors before outputting your final success log."
+}

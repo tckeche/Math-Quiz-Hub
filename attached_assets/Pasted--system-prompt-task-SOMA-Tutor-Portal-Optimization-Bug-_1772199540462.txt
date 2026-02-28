@@ -1,0 +1,26 @@
+{
+  "system_prompt": {
+    "task": "SOMA Tutor Portal Optimization & Bug Fixes",
+    "role": "Lead Full-Stack Engineer",
+    "objective": "Resolve critical UI/UX and performance issues on the Tutor Portal resulting from the V3 multi-tenant architecture migration.",
+    "execution_instructions": "Read the 4 action items below. Modify the router, optimize the backend aggregations, fix the student fetching query, and update the UI. Provide a summary of exactly what was changed."
+  },
+  "action_items": {
+    "1_admin_route_deprecation": {
+      "target_file": "client/src/App.tsx (and routing files)",
+      "action": "Delete the dedicated AdminLogin route/page. Add a strict redirect so any user attempting to access `/admin` is automatically rerouted to `/login`. All authentication must happen through the single `/login` entry point."
+    },
+    "2_fix_student_directory_fetch": {
+      "target_files": ["server/routes.ts", "client/src/pages/TutorStudents.tsx"],
+      "action": "Rename all 'Adopt Students' UI strings to 'Add Students'. Fix the `GET /api/tutor/students/available` (or equivalent global directory) endpoint. It is currently returning an empty array. Ensure the query explicitly selects users where `role = 'student'` OR `role IS NULL` (for legacy records), and specifically excludes students the tutor has ALREADY added. Verify the Supabase JWT middleware is not accidentally blocking this read."
+    },
+    "3_dashboard_performance_optimization": {
+      "target_file": "server/routes.ts (Tutor Dashboard Stats Endpoint)",
+      "action": "The Tutor Dashboard is taking too long to load. Stop fetching full quiz/report JSON payloads into Node.js memory just to calculate averages. Rewrite the Drizzle/SQL queries in the `dashboard-stats` endpoint to perform the aggregations (`COUNT`, `AVG`) natively at the database level. Add proper async/await `Promise.all()` for parallel execution of these queries."
+    },
+    "4_create_quiz_cta": {
+      "target_file": "client/src/pages/TutorDashboard.tsx",
+      "action": "Add a prominent, high-contrast 'Create Assessment' primary button at the top right of the Tutor Dashboard header (next to the title). This button must route directly to the Copilot Quiz Builder."
+    }
+  }
+}

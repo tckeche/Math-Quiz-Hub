@@ -255,6 +255,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showSummary, setShowSummary] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<{ score: number; maxScore: number } | null>(null);
+  const [quizStartedAt] = useState<string>(new Date().toISOString());
 
   useEffect(() => {
     if (isPreview) return;
@@ -308,6 +309,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
         studentId: userId,
         studentName: displayName,
         answers,
+        startedAt: quizStartedAt,
       });
       return res.json();
     },
@@ -324,7 +326,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
 
   const questions = isPreview ? (props as PreviewProps).previewQuestions : fetchedQuestions;
   const effectiveQuiz: SomaQuiz | undefined = isPreview
-    ? { id: 0, title: (props as PreviewProps).previewTitle, topic: "", curriculumContext: null, status: "draft", createdAt: new Date() } as SomaQuiz
+    ? { id: 0, title: (props as PreviewProps).previewTitle, topic: "", curriculumContext: null, status: "published", createdAt: new Date() } as SomaQuiz
     : quiz;
 
   const isLoading = isPreview ? false : (quizLoading || questionsLoading || sessionLoading);
@@ -394,7 +396,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
         <Button
           size="sm"
           className="hover:bg-slate-800 bg-transparent text-slate-400 transition-colors px-4 py-2 rounded-lg flex items-center gap-2 min-h-[44px]"
-          onClick={() => { (props as PreviewProps).onExitPreview(); setLocation("/admin"); }}
+          onClick={() => { (props as PreviewProps).onExitPreview(); setLocation("/tutor/assessments"); }}
           data-testid="button-preview-to-dashboard"
         >
           <Home className="w-4 h-4" />

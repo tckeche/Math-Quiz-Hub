@@ -1,62 +1,51 @@
 import {
-  type Quiz, type InsertQuiz,
-  type Question, type InsertQuestion,
-  type Student, type InsertStudent,
-  type Submission, type InsertSubmission,
   type SomaQuiz, type InsertSomaQuiz,
   type SomaQuestion, type InsertSomaQuestion,
   type SomaUser, type InsertSomaUser,
   type SomaReport, type InsertSomaReport,
   type TutorStudent, type InsertTutorStudent,
   type QuizAssignment, type InsertQuizAssignment,
-  quizzes, questions, students, submissions,
+  type TutorComment, type InsertTutorComment,
   somaQuizzes, somaQuestions, somaUsers, somaReports,
-  tutorStudents, quizAssignments,
+  tutorStudents, quizAssignments, tutorComments,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, ne, notInArray, inArray } from "drizzle-orm";
+import { eq, and, ne, inArray, or, isNull, sql, count, avg, sum } from "drizzle-orm";
 
 function sanitizeName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+type SomaQuizBundleQuestionInput = {
+  stem: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
+  marks?: number;
+};
+
 export interface IStorage {
-  createQuiz(quiz: InsertQuiz): Promise<Quiz>;
-  getQuizzes(): Promise<Quiz[]>;
-  getQuiz(id: number): Promise<Quiz | undefined>;
-  updateQuiz(id: number, data: Partial<InsertQuiz>): Promise<Quiz | undefined>;
-  deleteQuiz(id: number): Promise<void>;
-
-  createQuestions(questionList: InsertQuestion[]): Promise<Question[]>;
-  getQuestionsByQuizId(quizId: number): Promise<Question[]>;
-  deleteQuestion(id: number): Promise<void>;
-
-  findOrCreateStudent(student: InsertStudent): Promise<Student>;
-  getStudent(id: number): Promise<Student | undefined>;
-  findStudentByName(firstName: string, lastName: string): Promise<Student | undefined>;
-
-  createSubmission(submission: InsertSubmission): Promise<Submission>;
-  getSubmissionsByQuizId(quizId: number): Promise<(Submission & { student: Student })[]>;
-  deleteSubmission(id: number): Promise<void>;
-  deleteSubmissionsByQuizId(quizId: number): Promise<void>;
-  checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean>;
-  getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined>;
-
   upsertSomaUser(user: InsertSomaUser): Promise<SomaUser>;
 
   createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz>;
+  createSomaQuizBundle(input: {
+    quiz: InsertSomaQuiz;
+    questions: SomaQuizBundleQuestionInput[];
+    assignedStudentIds?: string[];
+  }): Promise<{ quiz: SomaQuiz; questions: SomaQuestion[]; assignments: QuizAssignment[] }>;
   getSomaQuizzes(): Promise<SomaQuiz[]>;
   getSomaQuiz(id: number): Promise<SomaQuiz | undefined>;
+  updateSomaQuiz(id: number, data: Partial<InsertSomaQuiz>): Promise<SomaQuiz | undefined>;
   createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]>;
   getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]>;
+  deleteSomaQuestion(id: number): Promise<void>;
   getSomaReportsByStudentId(studentId: string): Promise<(SomaReport & { quiz: SomaQuiz })[]>;
-  getSubmissionsByStudentUserId(studentId: string): Promise<(Submission & { quiz: Quiz })[]>;
   createSomaReport(report: InsertSomaReport): Promise<SomaReport>;
   updateSomaReport(reportId: number, data: Partial<{ status: string; aiFeedbackHtml: string | null }>): Promise<SomaReport | undefined>;
   checkSomaSubmission(quizId: number, studentId: string): Promise<boolean>;
   getSomaReportById(reportId: number): Promise<(SomaReport & { quiz: SomaQuiz }) | undefined>;
+  getSomaReportsByQuizId(quizId: number): Promise<(SomaReport & { quiz: SomaQuiz })[]>;
 
-  // Multi-tenant: Tutor-Student management
   getSomaUserByEmail(email: string): Promise<SomaUser | undefined>;
   getSomaUserById(id: string): Promise<SomaUser | undefined>;
   getAllStudents(): Promise<SomaUser[]>;
@@ -65,145 +54,62 @@ export interface IStorage {
   getAdoptedStudents(tutorId: string): Promise<SomaUser[]>;
   getAvailableStudents(tutorId: string): Promise<SomaUser[]>;
 
-  // Multi-tenant: Quiz assignments
-  createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]>;
+  createQuizAssignments(quizId: number, studentIds: string[], dueDate?: Date | null): Promise<QuizAssignment[]>;
   getQuizAssignmentsForStudent(studentId: string): Promise<(QuizAssignment & { quiz: SomaQuiz })[]>;
   getQuizAssignmentsForQuiz(quizId: number): Promise<(QuizAssignment & { student: SomaUser })[]>;
   updateQuizAssignmentStatus(quizId: number, studentId: string, status: string): Promise<void>;
+  deleteQuizAssignment(quizId: number, studentId: string): Promise<void>;
+  extendQuizAssignmentDeadlines(quizId: number, hours: number): Promise<number>;
 
-  // Multi-tenant: Tutor quiz management
   getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]>;
+
+  addTutorComment(comment: InsertTutorComment): Promise<TutorComment>;
+  getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]>;
+
+  getDashboardStatsForTutor(tutorId: string): Promise<{
+    totalStudents: number;
+    totalQuizzes: number;
+    cohortAverages: { subject: string; average: number; count: number }[];
+    recentSubmissions: { reportId: number; studentName: string; score: number; quizTitle: string; subject: string | null; createdAt: string; startedAt: string | null; completedAt: string | null }[];
+    pendingAssignments: { assignmentId: number; quizId: number; quizTitle: string; subject: string | null; studentId: string; studentName: string; dueDate: string | null; createdAt: string }[];
+  }>;
+
+  getAllSomaUsers(): Promise<SomaUser[]>;
+  deleteSomaUser(userId: string): Promise<void>;
+  deleteSomaQuiz(quizId: number): Promise<void>;
+  getAllSomaQuizzes(): Promise<SomaQuiz[]>;
 }
 
 class DatabaseStorage implements IStorage {
   constructor(private readonly database: NonNullable<typeof db>) {}
 
-  async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const [result] = await this.database.insert(quizzes).values(quiz).returning();
-    return result;
-  }
-
-  async getQuizzes(): Promise<Quiz[]> {
-    return this.database.select().from(quizzes).orderBy(quizzes.createdAt);
-  }
-
-  async getQuiz(id: number): Promise<Quiz | undefined> {
-    const [result] = await this.database.select().from(quizzes).where(eq(quizzes.id, id));
-    return result;
-  }
-
-  async updateQuiz(id: number, data: Partial<InsertQuiz>): Promise<Quiz | undefined> {
-    const [result] = await this.database.update(quizzes).set(data).where(eq(quizzes.id, id)).returning();
-    return result;
-  }
-
-  async deleteQuiz(id: number): Promise<void> {
-    await this.database.delete(submissions).where(eq(submissions.quizId, id));
-    await this.database.delete(quizzes).where(eq(quizzes.id, id));
-  }
-
-  async createQuestions(questionList: InsertQuestion[]): Promise<Question[]> {
-    if (questionList.length === 0) return [];
-    const normalizedQuestions = questionList.map((question) => ({
-      ...question,
-      options: Array.isArray(question.options) ? [...question.options] : [],
-    }));
-
-    return this.database.insert(questions).values(normalizedQuestions).returning();
-  }
-
-  async getQuestionsByQuizId(quizId: number): Promise<Question[]> {
-    return this.database.select().from(questions).where(eq(questions.quizId, quizId));
-  }
-
-  async deleteQuestion(id: number): Promise<void> {
-    await this.database.delete(questions).where(eq(questions.id, id));
-  }
-
-  async findOrCreateStudent(student: InsertStudent): Promise<Student> {
-    const fn = sanitizeName(student.firstName);
-    const ln = sanitizeName(student.lastName);
-    const existing = await this.findStudentByName(fn, ln);
-    if (existing) return existing;
-    try {
-      const [result] = await this.database.insert(students).values({ firstName: fn, lastName: ln }).returning();
-      return result;
-    } catch {
-      const fallback = await this.findStudentByName(fn, ln);
-      if (fallback) return fallback;
-      throw new Error("Failed to create or find student");
-    }
-  }
-
-  async getStudent(id: number): Promise<Student | undefined> {
-    const [result] = await this.database.select().from(students).where(eq(students.id, id));
-    return result;
-  }
-
-  async findStudentByName(firstName: string, lastName: string): Promise<Student | undefined> {
-    const fn = sanitizeName(firstName);
-    const ln = sanitizeName(lastName);
-    const [result] = await this.database.select().from(students)
-      .where(and(eq(students.firstName, fn), eq(students.lastName, ln)));
-    return result;
-  }
-
-  async createSubmission(submission: InsertSubmission): Promise<Submission> {
-    const [result] = await this.database.insert(submissions).values(submission).returning();
-    return result;
-  }
-
-  async getSubmissionsByQuizId(quizId: number): Promise<(Submission & { student: Student })[]> {
-    const rows = await this.database
-      .select({
-        submission: submissions,
-        student: students,
-      })
-      .from(submissions)
-      .innerJoin(students, eq(submissions.studentId, students.id))
-      .where(eq(submissions.quizId, quizId));
-    return rows.map((r) => ({ ...r.submission, student: r.student }));
-  }
-
-
-  async deleteSubmission(id: number): Promise<void> {
-    await this.database.delete(submissions).where(eq(submissions.id, id));
-  }
-
-  async deleteSubmissionsByQuizId(quizId: number): Promise<void> {
-    await this.database.delete(submissions).where(eq(submissions.quizId, quizId));
-  }
-
-  async checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean> {
-    const fn = sanitizeName(firstName);
-    const ln = sanitizeName(lastName);
-    const matchingStudents = await this.database.select().from(students)
-      .where(and(eq(students.firstName, fn), eq(students.lastName, ln)));
-    if (matchingStudents.length === 0) return false;
-    for (const student of matchingStudents) {
-      const [sub] = await this.database.select().from(submissions)
-        .where(and(eq(submissions.studentId, student.id), eq(submissions.quizId, quizId)));
-      if (sub) return true;
-    }
-    return false;
-  }
-
-  async getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined> {
-    const fn = sanitizeName(firstName);
-    const ln = sanitizeName(lastName);
-    const matchingStudents = await this.database.select().from(students)
-      .where(and(eq(students.firstName, fn), eq(students.lastName, ln)));
-    for (const student of matchingStudents) {
-      const [sub] = await this.database.select().from(submissions)
-        .where(and(eq(submissions.studentId, student.id), eq(submissions.quizId, quizId)));
-      if (sub) return sub;
-    }
-    return undefined;
-  }
-
   async createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz> {
     const [result] = await this.database.insert(somaQuizzes).values(quiz).returning();
     return result;
+  }
+
+  async createSomaQuizBundle(input: {
+    quiz: InsertSomaQuiz;
+    questions: SomaQuizBundleQuestionInput[];
+    assignedStudentIds?: string[];
+  }): Promise<{ quiz: SomaQuiz; questions: SomaQuestion[]; assignments: QuizAssignment[] }> {
+    return this.database.transaction(async (tx) => {
+      const [quiz] = await tx.insert(somaQuizzes).values(input.quiz).returning();
+      const questions = input.questions.length === 0
+        ? []
+        : await tx.insert(somaQuestions).values(
+          input.questions.map((q) => ({ ...q, quizId: quiz.id }))
+        ).returning();
+
+      const uniqueStudentIds = Array.from(new Set(input.assignedStudentIds ?? []));
+      const assignments = uniqueStudentIds.length === 0
+        ? []
+        : await tx.insert(quizAssignments).values(
+          uniqueStudentIds.map((studentId) => ({ quizId: quiz.id, studentId, status: "pending" }))
+        ).onConflictDoNothing().returning();
+
+      return { quiz, questions, assignments };
+    });
   }
 
   async getSomaQuizzes(): Promise<SomaQuiz[]> {
@@ -212,6 +118,11 @@ class DatabaseStorage implements IStorage {
 
   async getSomaQuiz(id: number): Promise<SomaQuiz | undefined> {
     const [result] = await this.database.select().from(somaQuizzes).where(eq(somaQuizzes.id, id));
+    return result;
+  }
+
+  async updateSomaQuiz(id: number, data: Partial<InsertSomaQuiz>): Promise<SomaQuiz | undefined> {
+    const [result] = await this.database.update(somaQuizzes).set(data).where(eq(somaQuizzes.id, id)).returning();
     return result;
   }
 
@@ -226,6 +137,10 @@ class DatabaseStorage implements IStorage {
 
   async getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]> {
     return this.database.select().from(somaQuestions).where(eq(somaQuestions.quizId, quizId));
+  }
+
+  async deleteSomaQuestion(id: number): Promise<void> {
+    await this.database.delete(somaQuestions).where(eq(somaQuestions.id, id));
   }
 
   async upsertSomaUser(user: InsertSomaUser): Promise<SomaUser> {
@@ -247,30 +162,6 @@ class DatabaseStorage implements IStorage {
       .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
       .where(eq(somaReports.studentId, studentId));
     return rows.map((r) => ({ ...r.report, quiz: r.quiz }));
-  }
-
-  async getSubmissionsByStudentUserId(studentId: string): Promise<(Submission & { quiz: Quiz })[]> {
-    const user = await this.database.select().from(somaUsers).where(eq(somaUsers.id, studentId));
-    if (!user.length) return [];
-    const email = user[0].email;
-    const displayName = user[0].displayName || email.split("@")[0];
-    const nameParts = displayName.split(" ");
-    const firstName = sanitizeName(nameParts[0] || "");
-    const lastName = sanitizeName(nameParts.slice(1).join(" ") || "");
-    if (!firstName) return [];
-    const matchingStudents = await this.database.select().from(students)
-      .where(lastName ? and(eq(students.firstName, firstName), eq(students.lastName, lastName)) : eq(students.firstName, firstName));
-    if (!matchingStudents.length) return [];
-    const allSubmissions: (Submission & { quiz: Quiz })[] = [];
-    for (const student of matchingStudents) {
-      const rows = await this.database
-        .select({ submission: submissions, quiz: quizzes })
-        .from(submissions)
-        .innerJoin(quizzes, eq(submissions.quizId, quizzes.id))
-        .where(eq(submissions.studentId, student.id));
-      allSubmissions.push(...rows.map((r) => ({ ...r.submission, quiz: r.quiz })));
-    }
-    return allSubmissions;
   }
 
   async createSomaReport(report: InsertSomaReport): Promise<SomaReport> {
@@ -297,6 +188,15 @@ class DatabaseStorage implements IStorage {
       .where(eq(somaReports.id, reportId));
     if (rows.length === 0) return undefined;
     return { ...rows[0].report, quiz: rows[0].quiz };
+  }
+
+  async getSomaReportsByQuizId(quizId: number): Promise<(SomaReport & { quiz: SomaQuiz })[]> {
+    const rows = await this.database
+      .select({ report: somaReports, quiz: somaQuizzes })
+      .from(somaReports)
+      .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+      .where(eq(somaReports.quizId, quizId));
+    return rows.map((r) => ({ ...r.report, quiz: r.quiz }));
   }
 
   async getSomaUserByEmail(email: string): Promise<SomaUser | undefined> {
@@ -342,26 +242,27 @@ class DatabaseStorage implements IStorage {
   }
 
   async getAvailableStudents(tutorId: string): Promise<SomaUser[]> {
-    const adopted = await this.database
-      .select({ studentId: tutorStudents.studentId })
-      .from(tutorStudents)
-      .where(eq(tutorStudents.tutorId, tutorId));
-    const adoptedIds = adopted.map((a) => a.studentId);
-    if (adoptedIds.length === 0) {
-      return this.database.select().from(somaUsers)
-        .where(and(eq(somaUsers.role, "student"), ne(somaUsers.id, tutorId)));
-    }
-    return this.database.select().from(somaUsers)
-      .where(and(
-        eq(somaUsers.role, "student"),
-        ne(somaUsers.id, tutorId),
-        notInArray(somaUsers.id, adoptedIds),
-      ));
+    // Step 1: Fetch ALL adopted student IDs for this tutor
+    const adopted = await this.getAdoptedStudents(tutorId);
+    const adoptedIds = new Set(adopted.map((s) => s.id));
+
+    // Step 2: Fetch ALL users where role = 'student' OR role IS NULL
+    const allStudents = await this.database.select().from(somaUsers)
+      .where(
+        or(eq(somaUsers.role, "student"), isNull(somaUsers.role))
+      );
+
+    // Step 3: Filter in plain JS — this cannot fail regardless of adoptedIds size
+    const available = allStudents.filter(
+      (s) => s.id !== tutorId && !adoptedIds.has(s.id)
+    );
+
+    return available;
   }
 
-  async createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]> {
+  async createQuizAssignments(quizId: number, studentIds: string[], dueDate?: Date | null): Promise<QuizAssignment[]> {
     if (studentIds.length === 0) return [];
-    const values = studentIds.map((studentId) => ({ quizId, studentId, status: "pending" }));
+    const values = studentIds.map((studentId) => ({ quizId, studentId, status: "pending", dueDate: dueDate || null }));
     return this.database.insert(quizAssignments).values(values).onConflictDoNothing().returning();
   }
 
@@ -389,126 +290,172 @@ class DatabaseStorage implements IStorage {
       .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
   }
 
+  async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    await this.database.delete(quizAssignments)
+      .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+  }
+
+  async extendQuizAssignmentDeadlines(quizId: number, hours: number): Promise<number> {
+    const result = await this.database.update(quizAssignments)
+      .set({ dueDate: sql`coalesce(${quizAssignments.dueDate}, now()) + interval '1 hour' * ${hours}` })
+      .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.status, "pending")))
+      .returning();
+    return result.length;
+  }
+
   async getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]> {
     return this.database.select().from(somaQuizzes)
       .where(eq(somaQuizzes.authorId, authorId))
       .orderBy(somaQuizzes.createdAt);
   }
 
+  async addTutorComment(comment: InsertTutorComment): Promise<TutorComment> {
+    const [result] = await this.database.insert(tutorComments).values(comment).returning();
+    return result;
+  }
+
+  async getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]> {
+    return this.database.select().from(tutorComments)
+      .where(and(eq(tutorComments.tutorId, tutorId), eq(tutorComments.studentId, studentId)))
+      .orderBy(tutorComments.createdAt);
+  }
+
+  async getDashboardStatsForTutor(tutorId: string) {
+    const adoptedStudentRows = await this.database
+      .select({ studentId: tutorStudents.studentId })
+      .from(tutorStudents)
+      .where(eq(tutorStudents.tutorId, tutorId));
+    const adoptedIds = adoptedStudentRows.map((r) => r.studentId);
+    const totalStudents = adoptedIds.length;
+
+    if (totalStudents === 0) {
+      const tutorQuizzes = await this.database.select({ id: somaQuizzes.id }).from(somaQuizzes);
+      return { totalStudents: 0, totalQuizzes: tutorQuizzes.length, cohortAverages: [], recentSubmissions: [], pendingAssignments: [] };
+    }
+
+    const [quizCountResult, subjectAvgRows, recentRows, pendingRows] = await Promise.all([
+      this.database.select({ cnt: sql<number>`count(*)::int` }).from(somaQuizzes),
+
+      this.database
+        .select({
+          subject: sql<string>`coalesce(${somaQuizzes.subject}, 'General')`,
+          totalScore: sql<number>`coalesce(sum(${somaReports.score}), 0)::int`,
+          totalMax: sql<number>`coalesce(sum((select coalesce(sum(${somaQuestions.marks}), 0) from ${somaQuestions} where ${somaQuestions.quizId} = ${somaReports.quizId})), 0)::int`,
+          cnt: sql<number>`count(*)::int`,
+        })
+        .from(somaReports)
+        .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+        .where(inArray(somaReports.studentId, adoptedIds))
+        .groupBy(sql`coalesce(${somaQuizzes.subject}, 'General')`),
+
+      this.database
+        .select({
+          reportId: somaReports.id,
+          studentName: sql<string>`coalesce(${somaUsers.displayName}, ${somaReports.studentName}, ${somaUsers.email})`,
+          score: somaReports.score,
+          quizTitle: somaQuizzes.title,
+          subject: somaQuizzes.subject,
+          createdAt: somaReports.createdAt,
+          startedAt: somaReports.startedAt,
+          completedAt: somaReports.completedAt,
+          maxScore: sql<number>`(select coalesce(sum(${somaQuestions.marks}), 0) from ${somaQuestions} where ${somaQuestions.quizId} = ${somaReports.quizId})::int`,
+        })
+        .from(somaReports)
+        .innerJoin(somaQuizzes, eq(somaReports.quizId, somaQuizzes.id))
+        .leftJoin(somaUsers, eq(somaReports.studentId, somaUsers.id))
+        .where(inArray(somaReports.studentId, adoptedIds))
+        .orderBy(sql`${somaReports.createdAt} desc`)
+        .limit(10),
+
+      this.database
+        .select({
+          assignmentId: quizAssignments.id,
+          quizId: quizAssignments.quizId,
+          quizTitle: somaQuizzes.title,
+          subject: somaQuizzes.subject,
+          studentId: quizAssignments.studentId,
+          studentName: sql<string>`coalesce(${somaUsers.displayName}, ${somaUsers.email})`,
+          dueDate: quizAssignments.dueDate,
+          assignedAt: quizAssignments.createdAt,
+        })
+        .from(quizAssignments)
+        .innerJoin(somaQuizzes, eq(quizAssignments.quizId, somaQuizzes.id))
+        .innerJoin(somaUsers, eq(quizAssignments.studentId, somaUsers.id))
+        .where(and(
+          inArray(quizAssignments.studentId, adoptedIds),
+          eq(quizAssignments.status, "pending"),
+        ))
+        .orderBy(sql`${quizAssignments.createdAt} desc`),
+    ]);
+
+    const cohortAverages = subjectAvgRows
+      .filter((r) => r.totalMax > 0)
+      .map((r) => ({ subject: r.subject, average: Math.round((r.totalScore / r.totalMax) * 100), count: r.cnt }));
+
+    const recentSubmissions = recentRows.map((r) => ({
+      reportId: r.reportId,
+      studentName: r.studentName,
+      score: r.maxScore > 0 ? Math.round((r.score / r.maxScore) * 100) : 0,
+      quizTitle: r.quizTitle,
+      subject: r.subject,
+      createdAt: r.createdAt.toISOString(),
+      startedAt: r.startedAt ? r.startedAt.toISOString() : null,
+      completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+    }));
+
+    const pendingAssignments = pendingRows.map((r) => ({
+      assignmentId: r.assignmentId,
+      quizId: r.quizId,
+      quizTitle: r.quizTitle,
+      subject: r.subject,
+      studentId: r.studentId,
+      studentName: r.studentName,
+      dueDate: r.dueDate ? r.dueDate.toISOString() : null,
+      createdAt: r.assignedAt.toISOString(),
+    }));
+
+    return {
+      totalStudents,
+      totalQuizzes: quizCountResult[0]?.cnt ?? 0,
+      cohortAverages,
+      recentSubmissions,
+      pendingAssignments,
+    };
+  }
+
+  async getAllSomaUsers(): Promise<SomaUser[]> {
+    return this.database.select().from(somaUsers).orderBy(somaUsers.createdAt);
+  }
+
+  async deleteSomaUser(userId: string): Promise<void> {
+    await this.database.delete(somaUsers).where(eq(somaUsers.id, userId));
+  }
+
+  async deleteSomaQuiz(quizId: number): Promise<void> {
+    await this.database.delete(somaQuestions).where(eq(somaQuestions.quizId, quizId));
+    await this.database.delete(somaReports).where(eq(somaReports.quizId, quizId));
+    await this.database.delete(quizAssignments).where(eq(quizAssignments.quizId, quizId));
+    await this.database.delete(somaQuizzes).where(eq(somaQuizzes.id, quizId));
+  }
+
+  async getAllSomaQuizzes(): Promise<SomaQuiz[]> {
+    return this.database.select().from(somaQuizzes).orderBy(somaQuizzes.createdAt);
+  }
 }
 
 class MemoryStorage implements IStorage {
-  private quizzes: Quiz[] = [];
-  private questions: Question[] = [];
-  private students: Student[] = [];
-  private submissions: Submission[] = [];
   private somaQuizzesList: SomaQuiz[] = [];
   private somaQuestionsList: SomaQuestion[] = [];
   private somaUsersList: SomaUser[] = [];
-  private quizId = 1;
-  private questionId = 1;
-  private studentId = 1;
-  private submissionId = 1;
+  private somaReportsList: SomaReport[] = [];
+  private tutorStudentsList: TutorStudent[] = [];
+  private quizAssignmentsList: QuizAssignment[] = [];
+  private tutorCommentsList: TutorComment[] = [];
   private somaQuizId = 1;
   private somaQuestionId = 1;
-
-  async createQuiz(quiz: InsertQuiz): Promise<Quiz> {
-    const created: Quiz = { id: this.quizId++, createdAt: new Date(), syllabus: null, level: null, subject: null, isArchived: false, ...quiz };
-    this.quizzes.push(created);
-    return created;
-  }
-
-  async getQuizzes(): Promise<Quiz[]> { return [...this.quizzes]; }
-  async getQuiz(id: number): Promise<Quiz | undefined> { return this.quizzes.find((q) => q.id === id); }
-
-  async updateQuiz(id: number, data: Partial<InsertQuiz>): Promise<Quiz | undefined> {
-    const idx = this.quizzes.findIndex((q) => q.id === id);
-    if (idx === -1) return undefined;
-    this.quizzes[idx] = { ...this.quizzes[idx], ...data };
-    return this.quizzes[idx];
-  }
-
-  async deleteQuiz(id: number): Promise<void> {
-    this.quizzes = this.quizzes.filter((q) => q.id !== id);
-    this.questions = this.questions.filter((q) => q.quizId !== id);
-    this.submissions = this.submissions.filter((s) => s.quizId !== id);
-  }
-
-  async createQuestions(questionList: InsertQuestion[]): Promise<Question[]> {
-    const created = questionList.map((q) => ({
-      id: this.questionId++,
-      ...q,
-      options: Array.isArray(q.options) ? [...(q.options as string[])] : [],
-      imageUrl: q.imageUrl ?? null,
-      marksWorth: q.marksWorth ?? 1,
-    }));
-    this.questions.push(...created);
-    return created;
-  }
-
-  async getQuestionsByQuizId(quizId: number): Promise<Question[]> {
-    return this.questions.filter((q) => q.quizId === quizId);
-  }
-
-  async deleteQuestion(id: number): Promise<void> {
-    this.questions = this.questions.filter((q) => q.id !== id);
-  }
-
-  async findOrCreateStudent(student: InsertStudent): Promise<Student> {
-    const fn = sanitizeName(student.firstName);
-    const ln = sanitizeName(student.lastName);
-    const existing = await this.findStudentByName(fn, ln);
-    if (existing) return existing;
-    const created: Student = {
-      id: this.studentId++,
-      firstName: fn,
-      lastName: ln,
-    };
-    this.students.push(created);
-    return created;
-  }
-
-  async getStudent(id: number): Promise<Student | undefined> { return this.students.find((s) => s.id === id); }
-
-  async findStudentByName(firstName: string, lastName: string): Promise<Student | undefined> {
-    const fn = sanitizeName(firstName);
-    const ln = sanitizeName(lastName);
-    return this.students.find((s) => s.firstName === fn && s.lastName === ln);
-  }
-
-  async createSubmission(submission: InsertSubmission): Promise<Submission> {
-    const created: Submission = { id: this.submissionId++, submittedAt: new Date(), ...submission };
-    this.submissions.push(created);
-    return created;
-  }
-
-  async getSubmissionsByQuizId(quizId: number): Promise<(Submission & { student: Student })[]> {
-    return this.submissions
-      .filter((s) => s.quizId === quizId)
-      .map((s) => ({ ...s, student: this.students.find((st) => st.id === s.studentId)! }))
-      .filter((s) => Boolean(s.student));
-  }
-
-
-  async deleteSubmission(id: number): Promise<void> {
-    this.submissions = this.submissions.filter((s) => s.id !== id);
-  }
-
-  async deleteSubmissionsByQuizId(quizId: number): Promise<void> {
-    this.submissions = this.submissions.filter((s) => s.quizId !== quizId);
-  }
-
-  async checkStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<boolean> {
-    const student = await this.findStudentByName(firstName, lastName);
-    if (!student) return false;
-    return this.submissions.some((s) => s.quizId === quizId && s.studentId === student.id);
-  }
-
-  async getStudentSubmission(quizId: number, firstName: string, lastName: string): Promise<Submission | undefined> {
-    const student = await this.findStudentByName(firstName, lastName);
-    if (!student) return undefined;
-    return this.submissions.find((s) => s.quizId === quizId && s.studentId === student.id);
-  }
+  private somaReportId = 1;
+  private tutorStudentId = 1;
+  private quizAssignmentId = 1;
 
   async createSomaQuiz(quiz: InsertSomaQuiz): Promise<SomaQuiz> {
     const created: SomaQuiz = {
@@ -521,15 +468,33 @@ class MemoryStorage implements IStorage {
       subject: quiz.subject ?? null,
       curriculumContext: quiz.curriculumContext ?? null,
       authorId: quiz.authorId ?? null,
-      status: quiz.status ?? "draft",
+      status: quiz.status ?? "published",
       isArchived: quiz.isArchived ?? false,
     };
     this.somaQuizzesList.push(created);
     return created;
   }
 
+  async createSomaQuizBundle(input: {
+    quiz: InsertSomaQuiz;
+    questions: SomaQuizBundleQuestionInput[];
+    assignedStudentIds?: string[];
+  }): Promise<{ quiz: SomaQuiz; questions: SomaQuestion[]; assignments: QuizAssignment[] }> {
+    const quiz = await this.createSomaQuiz(input.quiz);
+    const questions = await this.createSomaQuestions(input.questions.map((q) => ({ ...q, quizId: quiz.id })));
+    const assignments = await this.createQuizAssignments(quiz.id, Array.from(new Set(input.assignedStudentIds ?? [])));
+    return { quiz, questions, assignments };
+  }
+
   async getSomaQuizzes(): Promise<SomaQuiz[]> { return [...this.somaQuizzesList]; }
   async getSomaQuiz(id: number): Promise<SomaQuiz | undefined> { return this.somaQuizzesList.find((q) => q.id === id); }
+
+  async updateSomaQuiz(id: number, data: Partial<InsertSomaQuiz>): Promise<SomaQuiz | undefined> {
+    const idx = this.somaQuizzesList.findIndex((q) => q.id === id);
+    if (idx === -1) return undefined;
+    this.somaQuizzesList[idx] = { ...this.somaQuizzesList[idx], ...data };
+    return this.somaQuizzesList[idx];
+  }
 
   async createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]> {
     const created = questionList.map((q) => ({
@@ -547,6 +512,10 @@ class MemoryStorage implements IStorage {
     return this.somaQuestionsList.filter((q) => q.quizId === quizId);
   }
 
+  async deleteSomaQuestion(id: number): Promise<void> {
+    this.somaQuestionsList = this.somaQuestionsList.filter((q) => q.id !== id);
+  }
+
   async upsertSomaUser(user: InsertSomaUser): Promise<SomaUser> {
     const idx = this.somaUsersList.findIndex((u) => u.id === user.id);
     const record: SomaUser = { createdAt: new Date(), displayName: null, role: "student", ...user };
@@ -562,15 +531,8 @@ class MemoryStorage implements IStorage {
     return [];
   }
 
-  async getSubmissionsByStudentUserId(_studentId: string): Promise<(Submission & { quiz: Quiz })[]> {
-    return [];
-  }
-
-  private somaReportsList: SomaReport[] = [];
-  private somaReportId = 1;
-
   async createSomaReport(report: InsertSomaReport): Promise<SomaReport> {
-    const created: SomaReport = { id: this.somaReportId++, createdAt: new Date(), aiFeedbackHtml: null, answersJson: null, status: "pending", studentId: report.studentId ?? null, ...report };
+    const created: SomaReport = { id: this.somaReportId++, createdAt: new Date(), aiFeedbackHtml: null, answersJson: null, status: "pending", studentId: report.studentId ?? null, startedAt: null, completedAt: null, ...report };
     this.somaReportsList.push(created);
     return created;
   }
@@ -594,7 +556,17 @@ class MemoryStorage implements IStorage {
     return { ...report, quiz };
   }
 
-  // Multi-tenant stubs for MemoryStorage
+  async getSomaReportsByQuizId(quizId: number): Promise<(SomaReport & { quiz: SomaQuiz })[]> {
+    return this.somaReportsList
+      .filter((r) => r.quizId === quizId)
+      .map((r) => {
+        const quiz = this.somaQuizzesList.find((q) => q.id === r.quizId);
+        if (!quiz) return null;
+        return { ...r, quiz };
+      })
+      .filter(Boolean) as (SomaReport & { quiz: SomaQuiz })[];
+  }
+
   async getSomaUserByEmail(email: string): Promise<SomaUser | undefined> {
     return this.somaUsersList.find((u) => u.email === email);
   }
@@ -606,9 +578,6 @@ class MemoryStorage implements IStorage {
   async getAllStudents(): Promise<SomaUser[]> {
     return this.somaUsersList.filter((u) => u.role === "student");
   }
-
-  private tutorStudentsList: TutorStudent[] = [];
-  private tutorStudentId = 1;
 
   async adoptStudent(tutorId: string, studentId: string): Promise<TutorStudent> {
     const existing = this.tutorStudentsList.find((ts) => ts.tutorId === tutorId && ts.studentId === studentId);
@@ -630,19 +599,24 @@ class MemoryStorage implements IStorage {
   }
 
   async getAvailableStudents(tutorId: string): Promise<SomaUser[]> {
+    // Step 1: Fetch ALL adopted student IDs for this tutor
     const adoptedIds = new Set(this.tutorStudentsList.filter((ts) => ts.tutorId === tutorId).map((ts) => ts.studentId));
-    return this.somaUsersList.filter((u) => u.role === "student" && u.id !== tutorId && !adoptedIds.has(u.id));
+
+    // Step 2: Get all users where role = 'student' OR role IS NULL
+    const allStudents = this.somaUsersList.filter(
+      (u) => u.role === "student" || u.role === null
+    );
+
+    // Step 3: Filter in plain JS — this cannot fail
+    return allStudents.filter((s) => s.id !== tutorId && !adoptedIds.has(s.id));
   }
 
-  private quizAssignmentsList: QuizAssignment[] = [];
-  private quizAssignmentId = 1;
-
-  async createQuizAssignments(quizId: number, studentIds: string[]): Promise<QuizAssignment[]> {
+  async createQuizAssignments(quizId: number, studentIds: string[], dueDate?: Date | null): Promise<QuizAssignment[]> {
     const created: QuizAssignment[] = [];
     for (const studentId of studentIds) {
       const existing = this.quizAssignmentsList.find((qa) => qa.quizId === quizId && qa.studentId === studentId);
       if (!existing) {
-        const record: QuizAssignment = { id: this.quizAssignmentId++, quizId, studentId, status: "pending", createdAt: new Date() };
+        const record: QuizAssignment = { id: this.quizAssignmentId++, quizId, studentId, status: "pending", dueDate: dueDate || null, createdAt: new Date() };
         this.quizAssignmentsList.push(record);
         created.push(record);
       }
@@ -677,10 +651,86 @@ class MemoryStorage implements IStorage {
     if (qa) qa.status = status;
   }
 
+  async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    this.quizAssignmentsList = this.quizAssignmentsList.filter(
+      (a) => !(a.quizId === quizId && a.studentId === studentId)
+    );
+  }
+
+  async extendQuizAssignmentDeadlines(quizId: number, hours: number): Promise<number> {
+    let count = 0;
+    for (const a of this.quizAssignmentsList) {
+      if (a.quizId === quizId && a.status === "pending") {
+        const base = a.dueDate ? new Date(a.dueDate) : new Date();
+        a.dueDate = new Date(base.getTime() + hours * 60 * 60 * 1000);
+        count++;
+      }
+    }
+    return count;
+  }
+
   async getSomaQuizzesByAuthor(authorId: string): Promise<SomaQuiz[]> {
     return this.somaQuizzesList.filter((q) => q.authorId === authorId);
   }
 
+  async addTutorComment(comment: InsertTutorComment): Promise<TutorComment> {
+    const tc: TutorComment = { id: this.tutorCommentsList.length + 1, ...comment, createdAt: new Date() };
+    this.tutorCommentsList.push(tc);
+    return tc;
+  }
+
+  async getTutorComments(tutorId: string, studentId: string): Promise<TutorComment[]> {
+    return this.tutorCommentsList.filter((c) => c.tutorId === tutorId && c.studentId === studentId);
+  }
+
+  async getDashboardStatsForTutor(tutorId: string) {
+    const adoptedIds = this.tutorStudentsList.filter((ts) => ts.tutorId === tutorId).map((ts) => ts.studentId);
+    return { totalStudents: adoptedIds.length, totalQuizzes: 0, cohortAverages: [], recentSubmissions: [], pendingAssignments: [] };
+  }
+
+  async getAllSomaUsers(): Promise<SomaUser[]> {
+    return this.somaUsersList;
+  }
+
+  async deleteSomaUser(userId: string): Promise<void> {
+    this.tutorStudentsList = this.tutorStudentsList.filter(
+      (ts) => ts.tutorId !== userId && ts.studentId !== userId
+    );
+    this.tutorCommentsList = this.tutorCommentsList.filter(
+      (c) => c.tutorId !== userId && c.studentId !== userId
+    );
+    this.quizAssignmentsList = this.quizAssignmentsList.filter(
+      (qa) => qa.studentId !== userId
+    );
+    for (const r of this.somaReportsList) {
+      if (r.studentId === userId) r.studentId = null;
+    }
+    this.somaUsersList = this.somaUsersList.filter((u) => u.id !== userId);
+  }
+
+  async deleteSomaQuiz(quizId: number): Promise<void> {
+    this.somaQuestionsList = this.somaQuestionsList.filter((q) => q.quizId !== quizId);
+    this.somaReportsList = this.somaReportsList.filter((r) => r.quizId !== quizId);
+    this.quizAssignmentsList = this.quizAssignmentsList.filter((qa) => qa.quizId !== quizId);
+    this.somaQuizzesList = this.somaQuizzesList.filter((q) => q.id !== quizId);
+  }
+
+  async getAllSomaQuizzes(): Promise<SomaQuiz[]> {
+    return this.somaQuizzesList;
+  }
 }
 
-export const storage: IStorage = db ? new DatabaseStorage(db) : new MemoryStorage();
+let _storage: IStorage | null = null;
+
+export function initStorage() {
+  _storage = db ? new DatabaseStorage(db) : new MemoryStorage();
+}
+
+export const storage: IStorage = new Proxy({} as IStorage, {
+  get(_target, prop, receiver) {
+    if (!_storage) {
+      _storage = db ? new DatabaseStorage(db) : new MemoryStorage();
+    }
+    return Reflect.get(_storage, prop, receiver);
+  },
+});

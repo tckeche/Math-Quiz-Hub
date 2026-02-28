@@ -1,0 +1,33 @@
+{
+  "system_prompt": {
+    "task": "SOMA V3 - Re-implement Due Date & Time Feature",
+    "role": "Lead Feature Engineer",
+    "objective": "The 'Due Date' feature was lost during the legacy purge. You must re-add the ability for Tutors to set a strict Due Date and Time when assigning a quiz, and display this deadline prominently to the students.",
+    "execution_instructions": "Implement the 4 steps below. Update the Drizzle schema, backend API, Tutor assignment UI, and Student dashboard UI. Output the exact code blocks changed."
+  },
+  "feature_implementation": {
+    "1_database_schema": {
+      "target_file": "shared/schema.ts",
+      "action": "Add an optional `dueDate: timestamp('due_date')` column to the `quizAssignments` table. (Do NOT put it on the `somaQuizzes` table, so that different students can have different deadlines for the same quiz)."
+    },
+    "2_backend_storage_and_routes": {
+      "target_files": [
+        "server/storage.ts", 
+        "server/routes.ts"
+      ],
+      "action": "1. Update `createQuizAssignments` to accept an optional `dueDate` parameter and insert it. \n2. Update `POST /api/tutor/quizzes/:quizId/assign` to extract `dueDate` from `req.body` and pass it to the storage method."
+    },
+    "3_tutor_assignment_ui": {
+      "target_files": [
+        "client/src/pages/TutorAssessments.tsx", 
+        "client/src/components/AssignQuizModal.tsx (or equivalent)"
+      ],
+      "action": "Inject a Date/Time picker (e.g., `<input type=\"datetime-local\" />`) into the Assignment Modal. When the Tutor clicks 'Assign', include the selected `dueDate` in the JSON payload sent to the backend."
+    },
+    "4_student_dashboard_ui": {
+      "target_file": "client/src/pages/StudentDashboard.tsx",
+      "action": "In the 'Available Assessments' list, extract the `assignment.dueDate` from the API payload. If it exists, render a formatted badge (e.g., '📅 Due: Oct 24, 5:00 PM'). If the current time is PAST the due date, render a red 'Overdue' or 'Locked' badge to enforce urgency."
+    }
+  },
+  "final_command": "Run `npm run db:push` (or your Drizzle migration command) immediately after updating the schema so the backend doesn't crash when trying to write to the new column."
+}

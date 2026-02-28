@@ -3,70 +3,6 @@ import { pgTable, text, varchar, integer, timestamp, json, jsonb, serial, uuid, 
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const quizzes = pgTable("quizzes", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  timeLimitMinutes: integer("time_limit_minutes").notNull(),
-  dueDate: timestamp("due_date").notNull(),
-  syllabus: text("syllabus"),
-  level: text("level"),
-  subject: text("subject"),
-  isArchived: boolean("is_archived").notNull().default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const questions = pgTable("questions", {
-  id: serial("id").primaryKey(),
-  quizId: integer("quiz_id").notNull().references(() => quizzes.id, { onDelete: "cascade" }),
-  promptText: text("prompt_text").notNull(),
-  imageUrl: text("image_url"),
-  options: json("options").$type<string[]>().notNull(),
-  correctAnswer: text("correct_answer").notNull(),
-  marksWorth: integer("marks_worth").notNull().default(1),
-});
-
-export const students = pgTable("students", {
-  id: serial("id").primaryKey(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
-});
-
-export const submissions = pgTable("submissions", {
-  id: serial("id").primaryKey(),
-  studentId: integer("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
-  quizId: integer("quiz_id").notNull().references(() => quizzes.id, { onDelete: "cascade" }),
-  totalScore: integer("total_score").notNull(),
-  maxPossibleScore: integer("max_possible_score").notNull(),
-  answersBreakdown: json("answers_breakdown").$type<Record<string, { answer: string; correct: boolean; marksEarned: number }>>().notNull(),
-  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
-});
-
-export const insertQuizSchema = createInsertSchema(quizzes).omit({ id: true, createdAt: true });
-export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
-export const insertStudentSchema = createInsertSchema(students).omit({ id: true });
-export const insertSubmissionSchema = createInsertSchema(submissions).omit({ id: true, submittedAt: true });
-
-export type Quiz = typeof quizzes.$inferSelect;
-export type InsertQuiz = z.infer<typeof insertQuizSchema>;
-export type Question = typeof questions.$inferSelect;
-export type InsertQuestion = z.infer<typeof insertQuestionSchema>;
-export type Student = typeof students.$inferSelect;
-export type InsertStudent = z.infer<typeof insertStudentSchema>;
-export type Submission = typeof submissions.$inferSelect;
-export type InsertSubmission = z.infer<typeof insertSubmissionSchema>;
-
-export const questionUploadSchema = z.array(z.object({
-  prompt_text: z.string().min(1),
-  image_url: z.string().nullable().optional(),
-  options: z.array(z.string().min(1)).length(4),
-  correct_answer: z.string().min(1),
-  marks_worth: z.number().int().positive().default(1),
-}).refine((q) => q.options.includes(q.correct_answer), {
-  message: "correct_answer must match one of the options",
-}));
-
-export type QuestionUpload = z.infer<typeof questionUploadSchema>;
-
 export const somaUsers = pgTable("soma_users", {
   id: uuid("id").primaryKey(),
   email: text("email").notNull(),
@@ -84,7 +20,7 @@ export const somaQuizzes = pgTable("soma_quizzes", {
   subject: text("subject"),
   curriculumContext: text("curriculum_context"),
   authorId: uuid("author_id").references(() => somaUsers.id, { onDelete: "set null" }),
-  status: text("status").notNull().default("draft"),
+  status: text("status").notNull().default("published"),
   isArchived: boolean("is_archived").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -108,6 +44,8 @@ export const somaReports = pgTable("soma_reports", {
   status: text("status").notNull().default("pending"),
   aiFeedbackHtml: text("ai_feedback_html"),
   answersJson: jsonb("answers_json"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -125,10 +63,19 @@ export const quizAssignments = pgTable("quiz_assignments", {
   quizId: integer("quiz_id").notNull().references(() => somaQuizzes.id, { onDelete: "cascade" }),
   studentId: uuid("student_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("pending"),
+  dueDate: timestamp("due_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("quiz_assignment_unique_idx").on(table.quizId, table.studentId),
 ]);
+
+export const tutorComments = pgTable("tutor_comments", {
+  id: serial("id").primaryKey(),
+  tutorId: uuid("tutor_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => somaUsers.id, { onDelete: "cascade" }),
+  comment: text("comment").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 export const somaQuizzesRelations = relations(somaQuizzes, ({ one, many }) => ({
   questions: many(somaQuestions),
@@ -210,3 +157,7 @@ export type TutorStudent = typeof tutorStudents.$inferSelect;
 export type InsertTutorStudent = z.infer<typeof insertTutorStudentSchema>;
 export type QuizAssignment = typeof quizAssignments.$inferSelect;
 export type InsertQuizAssignment = z.infer<typeof insertQuizAssignmentSchema>;
+
+export const insertTutorCommentSchema = createInsertSchema(tutorComments).omit({ id: true, createdAt: true });
+export type TutorComment = typeof tutorComments.$inferSelect;
+export type InsertTutorComment = z.infer<typeof insertTutorCommentSchema>;

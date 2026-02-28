@@ -1,0 +1,32 @@
+{
+  "system_prompt": {
+    "task": "SOMA V3 - Role-Based Access Control (RBAC) & Super Admin Implementation",
+    "role": "Lead Backend Security Architect",
+    "objective": "Implement automated domain-based role assignment during authentication and establish a 'super_admin' tier with global platform oversight.",
+    "execution_instructions": "Read the JSON configuration below. Update the database schema, auth routes, security middleware, and create a Super Admin management view. Output a summary of the changed files."
+  },
+  "architecture_updates": {
+    "1_database_schema_roles": {
+      "target_file": "schema.ts",
+      "action": "Update the User table's 'role' column to accept three strict values: 'student', 'tutor', and 'super_admin'."
+    },
+    "2_automated_role_assignment": {
+      "target_file": "server/routes.ts (Auth Registration/Login Logic)",
+      "logic_flow": "When a new user registers or authenticates via email, apply the following strict hierarchy:\n1. IF email === 'admin.soma@melaniacalvin.com', set role to 'super_admin'.\n2. ELSE IF email.endsWith('@melaniacalvin.com'), set role to 'tutor'.\n3. ELSE, set role to 'student'.",
+      "enforcement": "This logic must run on the server-side during user creation/upsert to prevent frontend manipulation."
+    },
+    "3_security_middleware": {
+      "target_file": "server/routes.ts (or middleware config)",
+      "action": "Create two distinct authentication middlewares: `requireTutor` (allows 'tutor' AND 'super_admin') and `requireSuperAdmin` (strictly requires 'super_admin'). Apply these to the respective API endpoints."
+    },
+    "4_super_admin_dashboard_ui": {
+      "target_file": "client/src/pages/SuperAdminDashboard.tsx (New Route)",
+      "layout": "Create a secure route ('/super-admin') only accessible to the super_admin role. It should mirror the dark glassmorphism aesthetic.",
+      "global_management_powers": "Include data tables fetching from the global database (bypassing tutor assignment limits). Add 'Hard Delete' action buttons next to every user (student or tutor) and every quiz. The Super Admin must be able to instantly delete any user or quiz from the platform."
+    },
+    "5_ui_routing_redirection": {
+      "target_file": "client/src/App.tsx (or Auth routing component)",
+      "action": "Upon successful login, read the user's role. Redirect 'student' to '/dashboard', 'tutor' to '/tutor', and 'super_admin' to '/super-admin'."
+    }
+  }
+}

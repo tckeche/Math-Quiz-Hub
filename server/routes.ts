@@ -1,11 +1,8 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { questionUploadSchema, submissions as submissionsTable, insertSomaQuizSchema, insertSomaUserSchema, quizzes, questions, submissions, somaUsers, quizAssignments, somaQuizzes } from "@shared/schema";
-import { db } from "./db";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { insertSomaUserSchema } from "@shared/schema";
 import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -55,14 +52,6 @@ const supportingDocUpload = multer({
   }),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit for supporting docs
 });
-
-function getGeminiModel() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-}
-
 
 const ADMIN_COOKIE_NAME = "admin_session";
 
@@ -121,20 +110,38 @@ function getAdminSessionToken(req: Request) {
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const token = getAdminSessionToken(req);
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized" });
+  if (token) {
+    try {
+      jwt.verify(token, getJwtSecret());
+      return next();
+    } catch {}
   }
-  try {
-    jwt.verify(token, getJwtSecret());
-    next();
-  } catch {
-    return res.status(401).json({ message: "Unauthorized" });
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const supaToken = authHeader.slice(7);
+    return verifySupabaseToken(supaToken).then((decoded) => {
+      if (!decoded) return res.status(401).json({ message: "Unauthorized" });
+      const userId = decoded.sub;
+      return storage.getSomaUserById(userId).then((user) => {
+        if (user && (user.role === "tutor" || user.role === "super_admin")) {
+          (req as any).tutorId = userId;
+          (req as any).tutorUser = user;
+          (req as any).authUser = { id: user.id, email: user.email, role: user.role };
+          return next();
+        }
+        return res.status(401).json({ message: "Unauthorized" });
+      }).catch(() => res.status(401).json({ message: "Unauthorized" }));
+    }).catch(() => res.status(401).json({ message: "Unauthorized" }));
   }
+  return res.status(401).json({ message: "Unauthorized" });
 }
 
 const TUTOR_EMAIL_DOMAIN = process.env.TUTOR_EMAIL_DOMAIN || "melaniacalvin.com";
 
-function determinRole(email: string): "tutor" | "student" {
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin.soma@melaniacalvin.com";
+
+function determinRole(email: string): "tutor" | "student" | "super_admin" {
+  if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) return "super_admin";
   const domain = email.split("@")[1]?.toLowerCase();
   return domain === TUTOR_EMAIL_DOMAIN.toLowerCase() ? "tutor" : "student";
 }
@@ -145,7 +152,7 @@ function requireTutor(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ message: "Tutor ID required" });
   }
   storage.getSomaUserById(tutorId).then((user) => {
-    if (!user || user.role !== "tutor") {
+    if (!user || (user.role !== "tutor" && user.role !== "super_admin")) {
       return res.status(403).json({ message: "Access denied: tutor role required" });
     }
     (req as any).tutorId = tutorId;
@@ -153,6 +160,85 @@ function requireTutor(req: Request, res: Response, next: NextFunction) {
     next();
   }).catch(() => {
     res.status(500).json({ message: "Failed to verify tutor identity" });
+  });
+}
+
+function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  const adminId = req.headers["x-admin-id"] as string;
+  if (!adminId) {
+    return res.status(401).json({ message: "Admin ID required" });
+  }
+  storage.getSomaUserById(adminId).then((user) => {
+    if (!user || user.role !== "super_admin") {
+      return res.status(403).json({ message: "Access denied: super_admin role required" });
+    }
+    (req as any).adminId = adminId;
+    (req as any).adminUser = user;
+    next();
+  }).catch(() => {
+    res.status(500).json({ message: "Failed to verify admin identity" });
+  });
+}
+
+/**
+ * Supabase JWT authentication middleware.
+ * Verifies the Bearer token from the Authorization header using the Supabase
+ * JWT secret, extracts the user ID (sub claim), looks up the user in
+ * soma_users, and attaches `req.authUser` with { id, email, role }.
+ */
+function getSupabaseJwtSecret(): string {
+  return process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET || "";
+}
+
+async function verifySupabaseToken(token: string): Promise<{ sub: string; email?: string } | null> {
+  const secret = getSupabaseJwtSecret();
+  if (secret) {
+    try {
+      const decoded = jwt.verify(token, secret) as { sub?: string; email?: string };
+      if (decoded.sub) return { sub: decoded.sub, email: decoded.email };
+    } catch {}
+  }
+
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) return null;
+
+  try {
+    const resp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: process.env.VITE_SUPABASE_ANON_KEY || "" },
+    });
+    if (!resp.ok) return null;
+    const user = await resp.json();
+    if (user?.id) return { sub: user.id, email: user.email };
+  } catch {}
+
+  return null;
+}
+
+function requireSupabaseAuth(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  const token = authHeader.slice(7);
+
+  verifySupabaseToken(token).then((decoded) => {
+    if (!decoded) {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+
+    const userId = decoded.sub;
+    storage.getSomaUserById(userId).then((user) => {
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      (req as any).authUser = { id: user.id, email: user.email, role: user.role, displayName: user.displayName };
+      next();
+    }).catch(() => {
+      res.status(500).json({ message: "Failed to verify user identity" });
+    });
+  }).catch(() => {
+    res.status(401).json({ message: "Invalid or expired token" });
   });
 }
 
@@ -203,6 +289,32 @@ function extractJsonArray(text: string): any[] | null {
   }
 }
 
+function sanitizeStudentIds(studentIds: unknown): string[] {
+  if (!Array.isArray(studentIds)) return [];
+  return Array.from(new Set(studentIds
+    .filter((id): id is string => typeof id === "string")
+    .map((id) => id.trim())
+    .filter(Boolean)));
+}
+
+function sanitizeSubmittedAnswers(
+  questions: { id: number }[],
+  answers: unknown,
+): Record<string, string> {
+  if (!answers || typeof answers !== "object") return {};
+  const rawAnswers = answers as Record<string, unknown>;
+  const questionIds = new Set(questions.map((q) => String(q.id)));
+  const sanitized: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(rawAnswers)) {
+    if (!questionIds.has(key) || typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) sanitized[key] = trimmed;
+  }
+
+  return sanitized;
+}
+
 async function runBackgroundGrading(
   reportId: number,
   questions: { id: number; stem: string; options: string[]; correctAnswer: string; marks: number }[],
@@ -235,7 +347,8 @@ Provide:
 1. An overall performance summary
 2. Specific strengths demonstrated
 3. Areas needing improvement with concrete study suggestions — reference questions by their sequential number (e.g. "Question 3")
-4. Encouragement and next steps`;
+4. For every incorrect response, include a 1-2 sentence explanation that starts with the exact label "Question X:" and briefly explains why the correct answer is right
+5. Encouragement and next steps`;
 
     const gradePromise = generateWithFallback(systemPrompt, userPrompt);
 
@@ -293,6 +406,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Missing id or email" });
       }
       const role = determinRole(email);
+      console.log(`[auth-sync] email=${email} domain=${email.split("@")[1]} role=${role}`);
       const parsed = insertSomaUserSchema.parse({
         id,
         email,
@@ -311,8 +425,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/auth/me", async (req, res) => {
     try {
       const userId = req.query.userId as string;
+      const email = req.query.email as string;
       if (!userId) return res.status(400).json({ message: "userId required" });
-      const user = await storage.getSomaUserById(userId);
+      let user = await storage.getSomaUserById(userId);
+      if (!user && email) {
+        const role = determinRole(email);
+        console.log(`[auth-me] auto-sync for missing user: email=${email} role=${role}`);
+        const parsed = insertSomaUserSchema.parse({
+          id: userId,
+          email,
+          displayName: email.split("@")[0],
+          role,
+        });
+        user = await storage.upsertSomaUser(parsed);
+      }
       if (!user) return res.status(404).json({ message: "User not found" });
       res.json({ id: user.id, email: user.email, displayName: user.displayName, role: user.role });
     } catch (err: any) {
@@ -369,7 +495,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/tutor/students/:studentId", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      await storage.removeAdoptedStudent(tutorId, req.params.studentId);
+      await storage.removeAdoptedStudent(tutorId, String(req.params.studentId));
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to remove student" });
@@ -381,7 +507,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const tutorId = (req as any).tutorId;
       const quizzes = await storage.getSomaQuizzesByAuthor(tutorId);
-      res.json(quizzes);
+      res.json(quizzes.filter((q) => !q.isArchived));
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
     }
@@ -391,45 +517,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/tutor/quizzes/:quizId/assign", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const quizId = parseInt(req.params.quizId);
-      const { studentIds } = req.body;
-      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      const quizId = parseInt(String(req.params.quizId));
+      const studentIds = sanitizeStudentIds(req.body?.studentIds);
+      const rawDueDate = req.body?.dueDate;
+      const dueDate = rawDueDate ? new Date(rawDueDate) : null;
+      if (dueDate && isNaN(dueDate.getTime())) {
+        return res.status(400).json({ message: "Invalid dueDate format" });
+      }
+      if (studentIds.length === 0) {
         return res.status(400).json({ message: "studentIds array required" });
       }
-      // Verify quiz belongs to this tutor
       const quiz = await storage.getSomaQuiz(quizId);
-      if (!quiz || quiz.authorId !== tutorId) {
-        return res.status(403).json({ message: "You can only assign your own quizzes" });
+      if (!quiz || quiz.isArchived) {
+        return res.status(404).json({ message: "Quiz not found" });
       }
-      // Verify all students are adopted by this tutor
+
+      // Force-publish quiz on every assign — guarantees it's visible to students
+      if (quiz.status !== "published") {
+        await storage.updateSomaQuiz(quizId, { status: "published" });
+        console.log(`[Assign] Force-published quiz ${quizId} (was "${quiz.status}")`);
+      }
+
       const adopted = await storage.getAdoptedStudents(tutorId);
       const adoptedIds = new Set(adopted.map((s) => s.id));
       const validIds = studentIds.filter((id: string) => adoptedIds.has(id));
       if (validIds.length === 0) {
         return res.status(400).json({ message: "None of the provided students are adopted by you" });
       }
-      const assignments = await storage.createQuizAssignments(quizId, validIds);
+      const assignments = await storage.createQuizAssignments(quizId, validIds, dueDate);
       res.json({ assigned: assignments.length, assignments });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to assign quiz" });
     }
   });
 
-  // Get assignments for a specific quiz
-  app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
+  // Unassign a student from a quiz
+  app.delete("/api/tutor/quizzes/:quizId/unassign/:studentId", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const quizId = parseInt(req.params.quizId);
+      const quizId = parseInt(String(req.params.quizId));
+      const studentId = String(req.params.studentId);
+
       const quiz = await storage.getSomaQuiz(quizId);
-      if (!quiz || quiz.authorId !== tutorId) {
-        return res.status(403).json({ message: "Access denied" });
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
       }
-      const assignments = await storage.getQuizAssignmentsForQuiz(quizId);
-      res.json(assignments);
-    } catch (err: any) {
-      res.status(500).json({ message: err.message || "Failed to fetch assignments" });
-    }
-  });
 
   // Delete a quiz (tutor only)
   app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
@@ -455,486 +587,245 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── Student Routes ──────────────────────────────────────────────
 
-  app.get("/api/student/reports", async (req, res) => {
+      await storage.deleteQuizAssignment(quizId, studentId);
+      return res.json({ success: true, message: "Student unassigned" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to unassign student" });
+    }
+  });
+
+  // Delete an entire assessment (tutor must be the author)
+  app.delete("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
     try {
-      const studentId = req.query.studentId as string;
-      if (!studentId) return res.status(400).json({ message: "studentId required" });
-      const reports = await storage.getSomaReportsByStudentId(studentId);
-      res.json(reports);
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      if (quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Only the author can delete this assessment" });
+      }
+      await storage.deleteSomaQuiz(quizId);
+      return res.json({ success: true, message: "Assessment deleted" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to delete assessment" });
+    }
+  });
+
+  // Extend deadline by specified hours for all pending assignments on a quiz
+  app.patch("/api/tutor/quizzes/:quizId/assignments/extend", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const hours = Number(req.body.hours) || 24;
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      if (quiz.authorId !== tutorId) {
+        return res.status(403).json({ message: "Only the author can extend deadlines" });
+      }
+      const updated = await storage.extendQuizAssignmentDeadlines(quizId, hours);
+      return res.json({ success: true, message: `Extended deadline by ${hours}h for ${updated} assignment(s)`, updated });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to extend deadline" });
+    }
+  });
+
+  // Get assignments for a specific quiz
+  app.get("/api/tutor/quizzes/:quizId/assignments", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      const assignments = await storage.getQuizAssignmentsForQuiz(quizId);
+      res.json(assignments);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch assignments" });
+    }
+  });
+
+  app.get("/api/tutor/quizzes/:quizId/reports", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      const adoptedIds = new Set(adopted.map((s) => s.id));
+      const allReports = await storage.getSomaReportsByQuizId(quizId);
+      const reports = allReports.filter((r) => r.studentId && adoptedIds.has(r.studentId));
+      const questions = await storage.getSomaQuestionsByQuizId(quizId);
+      const maxScore = questions.reduce((s, q) => s + q.marks, 0);
+      res.json({ quiz, reports, questions, maxScore });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to fetch reports" });
     }
   });
 
-  app.get("/api/student/submissions", async (req, res) => {
+  app.get("/api/tutor/students/:studentId/comments", requireTutor, async (req, res) => {
     try {
-      const studentId = req.query.studentId as string;
-      if (!studentId) return res.status(400).json({ message: "studentId required" });
-      const subs = await storage.getSubmissionsByStudentUserId(studentId);
-      res.json(subs);
+      const tutorId = (req as any).tutorId;
+      const studentId = String(req.params.studentId);
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
+      const comments = await storage.getTutorComments(tutorId, studentId);
+      res.json(comments);
     } catch (err: any) {
-      res.status(500).json({ message: err.message || "Failed to fetch submissions" });
+      res.status(500).json({ message: err.message || "Failed to fetch comments" });
     }
   });
 
-  // Row-level security: Only return quizzes explicitly assigned to this student
-  app.get("/api/quizzes/available", async (req, res) => {
+  app.post("/api/tutor/students/:studentId/comments", requireTutor, async (req, res) => {
     try {
-      const studentId = req.query.studentId as string;
-      if (!studentId) return res.status(400).json({ message: "studentId required" });
-      const assignments = await storage.getQuizAssignmentsForStudent(studentId);
-      const assignedQuizzes = assignments
-        .filter((a) => !a.quiz.isArchived && a.quiz.status === "published")
-        .map((a) => a.quiz);
-      res.json(assignedQuizzes);
+      const tutorId = (req as any).tutorId;
+      const studentId = String(req.params.studentId);
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
+      const { comment } = req.body;
+      if (!comment?.trim()) return res.status(400).json({ message: "Comment is required" });
+      const result = await storage.addTutorComment({ tutorId, studentId, comment: comment.trim() });
+      res.json(result);
     } catch (err: any) {
-      res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });
+      res.status(500).json({ message: err.message || "Failed to add comment" });
     }
   });
 
-  app.post("/api/admin/login", loginLimiter, async (req, res) => {
-    const username = String(req.body?.username || "").trim().toLowerCase();
-    const password = String(req.body?.password || "");
+  app.get("/api/tutor/students/:studentId/performance", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const studentId = String(req.params.studentId);
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      if (!adopted.some((s) => s.id === studentId)) return res.status(403).json({ message: "Access denied" });
+      const reports = await storage.getSomaReportsByStudentId(studentId);
 
-    const suppliedUsername = username || getAdminUsername();
-    const suppliedPassword = password;
+      const reportsWithMax = await Promise.all(reports.map(async (r) => {
+        const questions = await storage.getSomaQuestionsByQuizId(r.quizId);
+        const maxScore = questions.reduce((s, q) => s + q.marks, 0);
+        return { ...r, maxScore };
+      }));
 
-    const passwordHash = getAdminPasswordHash();
-    const legacyPassword = getLegacyAdminPassword();
-    const isValidUser = suppliedUsername === getAdminUsername();
-    const isValidPassword = passwordHash
-      ? verifyPassword(suppliedPassword, passwordHash)
-      : Boolean(legacyPassword)
-        && Buffer.byteLength(suppliedPassword) === Buffer.byteLength(legacyPassword)
-        && crypto.timingSafeEqual(Buffer.from(suppliedPassword), Buffer.from(legacyPassword));
-
-    if (!isValidUser || !isValidPassword) {
-      return res.status(401).json({ message: "Invalid admin credentials." });
+      res.json({ reports: reportsWithMax, submissions: [] });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch performance" });
     }
-    const token = jwt.sign({ role: "admin", username: suppliedUsername }, getJwtSecret(), { expiresIn: "12h" });
-    res.cookie(ADMIN_COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 1000 * 60 * 60 * 12,
-      path: "/",
-    });
+  });
+
+  app.get("/api/tutor/dashboard-stats", requireTutor, async (req, res) => {
+    try {
+      const tutorId = (req as any).tutorId;
+      const stats = await storage.getDashboardStatsForTutor(tutorId);
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch stats" });
+    }
+  });
+
+  // ─── Tutor Quiz Builder Routes (replaces /api/admin/* for tutors) ──
+
+  // Session check for tutor auth
+  app.get("/api/tutor/session", requireTutor, async (_req, res) => {
     res.json({ authenticated: true });
   });
 
-  app.get("/api/admin/session", async (req, res) => {
-    const token = getAdminSessionToken(req);
-    if (!token) return res.json({ authenticated: false });
+  // Create a new quiz (sets authorId = tutorId)
+  app.post("/api/tutor/quizzes", requireTutor, async (req, res) => {
     try {
-      jwt.verify(token, getJwtSecret());
-      res.json({ authenticated: true });
-    } catch {
-      res.json({ authenticated: false });
-    }
-  });
-
-  app.post("/api/admin/logout", async (req, res) => {
-    res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
-    res.json({ success: true });
-  });
-
-  // Student quiz review - returns questions with correct answers for completed quizzes
-  app.get("/api/student/quiz-review", async (req, res) => {
-    try {
-      const quizId = Number(req.query.quizId);
-      const firstName = req.query.firstName as string;
-      const lastName = req.query.lastName as string;
-      if (!quizId || !firstName || !lastName) {
-        return res.status(400).json({ message: "quizId, firstName, and lastName required" });
-      }
-      const hasSubmitted = await storage.checkStudentSubmission(quizId, firstName, lastName);
-      if (!hasSubmitted) {
-        return res.status(403).json({ message: "No submission found for this student" });
-      }
-      const submission = await storage.getStudentSubmission(quizId, firstName, lastName);
-      const questions = await storage.getQuestionsByQuizId(quizId);
-      const quiz = await storage.getQuiz(quizId);
-      res.json({ quiz, questions, submission });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message || "Failed to fetch review data" });
-    }
-  });
-
-  // Student AI analysis - accessible without admin auth
-  app.post("/api/student/ai-analysis", async (req, res) => {
-    try {
-      const { message } = req.body;
-      if (!message) return res.status(400).json({ message: "message is required" });
-
-      const systemPrompt = `You are a comprehensive AI tutor. Analyze the student's complete academic performance and provide a detailed standing report in clean HTML format. Include sections for: Overall Academic Standing, Subject-by-Subject Breakdown, Critical Weak Areas, Personalized Study Plan, and Motivational Summary. Use <h2>, <h3>, <ul>, <li> tags. Output clean HTML only — no markdown, no code fences.`;
-
-      const { data, metadata } = await generateWithFallback(systemPrompt, String(message));
-      let reply = data.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-      if (metadata) {
-        reply += `<hr style="margin-top: 30px; border-color: #334155;"/><p style="font-size: 10px; color: #64748b; text-align: center; text-transform: uppercase; letter-spacing: 0.1em;">Generated by ${metadata.provider} (${metadata.model}) in ${(metadata.durationMs / 1000).toFixed(2)}s</p>`;
-      }
-      res.json({ reply, metadata });
-    } catch (err: any) {
-      res.status(500).json({ message: `Analysis failed: ${err.message}` });
-    }
-  });
-
-  // Student endpoint: on-demand AI analysis for a specific quiz submission
-  app.post("/api/student/analyze-quiz", async (req, res) => {
-    try {
-      const { quizId, firstName, lastName } = req.body;
-      if (!quizId || !firstName || !lastName) {
-        return res.status(400).json({ message: "quizId, firstName, and lastName required" });
-      }
-      const submission = await storage.getStudentSubmission(Number(quizId), firstName, lastName);
-      if (!submission) {
-        return res.status(404).json({ message: "No submission found" });
-      }
-      const questions = await storage.getQuestionsByQuizId(Number(quizId));
-      const quiz = await storage.getQuiz(Number(quizId));
-
-      let questionNumber = 0;
-      const breakdown = Object.entries(submission.answersBreakdown).map(([qId, detail]: [string, any]) => {
-        const question = questions.find((q: any) => String(q.id) === qId);
-        questionNumber++;
-        return {
-          questionNumber: question?.id || questionNumber,
-          question: question?.promptText || "Unknown",
-          studentAnswer: detail.answer || "No answer",
-          correct: detail.correct,
-          marksEarned: detail.marksEarned,
-          marksWorth: question?.marksWorth || 1,
-        };
+      const tutorId = (req as any).tutorId;
+      const { title, syllabus, level, subject, topic } = req.body;
+      if (!title) return res.status(400).json({ message: "title is required" });
+      const quiz = await storage.createSomaQuiz({
+        title,
+        topic: topic || title,
+        syllabus: syllabus || "IEB",
+        level: level || "Grade 6-12",
+        subject: subject || null,
+        authorId: tutorId,
+        status: "published",
       });
-
-      const systemPrompt = `You are an expert academic tutor. Analyze this student's quiz submission and provide a detailed performance report in clean HTML.
-
-FORMATTING RULES:
-1. Use <h3> tags for section headings.
-2. Format lists as <ul><li> items.
-3. Be concise, specific, and actionable.
-4. Output clean HTML only — no markdown, no code fences.
-
-Sections to include:
-- Overall Performance Summary (score, percentage, standing)
-- Areas of Strength (concepts demonstrated well)
-- Areas of Improvement (specific concepts to work on, as bullet points)
-- Recommended Next Steps (actionable study tips)`;
-
-      const userPrompt = `Quiz: "${quiz?.title || "Quiz"}" (${quiz?.subject || "General"})
-Student scored ${submission.totalScore}/${submission.maxPossibleScore}.
-
-Question breakdown:
-${JSON.stringify(breakdown, null, 2)}`;
-
-      const { data, metadata } = await generateWithFallback(systemPrompt, userPrompt);
-      let html = data.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-      if (metadata) {
-        html += `<hr style="margin-top: 30px; border-color: #334155;"/><p style="font-size: 10px; color: #64748b; text-align: center; text-transform: uppercase; letter-spacing: 0.1em;">Generated by ${metadata.provider} (${metadata.model}) in ${(metadata.durationMs / 1000).toFixed(2)}s</p>`;
-      }
-      res.json({ analysis: html, metadata });
+      res.json(quiz);
     } catch (err: any) {
-      res.status(500).json({ message: `Analysis failed: ${err.message}` });
+      res.status(500).json({ message: err.message || "Failed to create quiz" });
     }
   });
 
-  app.use("/api/admin", requireAdmin);
-
-  // Upload supporting documents (PDFs) — stored on disk so copilot can reference them
-  app.post("/api/admin/upload-supporting-doc", supportingDocUpload.single("pdf"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No PDF uploaded" });
-    res.json({ id: req.file.filename, originalName: req.file.originalname });
-  });
-
-  app.get("/api/quizzes", async (_req, res) => {
-    const allQuizzes = await storage.getQuizzes();
-    res.json(allQuizzes.filter((q) => !q.isArchived));
-  });
-
-  app.get("/api/quizzes/:id", async (req, res) => {
-    const quiz = await storage.getQuiz(parseInt(req.params.id));
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    res.json(quiz);
-  });
-
-  app.get("/api/quizzes/:id/questions", async (req, res) => {
-    const quizId = parseInt(req.params.id);
-    const quiz = await storage.getQuiz(quizId);
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    const qs = await storage.getQuestionsByQuizId(quizId);
-    const validQs = qs.filter((q) => Array.isArray(q.options) && q.options.length >= 4);
-    const sanitized = validQs.map(({ correctAnswer, ...rest }) => rest);
-    res.json(sanitized);
-  });
-
-  app.post("/api/students", async (req, res) => {
-    const { firstName, lastName } = req.body;
-    if (!firstName || !lastName) return res.status(400).json({ message: "First and last name required" });
-    const student = await storage.findOrCreateStudent({ firstName, lastName });
-    res.json(student);
-  });
-
-  app.post("/api/check-submission", async (req, res) => {
-    const { quizId, firstName, lastName } = req.body;
-    if (!quizId || !firstName || !lastName) {
-      return res.status(400).json({ message: "quizId, firstName, and lastName required" });
-    }
-    const quiz = await storage.getQuiz(Number(quizId));
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    const hasSubmitted = await storage.checkStudentSubmission(quizId, firstName, lastName);
-    if (hasSubmitted) {
-      const submission = await storage.getStudentSubmission(quizId, firstName, lastName);
-      return res.json({ hasSubmitted: true, totalScore: submission?.totalScore ?? 0, maxPossibleScore: submission?.maxPossibleScore ?? 0 });
-    }
-    res.json({ hasSubmitted: false });
-  });
-
-  app.post("/api/submissions", async (req, res) => {
-    const { studentId, quizId, answers, startTime } = req.body;
-    if (!studentId || !quizId) return res.status(400).json({ message: "studentId and quizId required" });
-    if (typeof startTime !== "number" || !Number.isFinite(startTime)) {
-      return res.status(400).json({ message: "startTime is required" });
-    }
-
-    const quiz = await storage.getQuiz(quizId);
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-
-    const now = Date.now();
-    if (startTime > now + 5000) {
-      return res.status(400).json({ message: "Submission rejected: invalid start time" });
-    }
-    const elapsed = (now - startTime) / 1000;
-    const allowedSeconds = quiz.timeLimitMinutes * 60 + 30;
-    if (elapsed > allowedSeconds) {
-      return res.status(400).json({ message: "Submission rejected: time limit exceeded" });
-    }
-
-    const allQuestions = await storage.getQuestionsByQuizId(quizId);
-    let totalScore = 0;
-    let maxPossibleScore = 0;
-    const answersBreakdown: Record<string, { answer: string; correct: boolean; marksEarned: number }> = {};
-
-    for (const q of allQuestions) {
-      maxPossibleScore += q.marksWorth;
-      const studentAnswer = answers?.[q.id] ?? "";
-      const isCorrect = studentAnswer === q.correctAnswer;
-      const marksEarned = isCorrect ? q.marksWorth : 0;
-      totalScore += marksEarned;
-      answersBreakdown[String(q.id)] = {
-        answer: studentAnswer,
-        correct: isCorrect,
-        marksEarned,
-      };
-    }
-
-    const submission = await storage.createSubmission({
-      studentId,
-      quizId,
-      totalScore,
-      maxPossibleScore,
-      answersBreakdown,
-    });
-
-    res.json(submission);
-  });
-
-  app.get("/api/admin/quizzes", async (_req, res) => {
-    const allQuizzes = await storage.getQuizzes();
-    const withSnapshots = await Promise.all(allQuizzes.map(async (quiz) => {
-      const [quizQuestions, quizSubmissions] = await Promise.all([
-        storage.getQuestionsByQuizId(quiz.id),
-        storage.getSubmissionsByQuizId(quiz.id),
-      ]);
-      return {
-        ...quiz,
-        snapshot: {
-          totalQuestions: quizQuestions.length,
-          totalSubmissions: quizSubmissions.length,
-          subject: quiz.subject || "General",
-          level: quiz.level || "Unspecified",
-        },
-      };
-    }));
-    res.json(withSnapshots);
-  });
-
-  app.get("/api/admin/quizzes/:id", async (req, res) => {
-    const quiz = await storage.getQuiz(parseInt(req.params.id));
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-    const questions = await storage.getQuestionsByQuizId(quiz.id);
-    res.json({ ...quiz, questions });
-  });
-
-  app.post("/api/admin/quizzes", async (req, res) => {
-    const { title, timeLimitMinutes, dueDate, syllabus, level, subject } = req.body;
-    if (!title || !timeLimitMinutes || !dueDate) {
-      return res.status(400).json({ message: "title, timeLimitMinutes, and dueDate required" });
-    }
-    const quiz = await storage.createQuiz({
-      title,
-      timeLimitMinutes,
-      dueDate: new Date(dueDate),
-      syllabus: syllabus || null,
-      level: level || null,
-      subject: subject || null,
-    });
-    res.json(quiz);
-  });
-
-  app.put("/api/admin/quizzes/:id", requireAdmin, async (req, res) => {
-    const id = parseInt(String(req.params.id));
-    const existing = await storage.getQuiz(id);
-    if (!existing) return res.status(404).json({ message: "Quiz not found" });
-
-    const { title, timeLimitMinutes, dueDate, syllabus, level, subject } = req.body;
-    const updates: any = {};
-    if (title !== undefined) updates.title = title;
-    if (timeLimitMinutes !== undefined) updates.timeLimitMinutes = timeLimitMinutes;
-    if (dueDate !== undefined) updates.dueDate = new Date(dueDate);
-    if (syllabus !== undefined) updates.syllabus = syllabus || null;
-    if (level !== undefined) updates.level = level || null;
-    if (subject !== undefined) updates.subject = subject || null;
-
-    const updated = await storage.updateQuiz(id, updates);
-    res.json(updated);
-  });
-
-  app.delete("/api/admin/quizzes/:id", async (req, res) => {
-    await storage.deleteQuiz(parseInt(req.params.id));
-    res.json({ success: true });
-  });
-
-  app.post("/api/admin/quizzes/bulk-action", async (req, res) => {
+  // Get a specific quiz with its questions
+  app.get("/api/tutor/quizzes/:quizId/detail", requireTutor, async (req, res) => {
     try {
-      const bodySchema = z.object({
-        quizIds: z.array(z.number().int().positive()).min(1),
-        action: z.enum(["archive", "hard_delete", "extend_24h", "mark_open", "mark_overdue"]),
-      });
-      const parsed = bodySchema.parse(req.body);
-      if (!db) {
-        return res.status(500).json({ message: "Database unavailable for bulk actions" });
-      }
-
-      if (parsed.action === "archive") {
-        await db.update(quizzes).set({ isArchived: true }).where(inArray(quizzes.id, parsed.quizIds));
-      } else if (parsed.action === "hard_delete") {
-        await db.delete(submissions).where(inArray(submissions.quizId, parsed.quizIds));
-        await db.delete(questions).where(inArray(questions.quizId, parsed.quizIds));
-        await db.delete(quizzes).where(inArray(quizzes.id, parsed.quizIds));
-      } else if (parsed.action === "extend_24h") {
-        await db.update(quizzes)
-          .set({ dueDate: sql`${quizzes.dueDate} + interval '24 hour'` as any })
-          .where(inArray(quizzes.id, parsed.quizIds));
-      } else if (parsed.action === "mark_open") {
-        const future = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7);
-        await db.update(quizzes).set({ dueDate: future }).where(inArray(quizzes.id, parsed.quizIds));
-      } else {
-        const now = new Date();
-        await db.update(quizzes).set({ dueDate: new Date(now.getTime() - 1000 * 60 * 5) }).where(inArray(quizzes.id, parsed.quizIds));
-      }
-
-      res.json({ success: true });
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      const questions = await storage.getSomaQuestionsByQuizId(quiz.id);
+      res.json({ ...quiz, questions });
     } catch (err: any) {
-      res.status(400).json({ message: err.message || "Bulk action failed" });
+      res.status(500).json({ message: err.message || "Failed to fetch quiz" });
     }
   });
 
-  app.get("/api/admin/quizzes/:id/questions", async (req, res) => {
-    const questions = await storage.getQuestionsByQuizId(parseInt(req.params.id));
-    res.json(questions);
-  });
-
-  app.post("/api/admin/quizzes/:id/questions", async (req, res) => {
-    const quizId = parseInt(req.params.id);
-    const quiz = await storage.getQuiz(quizId);
-    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-
-    const { questions: rawQuestions } = req.body;
-    const parsed = questionUploadSchema.safeParse(rawQuestions);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid question format", errors: parsed.error.errors });
-    }
-
-    const toInsert = parsed.data.map((q) => ({
-      quizId,
-      promptText: q.prompt_text,
-      imageUrl: q.image_url ?? null,
-      options: q.options,
-      correctAnswer: q.correct_answer,
-      marksWorth: q.marks_worth,
-    }));
-
-    const created = await storage.createQuestions(toInsert);
-    res.json(created);
-  });
-
-  app.post("/api/admin/validate-quiz", requireAdmin, async (req, res) => {
+  // Update quiz metadata
+  app.put("/api/tutor/quizzes/:quizId", requireTutor, async (req, res) => {
     try {
+      const quizId = parseInt(String(req.params.quizId));
+      const existing = await storage.getSomaQuiz(quizId);
+      if (!existing) return res.status(404).json({ message: "Quiz not found" });
+
+      const { title, syllabus, level, subject } = req.body;
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (syllabus !== undefined) updates.syllabus = syllabus || null;
+      if (level !== undefined) updates.level = level || null;
+      if (subject !== undefined) updates.subject = subject || null;
+
+      const updated = await storage.updateSomaQuiz(quizId, updates);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to update quiz" });
+    }
+  });
+
+  // Add questions to a quiz
+  app.post("/api/tutor/quizzes/:quizId/questions", requireTutor, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      const quiz = await storage.getSomaQuiz(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+
       const { questions } = req.body;
       if (!Array.isArray(questions) || questions.length === 0) {
-        return res.status(400).json({ message: "questions array is required" });
+        return res.status(400).json({ message: "questions array required" });
       }
-
-      const systemPrompt = `You are a strict quiz quality auditor. Review the following quiz questions for:
-1. CORRECTNESS: Is the correct_answer actually correct? Solve each problem step-by-step to verify.
-2. CLARITY: Is the question text clear and unambiguous?
-3. OPTIONS: Are all options plausible? Are there duplicate or obviously wrong distractors?
-4. FORMATTING: Is LaTeX notation properly delimited with \\( \\) or \\[ \\]? Are units correct?
-5. MARKS: Are marks allocated fairly based on difficulty?
-
-Return a JSON object with this structure:
-{
-  "overall": "pass" | "warning" | "fail",
-  "issues": [{ "questionIndex": number, "severity": "error" | "warning", "message": string }],
-  "summary": string
-}
-
-If all questions are correct and well-formatted, return overall: "pass" with an empty issues array.`;
-
-      const userPrompt = `Validate these quiz questions:\n${JSON.stringify(questions, null, 2)}`;
-
-      const { data, metadata } = await generateWithFallback(systemPrompt, userPrompt);
-
-      // Try to parse JSON from the response
-      let validation;
-      try {
-        const jsonMatch = data.match(/\{[\s\S]*\}/);
-        validation = jsonMatch ? JSON.parse(jsonMatch[0]) : { overall: "pass", issues: [], summary: data };
-      } catch {
-        validation = { overall: "pass", issues: [], summary: data };
-      }
-
-      res.json({ validation, metadata });
+      const mapped = questions.map((q: any) => ({
+        quizId,
+        stem: q.prompt_text || q.stem || "",
+        options: Array.isArray(q.options) ? [...q.options] : [],
+        correctAnswer: q.correct_answer || q.correctAnswer || "",
+        explanation: q.explanation || "",
+        marks: q.marks_worth || q.marks || 1,
+      }));
+      const saved = await storage.createSomaQuestions(mapped);
+      res.json(saved);
     } catch (err: any) {
-      res.status(500).json({ message: `Validation failed: ${err.message}` });
+      res.status(500).json({ message: err.message || "Failed to add questions" });
     }
   });
 
-  app.delete("/api/admin/questions/:id", async (req, res) => {
-    await storage.deleteQuestion(parseInt(req.params.id));
-    res.json({ success: true });
+  // Delete a question
+  app.delete("/api/tutor/questions/:questionId", requireTutor, async (req, res) => {
+    try {
+      await storage.deleteSomaQuestion(parseInt(String(req.params.questionId)));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete question" });
+    }
   });
 
-  app.get("/api/admin/quizzes/:id/submissions", async (req, res) => {
-    const submissions = await storage.getSubmissionsByQuizId(parseInt(req.params.id));
-    res.json(submissions);
-  });
-
-  app.delete("/api/admin/submissions/:id", async (req, res) => {
-    await storage.deleteSubmission(parseInt(req.params.id));
-    res.json({ success: true });
-  });
-
-  app.delete("/api/admin/quizzes/:id/submissions", async (req, res) => {
-    await storage.deleteSubmissionsByQuizId(parseInt(req.params.id));
-    res.json({ success: true });
-  });
-
-  app.post("/api/generate-questions", requireAdmin, (_req, res) => {
-    res.status(410).json({ message: "Generate from PDF is now available only through Copilot supporting documents." });
-  });
-
-  app.post("/api/admin/copilot-chat", async (req, res) => {
+  // Copilot chat for tutor quiz builder
+  app.post("/api/tutor/copilot-chat", requireTutor, async (req, res) => {
     try {
       const { message, documentIds } = req.body;
       if (!message) return res.status(400).json({ message: "message is required" });
@@ -961,15 +852,13 @@ If all questions are correct and well-formatted, return overall: "pass" with an 
         if (typeof fileId !== "string" || fileId.includes("..") || fileId.includes("/")) continue;
         const filePath = path.join(docsDir, fileId);
         if (fs.existsSync(filePath)) {
-          supportingText += `
-${await parsePdfTextFromBuffer(fs.readFileSync(filePath))}`;
+          supportingText += `\n${await parsePdfTextFromBuffer(fs.readFileSync(filePath))}`;
         }
       }
 
       const paperCode = text.match(/\b\d{4}\/v\d\/\d{4}\b/i)?.[0];
       if (paperCode) {
-        supportingText += `
-${await fetchPaperContext(paperCode)}`;
+        supportingText += `\n${await fetchPaperContext(paperCode)}`;
       }
 
       const copilotSystemPrompt = `You are SOMA Copilot, an expert MCQ assessment generator for the MCEC platform.
@@ -999,10 +888,7 @@ RULES:
 
       const { data, metadata } = await generateWithFallback(
         copilotSystemPrompt,
-        `${text}
-
-Supporting context:
-${supportingText || "No extra context."}`,
+        `${text}\n\nSupporting context:\n${supportingText || "No extra context."}`,
       );
 
       const rawDrafts = extractJsonArray(data) || [];
@@ -1047,80 +933,211 @@ ${supportingText || "No extra context."}`,
     }
   });
 
-  app.post("/api/analyze-student", requireAdmin, async (req, res) => {
+  // Upload supporting document for tutor quiz builder
+  app.post("/api/tutor/upload-doc", requireTutor, supportingDocUpload.single("pdf"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No PDF uploaded" });
+    res.json({ id: req.file.filename, originalName: req.file.originalname });
+  });
+
+  // ─── Super Admin Routes ──────────────────────────────────────────
+
+  app.get("/api/super-admin/users", requireSuperAdmin, async (_req, res) => {
     try {
-      const { submission, questions } = req.body;
-      if (!submission || !questions) {
-        return res.status(400).json({ message: "submission and questions required" });
+      const users = await storage.getAllSomaUsers();
+      res.json(users);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch users" });
+    }
+  });
+
+  app.delete("/api/super-admin/users/:userId", requireSuperAdmin, async (req, res) => {
+    try {
+      const userId = String(req.params.userId);
+      const user = await storage.getSomaUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (user.role === "super_admin") return res.status(403).json({ message: "Cannot delete super admin" });
+      await storage.deleteSomaUser(userId);
+      res.json({ message: "User deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete user" });
+    }
+  });
+
+  app.get("/api/super-admin/quizzes", requireSuperAdmin, async (_req, res) => {
+    try {
+      const quizzes = await storage.getAllSomaQuizzes();
+      res.json(quizzes);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch quizzes" });
+    }
+  });
+
+  app.delete("/api/super-admin/quizzes/:quizId", requireSuperAdmin, async (req, res) => {
+    try {
+      const quizId = parseInt(String(req.params.quizId));
+      if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
+      await storage.deleteSomaQuiz(quizId);
+      res.json({ message: "Quiz deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete quiz" });
+    }
+  });
+
+  app.get("/api/super-admin/stats", requireSuperAdmin, async (_req, res) => {
+    try {
+      const [users, quizzes] = await Promise.all([
+        storage.getAllSomaUsers(),
+        storage.getAllSomaQuizzes(),
+      ]);
+      const students = users.filter((u) => u.role === "student");
+      const tutors = users.filter((u) => u.role === "tutor");
+      res.json({
+        totalUsers: users.length,
+        totalStudents: students.length,
+        totalTutors: tutors.length,
+        totalQuizzes: quizzes.length,
+        publishedQuizzes: quizzes.filter((q) => q.status === "published").length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch stats" });
+    }
+  });
+
+  // ─── Student Routes (Supabase JWT-protected) ────────────────────
+
+  app.get("/api/student/reports", requireSupabaseAuth, async (req, res) => {
+    try {
+      const studentId = (req as any).authUser.id;
+      const reports = await storage.getSomaReportsByStudentId(studentId);
+      res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch reports" });
+    }
+  });
+
+  app.get("/api/student/submissions", requireSupabaseAuth, async (req, res) => {
+    try {
+      res.json([]);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to fetch submissions" });
+    }
+  });
+
+  app.get("/api/quizzes/available", requireSupabaseAuth, async (req, res) => {
+    try {
+      const studentId = (req as any).authUser.id;
+      const allQuizzes = await storage.getSomaQuizzes();
+      const assignments = await storage.getQuizAssignmentsForStudent(studentId);
+
+      console.log(`[Available] Fetching for Student: ${studentId}, Found Assignments: ${assignments.length}`);
+
+      // X-ray: log every raw assignment before any filtering
+      for (const a of assignments) {
+        console.log(`[Available]   Assignment quizId=${a.quizId} status="${a.status}" dueDate=${a.dueDate || "null"} quizStatus="${a.quiz?.status}" quizTitle="${a.quiz?.title}"`);
       }
 
-      let questionNumber = 0;
-      const breakdown = Object.entries(submission.answersBreakdown).map(([qId, detail]: [string, any]) => {
-        const question = questions.find((q: any) => String(q.id) === qId);
-        questionNumber++;
-        return {
-          questionNumber: question?.displayNumber || questionNumber,
-          question: question?.promptText || "Unknown",
-          studentAnswer: detail.answer || "No answer",
-          correct: detail.correct,
-          marksEarned: detail.marksEarned,
-          marksWorth: question?.marksWorth || 1,
-        };
-      });
+      const assignmentMap = new Map<number, any>();
+      for (const a of assignments) {
+        if (a.status === "pending") {
+          assignmentMap.set(a.quizId, a);
+        }
+      }
 
-      const systemPrompt = `You are an expert academic tutor across all subjects. Analyze student quiz submissions and provide detailed performance reports.
+      const pendingCount = assignmentMap.size;
+      const publishedQuizzes = allQuizzes.filter(q => !q.isArchived && q.status === "published");
 
-IMPORTANT FORMATTING RULES:
-1. Reference questions using their "questionNumber" field (e.g., "Question 1", "Question 2"), NOT their database IDs.
-2. Format all "Areas of Improvement" and explanations as clean HTML bulleted lists using <ul> and <li> tags.
-3. Use <h3> tags for section headings.
-4. Be concise, specific, and actionable.
-5. Output clean HTML only — no markdown, no code fences.
+      console.log(`[Available] Student ${studentId}: ${assignments.length} total assignments, ${pendingCount} pending, ${publishedQuizzes.length} published quizzes, ${allQuizzes.length} total quizzes`);
 
-Sections to include:
-- Overall Performance Summary
-- Areas of Strength (concepts the student demonstrated well)
-- Areas of Improvement (specific concepts to work on, as <ul><li> items)
-- Recommended Next Steps (actionable study tips, as <ul><li> items)`;
+      // Log any quiz that has a pending assignment but is NOT published (ghost assignment root cause)
+      for (const quizId of Array.from(assignmentMap.keys())) {
+        const matchingQuiz = allQuizzes.find(q => q.id === quizId);
+        if (!matchingQuiz) {
+          console.log(`[Available] WARNING: Assignment for quizId=${quizId} but quiz not found in DB!`);
+        } else if (matchingQuiz.status !== "published") {
+          console.log(`[Available] WARNING: Assignment for quizId=${quizId} but quiz status="${matchingQuiz.status}" (not published) — title="${matchingQuiz.title}"`);
+        } else if (matchingQuiz.isArchived) {
+          console.log(`[Available] WARNING: Assignment for quizId=${quizId} but quiz is archived — title="${matchingQuiz.title}"`);
+        }
+      }
 
-      const userPrompt = `Student scored ${submission.totalScore}/${submission.maxPossibleScore}.\n\nQuestion breakdown:\n${JSON.stringify(breakdown, null, 2)}`;
+      const available = publishedQuizzes
+        .filter(q => assignmentMap.has(q.id))
+        .map(q => ({
+          ...q,
+          isAssigned: true,
+          assignmentStatus: "pending",
+          dueDate: assignmentMap.get(q.id)?.dueDate || null,
+        }));
 
-      const { data, metadata } = await generateWithFallback(systemPrompt, userPrompt);
-      let html = data.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-      html += `<hr style="margin-top: 30px; border-color: #334155;"/><p style="font-size: 10px; color: #64748b; text-align: center; text-transform: uppercase; letter-spacing: 0.1em;">Generated by ${metadata.provider} (${metadata.model}) in ${(metadata.durationMs / 1000).toFixed(2)}s</p>`;
-      res.json({ analysis: html, metadata });
+      console.log(`[Available] Returning ${available.length} available quizzes for student ${studentId}`);
+
+      return res.json(available);
     } catch (err: any) {
-      res.status(500).json({ message: `AI analysis failed: ${err.message}` });
+      return res.status(500).json({ message: err.message || "Failed to fetch available quizzes" });
     }
   });
 
-  app.post("/api/analyze-class", requireAdmin, async (req, res) => {
-    try {
-      const { quizId } = req.body;
-      if (!quizId) return res.status(400).json({ message: "quizId required" });
+  app.post("/api/admin/login", loginLimiter, async (req, res) => {
+    const username = String(req.body?.username || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
 
-      const submissions = await storage.getSubmissionsByQuizId(Number(quizId));
-      const questions = await storage.getQuestionsByQuizId(Number(quizId));
+    const suppliedUsername = username || getAdminUsername();
+    const suppliedPassword = password;
 
-      const payload = submissions.map((s) => ({
-        student: `${s.student.firstName} ${s.student.lastName}`,
-        totalScore: s.totalScore,
-        maxPossibleScore: s.maxPossibleScore,
-        answersBreakdown: s.answersBreakdown,
-      }));
+    const passwordHash = getAdminPasswordHash();
+    const legacyPassword = getLegacyAdminPassword();
+    const isValidUser = suppliedUsername === getAdminUsername();
+    const isValidPassword = passwordHash
+      ? verifyPassword(suppliedPassword, passwordHash)
+      : Boolean(legacyPassword)
+        && Buffer.byteLength(suppliedPassword) === Buffer.byteLength(legacyPassword)
+        && crypto.timingSafeEqual(Buffer.from(suppliedPassword), Buffer.from(legacyPassword));
 
-      const systemPrompt = `You are a master academic tutor. Analyze cohort quiz data. Identify macro-trends, the most commonly failed questions, and the specific concepts the class as a whole is struggling with. Output in clean, professional HTML — no markdown, no code fences.`;
-
-      const userPrompt = `Questions:\n${JSON.stringify(questions, null, 2)}\n\nSubmissions:\n${JSON.stringify(payload, null, 2)}`;
-
-      const { data, metadata } = await generateWithFallback(systemPrompt, userPrompt);
-      let html = data.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-      html += `<hr style="margin-top: 30px; border-color: #334155;"/><p style="font-size: 10px; color: #64748b; text-align: center; text-transform: uppercase; letter-spacing: 0.1em;">Generated by ${metadata.provider} (${metadata.model}) in ${(metadata.durationMs / 1000).toFixed(2)}s</p>`;
-      res.json({ analysis: html, submissionCount: submissions.length, metadata });
-    } catch (err: any) {
-      res.status(500).json({ message: `Class analysis failed: ${err.message}` });
+    if (!isValidUser || !isValidPassword) {
+      return res.status(401).json({ message: "Invalid admin credentials." });
     }
+    const token = jwt.sign({ role: "admin", username: suppliedUsername }, getJwtSecret(), { expiresIn: "12h" });
+    res.cookie(ADMIN_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 1000 * 60 * 60 * 12,
+      path: "/",
+    });
+    res.json({ authenticated: true });
   });
+
+  app.get("/api/admin/session", async (req, res) => {
+    const token = getAdminSessionToken(req);
+    if (token) {
+      try {
+        jwt.verify(token, getJwtSecret());
+        return res.json({ authenticated: true });
+      } catch {}
+    }
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const supaToken = authHeader.slice(7);
+      try {
+        const decoded = await verifySupabaseToken(supaToken);
+        if (decoded?.sub) {
+          const user = await storage.getSomaUserById(decoded.sub);
+          if (user && (user.role === "tutor" || user.role === "super_admin")) {
+            return res.json({ authenticated: true });
+          }
+        }
+      } catch {}
+    }
+    res.json({ authenticated: false });
+  });
+
+  app.post("/api/admin/logout", async (req, res) => {
+    res.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
+    res.json({ success: true });
+  });
+
+  app.use("/api/admin", requireAdmin);
+
 
   app.post("/api/upload-image", requireAdmin, (req, res) => {
     upload.single("image")(req, res, (err: any) => {
@@ -1170,7 +1187,7 @@ Sections to include:
         syllabus,
         level,
         curriculumContext: curriculumContext || null,
-        status: "draft",
+        status: "published",
         isArchived: false,
       });
 
@@ -1209,7 +1226,7 @@ Sections to include:
       }
 
       const { topic, title, curriculumContext, subject, syllabus, level } = parsed.data;
-      const { assignTo } = req.body; // array of student IDs
+      const requestedStudentIds = sanitizeStudentIds(req.body?.assignTo);
       const quizTitle = title || `${topic} Quiz`;
 
       const result = await generateAuditedQuiz({
@@ -1217,47 +1234,40 @@ Sections to include:
         copilotPrompt: curriculumContext,
       });
 
-      const quiz = await storage.createSomaQuiz({
-        title: quizTitle,
-        topic,
-        subject,
-        syllabus,
-        level,
-        curriculumContext: curriculumContext || null,
-        authorId: tutorId,
-        status: "published",
-        isArchived: false,
-      });
+      const adopted = await storage.getAdoptedStudents(tutorId);
+      const adoptedIds = new Set(adopted.map((s) => s.id));
+      const validAssignedStudentIds = requestedStudentIds.filter((id) => adoptedIds.has(id));
 
-      const insertedQuestions = await storage.createSomaQuestions(
-        result.questions.map((q) => ({
-          quizId: quiz.id,
+      const bundle = await storage.createSomaQuizBundle({
+        quiz: {
+          title: quizTitle,
+          topic,
+          subject,
+          syllabus,
+          level,
+          curriculumContext: curriculumContext || null,
+          authorId: tutorId,
+          status: "published",
+          isArchived: false,
+        },
+        questions: result.questions.map((q) => ({
           stem: q.stem,
           options: q.options,
           correctAnswer: q.correct_answer,
           explanation: q.explanation,
           marks: q.marks,
-        }))
-      );
-
-      // Auto-assign to selected students
-      let assignments: any[] = [];
-      if (Array.isArray(assignTo) && assignTo.length > 0) {
-        const adopted = await storage.getAdoptedStudents(tutorId);
-        const adoptedIds = new Set(adopted.map((s) => s.id));
-        const validIds = assignTo.filter((id: string) => adoptedIds.has(id));
-        if (validIds.length > 0) {
-          assignments = await storage.createQuizAssignments(quiz.id, validIds);
-        }
-      }
+        })),
+        assignedStudentIds: validAssignedStudentIds,
+      });
 
       res.json({
-        quiz,
-        questions: insertedQuestions,
-        assignments: assignments.length,
+        quiz: bundle.quiz,
+        questions: bundle.questions,
+        assignments: bundle.assignments.length,
+        assignedStudentIds: validAssignedStudentIds,
         pipeline: {
           stages: ["Claude Sonnet (Maker)", "Gemini 2.5 Flash (Checker)"],
-          totalQuestions: insertedQuestions.length,
+          totalQuestions: bundle.questions.length,
         },
       });
     } catch (err: any) {
@@ -1306,10 +1316,13 @@ Sections to include:
       const quizId = parseInt(req.params.id);
       if (isNaN(quizId)) return res.status(400).json({ message: "Invalid quiz ID" });
 
-      const { studentId, studentName, answers } = req.body;
-      if (!studentId || !studentName || !answers) {
-        return res.status(400).json({ message: "Missing studentId, studentName, or answers" });
+      const { studentId, studentName, answers, startedAt } = req.body;
+      if (!studentId || !answers) {
+        return res.status(400).json({ message: "Missing studentId or answers" });
       }
+
+      const dbUser = await storage.getSomaUserById(studentId);
+      const resolvedName = dbUser?.displayName || studentName || "Student";
 
       const alreadySubmitted = await storage.checkSomaSubmission(quizId, studentId);
       if (alreadySubmitted) {
@@ -1321,20 +1334,27 @@ Sections to include:
         return res.status(404).json({ message: "No questions found for this quiz." });
       }
 
+      const sanitizedAnswers = sanitizeSubmittedAnswers(allQuestions, answers);
+
       let totalScore = 0;
       for (const q of allQuestions) {
-        if (answers[String(q.id)] === q.correctAnswer) {
+        if (sanitizedAnswers[String(q.id)] === q.correctAnswer) {
           totalScore += q.marks;
         }
       }
 
+      const now = new Date();
+      const parsedStartedAt = startedAt ? new Date(startedAt) : null;
+
       const report = await storage.createSomaReport({
         quizId,
         studentId,
-        studentName,
+        studentName: resolvedName,
         score: totalScore,
         status: "pending",
-        answersJson: answers,
+        answersJson: sanitizedAnswers,
+        startedAt: parsedStartedAt && !isNaN(parsedStartedAt.getTime()) ? parsedStartedAt : null,
+        completedAt: now,
       });
 
       res.json(report);
@@ -1363,13 +1383,31 @@ Sections to include:
     }
   });
 
-  app.get("/api/soma/reports/:reportId/review", async (req, res) => {
+  app.get("/api/soma/reports/:reportId/review", requireSupabaseAuth, async (req, res) => {
     try {
-      const reportId = parseInt(req.params.reportId);
+      const reportId = parseInt(String(req.params.reportId));
       if (isNaN(reportId)) return res.status(400).json({ message: "Invalid report ID" });
 
       const report = await storage.getSomaReportById(reportId);
       if (!report) return res.status(404).json({ message: "Report not found" });
+
+      // Ownership check: student owns the report, OR tutor adopted the student, OR super_admin
+      const authUser = (req as any).authUser as { id: string; role: string };
+      const isOwner = report.studentId === authUser.id;
+      const isSuperAdmin = authUser.role === "super_admin";
+
+      if (!isOwner && !isSuperAdmin) {
+        // Check if requester is a tutor who adopted this student
+        if (authUser.role === "tutor" && report.studentId) {
+          const adopted = await storage.getAdoptedStudents(authUser.id);
+          const isTutorOfStudent = adopted.some((s) => s.id === report.studentId);
+          if (!isTutorOfStudent) {
+            return res.status(403).json({ message: "Forbidden: you do not have access to this report" });
+          }
+        } else {
+          return res.status(403).json({ message: "Forbidden: you do not have access to this report" });
+        }
+      }
 
       const questions = await storage.getSomaQuestionsByQuizId(report.quizId);
 

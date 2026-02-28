@@ -108,7 +108,7 @@ class TestMemoryStorage {
   }
 
   async createSomaQuiz(quiz: any) {
-    const created = { id: this.somaQuizId++, createdAt: new Date(), curriculumContext: null, status: "draft", ...quiz };
+    const created = { id: this.somaQuizId++, createdAt: new Date(), curriculumContext: null, status: "published", ...quiz };
     this.somaQuizzesList.push(created);
     return created;
   }
@@ -350,16 +350,16 @@ describe("Storage: Submissions & Single-Attempt Enforcement", () => {
 // ─── Soma Storage ────────────────────────────────────────────────────────────
 describe("Storage: Soma Quiz & Questions", () => {
   it("creates and retrieves a Soma quiz", async () => {
-    const quiz = await store.createSomaQuiz({ title: "Calculus", topic: "Derivatives", status: "draft" });
+    const quiz = await store.createSomaQuiz({ title: "Calculus", topic: "Derivatives", status: "published" });
     expect(quiz.id).toBe(1);
     expect(quiz.title).toBe("Calculus");
-    expect(quiz.status).toBe("draft");
+    expect(quiz.status).toBe("published");
     const found = await store.getSomaQuiz(1);
     expect(found).toBeDefined();
   });
 
   it("returns all soma quizzes", async () => {
-    await store.createSomaQuiz({ title: "Q1", topic: "T1", status: "draft" });
+    await store.createSomaQuiz({ title: "Q1", topic: "T1", status: "published" });
     await store.createSomaQuiz({ title: "Q2", topic: "T2", status: "published" });
     const all = await store.getSomaQuizzes();
     expect(all).toHaveLength(2);
@@ -370,7 +370,7 @@ describe("Storage: Soma Quiz & Questions", () => {
   });
 
   it("creates Soma questions and retrieves by quizId", async () => {
-    const quiz = await store.createSomaQuiz({ title: "Q", topic: "T", status: "draft" });
+    const quiz = await store.createSomaQuiz({ title: "Q", topic: "T", status: "published" });
     const questions = await store.createSomaQuestions([
       { quizId: quiz.id, stem: "What is 2^3?", options: ["4", "6", "8", "16"], correctAnswer: "8", marks: 2 },
     ]);
@@ -381,12 +381,12 @@ describe("Storage: Soma Quiz & Questions", () => {
   });
 
   it("Soma quiz defaults curriculumContext to null", async () => {
-    const quiz = await store.createSomaQuiz({ title: "Q", topic: "T", status: "draft" });
+    const quiz = await store.createSomaQuiz({ title: "Q", topic: "T", status: "published" });
     expect(quiz.curriculumContext).toBeNull();
   });
 
   it("returns empty questions for Soma quiz with no questions", async () => {
-    const quiz = await store.createSomaQuiz({ title: "Empty", topic: "T", status: "draft" });
+    const quiz = await store.createSomaQuiz({ title: "Empty", topic: "T", status: "published" });
     const qs = await store.getSomaQuestionsByQuizId(quiz.id);
     expect(qs).toHaveLength(0);
   });
