@@ -319,16 +319,6 @@ export default function TutorAssessments() {
     enabled: !!expandedQuiz && !!userId,
   });
 
-  const { data: quizAssignments = [] } = useQuery<AssignmentWithStudent[]>({
-    queryKey: ["/api/tutor/quizzes", expandedQuiz, "assignments"],
-    queryFn: async () => {
-      const res = await fetch(`/api/tutor/quizzes/${expandedQuiz}/assignments`, { headers });
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!expandedQuiz && !!userId,
-  });
-
   const assignMutation = useMutation({
     mutationFn: async ({ quizId, studentIds, dueDate: dd }: { quizId: number; studentIds: string[]; dueDate?: string }) => {
       const payload: any = { studentIds };
@@ -363,7 +353,7 @@ export default function TutorAssessments() {
 
   const unassignMutation = useMutation({
     mutationFn: async ({ quizId, studentId }: { quizId: number; studentId: string }) => {
-      const res = await fetch(`/api/tutor/quizzes/${quizId}/unassign/${studentId}`, {
+      const res = await fetch(`/api/tutor/quizzes/${quizId}/assignments/${studentId}`, {
         method: "DELETE",
         headers,
       });
@@ -550,28 +540,16 @@ export default function TutorAssessments() {
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${sc.border} shrink-0`} style={{ backgroundColor: `${sc.hex}15` }}>
                         <SubIcon className="w-5 h-5" style={{ color: sc.hex }} />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">
-                            Published
-                          </span>
                           {isExpanded && reports.length > 0 && (
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">
                               {reports.length} submission{reports.length !== 1 ? "s" : ""} · avg {avgPct}%
                             </span>
                           )}
                         </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            {isExpanded && reports.length > 0 && (
-                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">
-                                {reports.length} submission{reports.length !== 1 ? "s" : ""} · avg {avgPct}%
-                              </span>
-                            )}
-                          </div>
-                          <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
-                          <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} · {quiz.level}</p>
-                        </div>
+                        <h3 className="text-sm font-medium text-slate-200 truncate">{quiz.title}</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">{quiz.topic} · {quiz.level}</p>
                       </div>
                       <div className="p-2 text-slate-400">
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -604,9 +582,6 @@ export default function TutorAssessments() {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                      <div className="p-2 text-slate-400">
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </div>
                     </div>
                   </div>
 
@@ -723,30 +698,7 @@ export default function TutorAssessments() {
                       )}
 
                       {/* Student Submissions Section */}
-                      {reportsLoading ? (
-                        <div className="flex justify-center py-8">
-                          <Loader2 className="w-5 h-5 text-violet-500 animate-spin" />
-                        </div>
-                      ) : reports.length === 0 ? (
-                        <div className="text-center py-8">
-                          <FileText className="w-10 h-10 mx-auto text-slate-600 mb-3" />
-                          <p className="text-sm text-slate-400">No submissions yet</p>
-                          <p className="text-xs text-slate-500 mt-1">Students will appear here once they complete this assessment</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-sm font-semibold text-slate-300">Student Submissions</h4>
-                            <div className="flex items-center gap-3 text-xs text-slate-400">
-                              <span>{reports.length} submission{reports.length !== 1 ? "s" : ""}</span>
-                              <span>·</span>
-                              <span>Avg: <span className={scoreColor(avgScore, maxScore)}>{avgPct}%</span></span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="border-t border-slate-800/60 px-5 py-4">
+                      <div>
                         <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-3">
                           <FileText className="w-4 h-4 text-violet-400" />
                           Student Submissions ({reports.length})
