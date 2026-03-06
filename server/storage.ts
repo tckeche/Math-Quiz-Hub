@@ -492,6 +492,7 @@ class MemoryStorage implements IStorage {
       subject: quiz.subject ?? null,
       curriculumContext: quiz.curriculumContext ?? null,
       authorId: quiz.authorId ?? null,
+      timeLimitMinutes: quiz.timeLimitMinutes ?? 60,
       status: quiz.status ?? "published",
       isArchived: quiz.isArchived ?? false,
     };
