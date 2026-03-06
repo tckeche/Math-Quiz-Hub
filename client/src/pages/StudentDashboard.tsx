@@ -183,16 +183,17 @@ export default function StudentDashboard() {
   }, [reports]);
 
   const subjectStats = useMemo(() => {
-    const map: Record<string, { total: number; earned: number }> = {};
+    const map: Record<string, { totalScore: number; maxPossibleScore: number }> = {};
     reports.forEach((r) => {
-      const subj = r.quiz.topic || r.quiz.subject || "General";
-      if (!map[subj]) map[subj] = { total: 0, earned: 0 };
-      map[subj].total += r.maxScore || 1;
-      map[subj].earned += r.score;
+      // Prefer standardized subject, fall back to topic, then "General"
+      const subj = r.quiz.subject || r.quiz.topic || "General";
+      if (!map[subj]) map[subj] = { totalScore: 0, maxPossibleScore: 0 };
+      map[subj].maxPossibleScore += r.maxScore || 0;
+      map[subj].totalScore += r.score;
     });
-    return Object.entries(map).map(([subject, { total, earned }]) => ({
+    return Object.entries(map).map(([subject, { totalScore, maxPossibleScore }]) => ({
       subject,
-      percentage: total > 0 ? (earned / total) * 100 : 0,
+      percentage: maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0,
     }));
   }, [reports]);
 
@@ -204,10 +205,10 @@ export default function StudentDashboard() {
   const availableQuizzes = useMemo(() => {
     // Backend already filters for published + pending assignments — no frontend filter needed
     return (somaQuizzes || [])
-      .map((q: any) => ({
+      .map((q: SomaQuiz & { isAssigned?: boolean; dueDate?: string }) => ({
         id: q.id,
         title: q.title,
-        subject: q.topic || q.subject || "General",
+        subject: q.subject || q.topic || "General",
         level: q.level || "",
         isAssigned: q.isAssigned || false,
         dueDate: q.dueDate || null,
@@ -239,7 +240,7 @@ export default function StudentDashboard() {
       id: r.id,
       quizId: r.quizId,
       title: r.quiz.title,
-      subject: r.quiz.topic || r.quiz.subject || "General",
+      subject: r.quiz.subject || r.quiz.topic || "General",
       score: r.score,
       maxScore: r.maxScore || 1,
       status: r.status,
