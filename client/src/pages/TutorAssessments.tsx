@@ -296,6 +296,8 @@ export default function TutorAssessments() {
       return res.json();
     },
     enabled: !!userId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: adoptedStudents = [] } = useQuery<SomaUser[]>({
@@ -307,6 +309,8 @@ export default function TutorAssessments() {
       return res.json();
     },
     enabled: !!userId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: quizReportsData, isLoading: reportsLoading } = useQuery<QuizReportsData>({

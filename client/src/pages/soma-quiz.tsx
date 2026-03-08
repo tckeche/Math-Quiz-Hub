@@ -273,6 +273,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
 
   const userId = session?.user?.id;
   const displayName = session?.user?.user_metadata?.display_name || session?.user?.email?.split("@")[0] || "Student";
+  const answersCacheKey = !isPreview && quizId > 0 ? `soma_quiz_answers_${quizId}_${userId || "guest"}` : null;
 
   const { data: quiz, isLoading: quizLoading, error: quizError } = useQuery<SomaQuiz>({
     queryKey: ["/api/soma/quizzes", quizId],
@@ -304,6 +305,24 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
     enabled: !isPreview && quizId > 0 && !!userId,
   });
 
+
+  useEffect(() => {
+    if (!answersCacheKey) return;
+    const raw = localStorage.getItem(answersCacheKey);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const restored = Object.fromEntries(
+          Object.entries(parsed as Record<string, string>).map(([k, v]) => [Number(k), String(v)])
+        );
+        setAnswers(restored);
+      }
+    } catch {
+      localStorage.removeItem(answersCacheKey);
+    }
+  }, [answersCacheKey]);
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/soma/quizzes/${quizId}/submit`, {
@@ -317,6 +336,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
     onSuccess: (data: any) => {
       const totalMarks = questions ? questions.reduce((s, q) => s + q.marks, 0) : 0;
       setSubmissionResult({ score: data.score, maxScore: totalMarks });
+      if (answersCacheKey) localStorage.removeItem(answersCacheKey);
       queryClient.invalidateQueries({ queryKey: ["/api/student/reports"] });
       queryClient.invalidateQueries({ queryKey: ["/api/soma/quizzes", quizId, "check-submission"] });
     },
@@ -368,7 +388,19 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
   }, [questions]);
 
   const handleSelectAnswer = (questionId: number, option: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: option }));
+    setAnswers((prev) => {
+      const next = { ...prev, [questionId]: option };
+      if (answersCacheKey) {
+        setTimeout(() => {
+          try {
+            localStorage.setItem(answersCacheKey, JSON.stringify(next));
+          } catch {
+            // ignore storage quota/private mode failures
+          }
+        }, 0);
+      }
+      return next;
+    });
   };
 
   const handleNext = () => {

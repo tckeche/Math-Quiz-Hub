@@ -163,6 +163,8 @@ export default function StudentDashboard() {
       return res.json();
     },
     enabled: !!userId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: reports = [], isLoading: reportsLoading } = useQuery<ReportWithQuiz[]>({
@@ -174,13 +176,9 @@ export default function StudentDashboard() {
       return res.json();
     },
     enabled: !!userId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
-
-  const completedSomaQuizIds = useMemo(() => {
-    const ids = new Set<number>();
-    reports.forEach((r) => ids.add(r.quizId));
-    return ids;
-  }, [reports]);
 
   const subjectStats = useMemo(() => {
     const map: Record<string, { totalScore: number; maxPossibleScore: number }> = {};
@@ -213,7 +211,7 @@ export default function StudentDashboard() {
         isAssigned: q.isAssigned || false,
         dueDate: q.dueDate || null,
       }));
-  }, [somaQuizzes, completedSomaQuizIds]);
+  }, [somaQuizzes]);
 
   const allSubjects = useMemo(() => {
     const set = new Set<string>();

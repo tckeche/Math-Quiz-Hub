@@ -74,6 +74,8 @@ export default function SuperAdminDashboard() {
       return res.json();
     },
     enabled: !!userId && roleVerified,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: users = [], isLoading: usersLoading } = useQuery<SomaUser[]>({
@@ -84,6 +86,8 @@ export default function SuperAdminDashboard() {
       return res.json();
     },
     enabled: !!userId && roleVerified,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: quizzes = [], isLoading: quizzesLoading } = useQuery<SomaQuiz[]>({
@@ -94,6 +98,8 @@ export default function SuperAdminDashboard() {
       return res.json();
     },
     enabled: !!userId && roleVerified,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const deleteUserMutation = useMutation({
