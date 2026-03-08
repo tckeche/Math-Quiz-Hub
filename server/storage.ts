@@ -308,8 +308,12 @@ class DatabaseStorage implements IStorage {
   }
 
   async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
-    await this.database.delete(quizAssignments)
-      .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+    await this.database.transaction(async (tx) => {
+      await tx.delete(somaReports)
+        .where(and(eq(somaReports.quizId, quizId), eq(somaReports.studentId, studentId)));
+      await tx.delete(quizAssignments)
+        .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+    });
   }
 
   async extendQuizAssignmentDeadlines(quizId: number, hours: number): Promise<number> {
@@ -703,6 +707,9 @@ class MemoryStorage implements IStorage {
   }
 
   async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    this.somaReportsList = this.somaReportsList.filter(
+      (r) => !(r.quizId === quizId && r.studentId === studentId)
+    );
     this.quizAssignmentsList = this.quizAssignmentsList.filter(
       (a) => !(a.quizId === quizId && a.studentId === studentId)
     );

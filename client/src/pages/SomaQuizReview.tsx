@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 
+const STANDARD_ACTION_BUTTON_CLASS = "inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium border border-violet-500/40 bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-all";
+
 interface ReviewQuestion {
   id: number;
   stem: string;
@@ -125,12 +127,12 @@ export default function SomaQuizReview() {
       <div className="max-w-3xl mx-auto" ref={reportRef}>
         <div className="flex items-center justify-between mb-6">
           <Link href="/dashboard">
-            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" data-testid="button-review-back">
+            <Button className={STANDARD_ACTION_BUTTON_CLASS} size="sm" data-testid="button-review-back">
               <ArrowLeft className="w-4 h-4 mr-1" />
               Dashboard
             </Button>
           </Link>
-          <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30" data-testid="badge-review-mode">
+          <Badge className={STANDARD_ACTION_BUTTON_CLASS} data-testid="badge-review-mode">
             Review Mode
           </Badge>
           <Button className="glow-button min-h-[44px]" size="sm" onClick={downloadPdf} data-testid="button-download-report">

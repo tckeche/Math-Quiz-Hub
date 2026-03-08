@@ -10,11 +10,11 @@ interface ModelConfig {
 
 const AI_FALLBACK_CHAIN: ModelConfig[] = [
   // --- TIER 1: ANTHROPIC (PRIMARY SOMA AGENT) ---
-  { provider: "anthropic", model: "claude-sonnet-4-6" },
+  { provider: "anthropic", model: "claude-3-5-sonnet-latest" },
 
   // --- TIER 2: GOOGLE GEMINI (IMMEDIATE WORKING BACKUP) ---
-  { provider: "google", model: "gemini-2.5-flash" },
-  { provider: "google", model: "gemini-2.0-flash-001" },
+  { provider: "google", model: "gemini-1.5-pro" },
+  { provider: "google", model: "gemini-1.5-flash" },
 
   // --- TIER 3: DEEPSEEK (BACKGROUND) ---
   { provider: "deepseek", model: "deepseek-chat" },
@@ -118,7 +118,7 @@ async function callGoogle(
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  const generationConfig: any = { temperature: 0.1 };
+  const generationConfig: any = { temperature: 0, topP: 0.1, topK: 1, candidateCount: 1 };
   if (expectedSchema) {
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = convertToGeminiSchema(expectedSchema);
@@ -268,9 +268,9 @@ export interface AIResult {
 function getProviderTimeoutMs(provider: string): number {
   switch (provider) {
     case "anthropic":
-      return 60_000;
+      return 20_000;
     case "google":
-      return 45_000;
+      return 25_000;
     case "deepseek":
     case "openai":
       return 45_000;

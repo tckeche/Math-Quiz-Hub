@@ -55,6 +55,7 @@ interface AdoptedStudent {
 }
 
 const CARD_CLASS = "bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-6 shadow-2xl";
+const STANDARD_ACTION_BUTTON_CLASS = "inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium border border-violet-500/40 bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-all";
 
 function toProperCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -232,7 +233,7 @@ export default function TutorAssessmentDetails() {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 px-6 py-8">
         <div className="max-w-7xl mx-auto">
           <Link href="/tutor/assessments">
-            <button className="flex items-center gap-2 text-slate-400 hover:text-slate-200 mb-6">
+            <button className={`${STANDARD_ACTION_BUTTON_CLASS} mb-6`}>
               <ArrowLeft className="w-4 h-4" />
               Back
             </button>
@@ -250,7 +251,7 @@ export default function TutorAssessmentDetails() {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 px-6 py-8">
         <div className="max-w-7xl mx-auto">
           <Link href="/tutor/assessments">
-            <button className="flex items-center gap-2 text-slate-400 hover:text-slate-200 mb-6">
+            <button className={`${STANDARD_ACTION_BUTTON_CLASS} mb-6`}>
               <ArrowLeft className="w-4 h-4" />
               Back
             </button>
@@ -282,7 +283,7 @@ export default function TutorAssessmentDetails() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <Link href="/tutor/assessments">
-            <button className="flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors">
+            <button className={STANDARD_ACTION_BUTTON_CLASS}>
               <ArrowLeft className="w-4 h-4" />
               Back to Assessments
             </button>
@@ -346,7 +347,7 @@ export default function TutorAssessmentDetails() {
                 setSelectedStudentIds(new Set());
                 setAssignDueDate("");
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/40 hover:bg-violet-500/30 transition-all text-sm font-medium"
+              className={STANDARD_ACTION_BUTTON_CLASS}
             >
               <Plus className="w-4 h-4" />
               Add Students
