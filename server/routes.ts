@@ -14,6 +14,7 @@ import { generateWithFallback } from "./services/aiOrchestrator";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
+const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
 
 const analyzeClassLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -1133,7 +1134,11 @@ RULES:
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return res.status(500).json({ message: "GEMINI_API_KEY is not configured" });
 
-      const pdfBuffer = fs.readFileSync(req.file.path);
+      const resolvedPath = fs.realpathSync(req.file.path);
+      if (!resolvedPath.startsWith(UPLOAD_ROOT + path.sep)) {
+        return res.status(400).json({ message: "Invalid file path" });
+      }
+      const pdfBuffer = fs.readFileSync(resolvedPath);
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
         model: "gemini-1.5-pro",
