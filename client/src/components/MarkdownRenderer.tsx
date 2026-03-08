@@ -1,3 +1,4 @@
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -15,7 +16,7 @@ function normalizeLatexDelimiters(text: string): string {
   return result;
 }
 
-export default function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
+function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
   if (!content) return null;
 
   const normalized = normalizeLatexDelimiters(content);
@@ -93,3 +94,5 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
     </div>
   );
 }
+
+export default React.memo(MarkdownRenderer, (prev, next) => prev.content === next.content && prev.className === next.className);

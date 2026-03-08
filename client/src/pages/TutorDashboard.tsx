@@ -158,6 +158,8 @@ export default function TutorDashboard() {
       return res.json();
     },
     enabled: !!userId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: tutorQuizzes = [], isLoading: quizzesLoading } = useQuery<SomaQuiz[]>({
@@ -169,6 +171,8 @@ export default function TutorDashboard() {
       return res.json();
     },
     enabled: !!userId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: adoptedStudents = [] } = useQuery<SomaUser[]>({
@@ -180,6 +184,8 @@ export default function TutorDashboard() {
       return res.json();
     },
     enabled: !!userId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const assignMutation = useMutation({

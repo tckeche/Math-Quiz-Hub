@@ -268,7 +268,19 @@ export interface AIResult {
   metadata: AIMetadata;
 }
 
-const PER_MODEL_TIMEOUT_MS = 60_000; // 60 seconds per provider call
+function getProviderTimeoutMs(provider: string): number {
+  switch (provider) {
+    case "anthropic":
+      return 20_000;
+    case "google":
+      return 25_000;
+    case "deepseek":
+    case "openai":
+      return 45_000;
+    default:
+      return 30_000;
+  }
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -290,12 +302,13 @@ export async function generateWithFallback(
       const startTime = Date.now();
       let result: string;
       const timeoutLabel = `${config.provider}/${config.model}`;
+      const timeoutMs = getProviderTimeoutMs(config.provider);
       switch (config.provider) {
         case "google":
-          result = await withTimeout(callGoogle(config.model, systemPrompt, userPrompt, expectedSchema), PER_MODEL_TIMEOUT_MS, timeoutLabel);
+          result = await withTimeout(callGoogle(config.model, systemPrompt, userPrompt, expectedSchema), timeoutMs, timeoutLabel);
           break;
         case "openai":
-          result = await withTimeout(callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema), PER_MODEL_TIMEOUT_MS, timeoutLabel);
+          result = await withTimeout(callOpenAI(config.model, systemPrompt, userPrompt, expectedSchema), timeoutMs, timeoutLabel);
           break;
         case "anthropic": {
           const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -314,7 +327,7 @@ export async function generateWithFallback(
                 input_schema: expectedSchema as any,
               }],
               tool_choice: { type: "tool" as const, name: "generate_structured_data" },
-            }), PER_MODEL_TIMEOUT_MS, timeoutLabel);
+            }), timeoutMs, timeoutLabel);
 
             const toolBlock = msg.content.find((block: any) => block.type === "tool_use");
             if (!toolBlock) throw new Error("Anthropic failed to use the structured data tool.");
@@ -326,7 +339,7 @@ export async function generateWithFallback(
               temperature: 0.1,
               system: systemPrompt,
               messages: [{ role: "user", content: userPrompt }],
-            }), PER_MODEL_TIMEOUT_MS, timeoutLabel);
+            }), timeoutMs, timeoutLabel);
             const textBlock = msg.content[0];
             anthropicResponse = textBlock.type === "text" ? textBlock.text : "";
           }
@@ -335,7 +348,7 @@ export async function generateWithFallback(
           return { data: anthropicData, metadata: { provider: config.provider, model: config.model, durationMs: Date.now() - startTime } };
         }
         case "deepseek":
-          result = await withTimeout(callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema), PER_MODEL_TIMEOUT_MS, timeoutLabel);
+          result = await withTimeout(callDeepSeek(config.model, systemPrompt, userPrompt, expectedSchema), timeoutMs, timeoutLabel);
           break;
         default:
           continue;
