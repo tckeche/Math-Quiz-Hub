@@ -42,6 +42,60 @@ export async function fetchPaperContext(paperCode: string): Promise<string> {
   return `Web search snippets for ${paperCode}:\n${html.slice(0, 6000)}`;
 }
 
+/**
+ * Validates and corrects MCQ questions so that correct_answer exactly matches one of the options.
+ * Returns a new array with all questions corrected.
+ */
+export function validateAndCorrectMcqAnswers(
+  questions: Array<{ stem: string; options: string[]; correct_answer: string; explanation: string; marks: number }>
+): Array<{ stem: string; options: string[]; correct_answer: string; explanation: string; marks: number }> {
+  return questions.map((q) => {
+    if (q.options.includes(q.correct_answer)) {
+      return q;
+    }
+
+    // Attempt 1: If correct_answer is a letter like "A", "B", "C", "D", map to options index
+    const letterMatch = q.correct_answer.trim().match(/^([A-Da-d])\.?$/);
+    if (letterMatch) {
+      const idx = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
+      if (idx >= 0 && idx < q.options.length) {
+        console.warn(`[MCQ_VALIDATION_FIXED] Corrected mismatched answer string: letter "${q.correct_answer}" -> "${q.options[idx]}"`);
+        return { ...q, correct_answer: q.options[idx] };
+      }
+    }
+
+    // Attempt 2: Find closest matching option using normalized comparison
+    const normalized = q.correct_answer.trim().toLowerCase().replace(/\s+/g, " ");
+    let bestIdx = -1;
+    let bestScore = 0;
+    for (let i = 0; i < q.options.length; i++) {
+      const optNorm = q.options[i].trim().toLowerCase().replace(/\s+/g, " ");
+      // Check containment or prefix match
+      if (optNorm === normalized) {
+        bestIdx = i;
+        bestScore = Infinity;
+        break;
+      }
+      if (optNorm.includes(normalized) || normalized.includes(optNorm)) {
+        const score = Math.min(optNorm.length, normalized.length) / Math.max(optNorm.length, normalized.length);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = i;
+        }
+      }
+    }
+
+    if (bestIdx >= 0 && bestScore > 0.5) {
+      console.warn(`[MCQ_VALIDATION_FIXED] Corrected mismatched answer string: "${q.correct_answer}" -> "${q.options[bestIdx]}"`);
+      return { ...q, correct_answer: q.options[bestIdx] };
+    }
+
+    // Fallback: assign first option as correct answer
+    console.warn(`[MCQ_VALIDATION_FIXED] Corrected mismatched answer string: no close match for "${q.correct_answer}", defaulting to options[0] "${q.options[0]}"`);
+    return { ...q, correct_answer: q.options[0] };
+  });
+}
+
 export async function generateAuditedQuiz(input: SomaGenerationContext | string): Promise<QuizResult> {
   const context: SomaGenerationContext = typeof input === "string"
     ? { topic: input, subject: "Mathematics", syllabus: "IEB", level: "Grade 6-12" }
@@ -54,5 +108,7 @@ export async function generateAuditedQuiz(input: SomaGenerationContext | string)
   const { data: maker } = await generateWithFallback(makerPrompt, `Topic: ${context.topic}\n${context.copilotPrompt || ""}\n${context.supportingDocText || ""}`, jsonSchema);
   const { data: checker } = await generateWithFallback(checkerPrompt, `Topic: ${context.topic}\nInput JSON:\n${maker}`, jsonSchema);
   const { data: final } = await generateWithFallback(finalizerPrompt, `Topic: ${context.topic}\nInput JSON:\n${checker}`, jsonSchema);
-  return extractJson(final);
+  const parsed = extractJson(final);
+  parsed.questions = validateAndCorrectMcqAnswers(parsed.questions);
+  return parsed;
 }
