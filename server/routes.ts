@@ -12,6 +12,13 @@ import crypto from "crypto";
 import { fetchPaperContext, generateAuditedQuiz, parsePdfTextFromBuffer, validateAndCorrectMcqAnswers } from "./services/aiPipeline";
 import { generateWithFallback } from "./services/aiOrchestrator";
 
+const adminRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 admin requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
 const adminRateLimiter = rateLimit({
@@ -1285,7 +1292,7 @@ RULES:
     res.json({ authenticated: true });
   });
 
-  app.get("/api/admin/session", async (req, res) => {
+  app.get("/api/admin/session", adminRateLimiter, async (req, res) => {
     const token = getAdminSessionToken(req);
     if (token) {
       try {
@@ -1309,7 +1316,7 @@ RULES:
     res.json({ authenticated: false });
   });
 
-  app.post("/api/analyze-class", requireAdmin, async (req, res) => {
+  app.post("/api/analyze-class", adminRateLimiter, requireAdmin, async (req, res) => {
     try {
       const quizId = Number(req.body?.quizId);
       if (!Number.isInteger(quizId) || quizId <= 0) {
