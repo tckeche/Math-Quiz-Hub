@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { SomaQuiz, SomaQuestion } from "@shared/schema";
+import { STANDARDIZED_SUBJECTS } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +43,7 @@ export default function BuilderPage() {
   const [syllabus, setSyllabus] = useState("");
   const [level, setLevel] = useState("");
   const [subject, setSubject] = useState("");
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(60);
 
   const [msg, setMsg] = useState("");
   const [chat, setChat] = useState<{ role: "user" | "ai"; text: string; metadata?: { provider: string; model: string; durationMs: number } }[]>([]);
@@ -140,6 +142,7 @@ export default function BuilderPage() {
       setSyllabus(quizData.syllabus || "");
       setLevel(quizData.level || "");
       setSubject(quizData.subject || "");
+      setTimeLimitMinutes(quizData.timeLimitMinutes ?? 60);
       if (quizData.questions) {
         setSavedQuestions(quizData.questions);
       }
@@ -168,6 +171,7 @@ export default function BuilderPage() {
       syllabus: syllabus || "IEB",
       level: level || "Grade 6-12",
       subject: subject || null,
+      timeLimitMinutes,
     });
     const quiz = await quizRes.json();
     setActiveQuizId(quiz.id);
@@ -258,6 +262,7 @@ export default function BuilderPage() {
         syllabus: syllabus || null,
         level: level || null,
         subject: subject || null,
+        timeLimitMinutes,
       });
     },
     onSuccess: () => {
@@ -426,7 +431,7 @@ export default function BuilderPage() {
               <h2 className="font-semibold text-slate-100 text-sm">Assessment Parameters</h2>
               {activeQuizId && <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] ml-auto">Live &middot; ID {activeQuizId}</Badge>}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                 <Label className="text-slate-400 text-xs">Title</Label>
                 <Input
@@ -439,13 +444,17 @@ export default function BuilderPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-slate-400 text-xs uppercase">Subject</Label>
-                <Input
+                <select
                   value={subject}
                   onChange={(e) => { setSubject(e.target.value); markMeta(); }}
-                  placeholder="Mathematics"
-                  className="glass-input text-sm h-12"
+                  className="w-full glass-input px-3 rounded-lg bg-black/20 border border-white/10 text-slate-200 text-sm h-12"
                   data-testid="input-quiz-subject"
-                />
+                >
+                  <option value="">Select subject</option>
+                  {STANDARDIZED_SUBJECTS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-slate-400 text-xs uppercase">Syllabus</Label>
@@ -470,6 +479,18 @@ export default function BuilderPage() {
                     <option key={l} value={l}>{l}</option>
                   ))}
                 </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-slate-400 text-xs uppercase">Time Limit (Min)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={300}
+                  value={timeLimitMinutes}
+                  onChange={(e) => { setTimeLimitMinutes(Math.max(1, parseInt(e.target.value) || 60)); markMeta(); }}
+                  className="glass-input text-sm h-12"
+                  data-testid="input-quiz-time-limit"
+                />
               </div>
             </div>
             {metaDirty && activeQuizId && (
