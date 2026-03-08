@@ -11,6 +11,7 @@ import rateLimit from "express-rate-limit";
 import crypto from "crypto";
 import { fetchPaperContext, generateAuditedQuiz, parsePdfTextFromBuffer } from "./services/aiPipeline";
 import { generateWithFallback } from "./services/aiOrchestrator";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
@@ -37,6 +38,23 @@ const upload = multer({
 });
 
 const pdfUpload = multer({ storage: multer.memoryStorage() });
+
+const pdfExtractionResponseSchema: any = {
+  type: SchemaType.ARRAY,
+  items: {
+    type: SchemaType.OBJECT,
+    properties: {
+      question: { type: SchemaType.STRING },
+      options: {
+        type: SchemaType.ARRAY,
+        items: { type: SchemaType.STRING },
+      },
+      correct_answer: { type: SchemaType.STRING },
+      explanation: { type: SchemaType.STRING },
+    },
+    required: ["question", "options", "correct_answer", "explanation"],
+  },
+};
 
 const supportingDocUpload = multer({
   storage: multer.diskStorage({
@@ -1090,8 +1108,75 @@ RULES:
 
   // Upload supporting document for tutor quiz builder
   app.post("/api/tutor/upload-doc", requireTutor, supportingDocUpload.single("pdf"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No PDF uploaded" });
-    res.json({ id: req.file.filename, originalName: req.file.originalname });
+    try {
+      if (!req.file) return res.status(400).json({ message: "No PDF uploaded" });
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return res.status(500).json({ message: "GEMINI_API_KEY is not configured" });
+
+      const pdfBuffer = fs.readFileSync(req.file.path);
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-pro",
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json",
+          responseSchema: pdfExtractionResponseSchema,
+        },
+      });
+
+      const extractionPrompt = `You are a precise document extraction tool. Read the provided past paper.
+
+Extract the exact questions found in the document. Do not invent, simulate, or hallucinate new questions.
+If the questions are already multiple-choice, extract the exact options. If they are open-ended, generate 3 plausible but incorrect distractor options to format them as MCQs.
+Format all mathematical equations, variables, and formulas strictly in KaTeX syntax.
+Provide a concise 2-3 sentence explanation for the correct answer.
+
+Return only a JSON array with objects that follow this exact schema:
+- question (string)
+- options (string[] with exactly 4 options)
+- correct_answer (string that exactly matches one option)
+- explanation (string)`;
+
+      const result = await model.generateContent([
+        { text: extractionPrompt },
+        {
+          inlineData: {
+            mimeType: req.file.mimetype || "application/pdf",
+            data: pdfBuffer.toString("base64"),
+          },
+        },
+      ]);
+
+      const raw = result.response.text();
+      const parsed = JSON.parse(raw);
+      const drafts = Array.isArray(parsed)
+        ? parsed.map((item: any) => ({
+            prompt_text: String(item?.question || "").trim(),
+            options: Array.isArray(item?.options) ? item.options.map((opt: any) => String(opt)).slice(0, 4) : [],
+            correct_answer: String(item?.correct_answer || "").trim(),
+            marks_worth: 1,
+            explanation: String(item?.explanation || "").trim(),
+          })).filter((item: any) =>
+            item.prompt_text.length > 0
+            && Array.isArray(item.options)
+            && item.options.length === 4
+            && item.options.every((opt: string) => opt.length > 0)
+            && item.correct_answer.length > 0
+            && item.options.includes(item.correct_answer)
+            && item.explanation.length > 0
+          )
+        : [];
+
+      res.json({
+        id: req.file.filename,
+        originalName: req.file.originalname,
+        drafts,
+        metadata: { provider: "google", model: "gemini-1.5-pro" },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to extract questions from PDF" });
+    }
   });
 
   // ─── Super Admin Routes ──────────────────────────────────────────

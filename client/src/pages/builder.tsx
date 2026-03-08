@@ -291,15 +291,31 @@ export default function BuilderPage() {
         body: uploadForm,
       });
       let fileId: string | null = null;
+      let extractedDrafts: any[] = [];
       if (uploadRes.ok) {
         const uploadData = await uploadRes.json();
         fileId = uploadData.id;
+        extractedDrafts = Array.isArray(uploadData.drafts) ? uploadData.drafts : [];
       }
       setSupportingDocs((prev) =>
         prev.map((d) => (d.name === file.name && d.type === docType ? { ...d, processing: false } : d))
       );
       if (fileId) {
         setDocContext((prev) => [...prev, { name: file.name, type: docType, fileId }]);
+      }
+
+      if (extractedDrafts.length > 0) {
+        const quizId = await ensureQuizExists();
+        await authApiRequest("POST", `/api/tutor/quizzes/${quizId}/questions`, { questions: extractedDrafts });
+
+        await queryClient.refetchQueries({ queryKey: ["/api/tutor/quizzes", quizId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tutor/quizzes"] });
+
+        const refetched = queryClient.getQueryData<SomaQuiz & { questions: SomaQuestion[] }>(["/api/tutor/quizzes", quizId]);
+        if (refetched?.questions) {
+          setSavedQuestions(refetched.questions);
+        }
+        toast({ title: `Imported ${extractedDrafts.length} question${extractedDrafts.length === 1 ? "" : "s"} from PDF` });
       }
     } catch {
       setSupportingDocs((prev) => prev.filter((d) => !(d.name === file.name && d.type === docType)));
