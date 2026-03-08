@@ -14,7 +14,7 @@ A full-stack educational assessment platform (SOMA). Students take interactive M
 
 ### Database Schema (Soma-only — legacy tables removed)
 - `soma_users` - id (uuid, maps to Supabase auth UID), email, display_name, role, created_at
-- `soma_quizzes` - id, title, topic, syllabus, level, subject, curriculum_context, author_id, status (draft/published), is_archived, created_at
+- `soma_quizzes` - id, title, topic, syllabus, level, subject, curriculum_context, author_id, time_limit_minutes (default 60), status (always "published"), is_archived, created_at
 - `soma_questions` - id, quiz_id (FK → soma_quizzes), stem, options (JSON), correct_answer, explanation (NOT NULL), marks
 - `soma_reports` - id, quiz_id (FK → soma_quizzes), student_id (uuid FK → soma_users), student_name, score, status, ai_feedback_html, answers_json, started_at, completed_at, created_at
 - `tutor_students` - id, tutor_id, student_id (unique index), created_at
@@ -70,7 +70,7 @@ A full-stack educational assessment platform (SOMA). Students take interactive M
 - **Soma Quiz Review**: Post-quiz review with explanations, correct/incorrect indicators, AI feedback.
 - **Admin Route Deprecation**: `/admin` redirects to `/login`. Builder (`/admin/builder`) remains accessible.
 - **AI Copilot**: Builder page uses copilot chat to generate quiz questions via AI fallback chain.
-- **AI Orchestrator**: Centralized dynamic fallback array (`server/services/aiOrchestrator.ts`).
+- **AI Orchestrator**: Centralized dynamic fallback chain (`server/services/aiOrchestrator.ts`). Model order: Claude claude-sonnet-4-6 → Gemini 2.0 Flash → DeepSeek → GPT-4o. Maker-Checker pipeline in `server/services/aiPipeline.ts`.
 - **Tutor Portal**: Multi-page navigation (Dashboard, Students, Assessments) with analytics, student management, comments.
 - **Super Admin Dashboard**: Global management with user/quiz data tables, hard delete.
 - **Legacy V1/V2 Purge Complete**: All legacy `quizzes`, `questions`, `students`, `submissions` tables, routes, storage methods, and frontend pages (`quiz.tsx`, `home.tsx`, `admin.tsx`, `analytics.tsx`) have been removed. The builder now creates soma quizzes directly.
