@@ -10,20 +10,17 @@ interface ModelConfig {
 
 const AI_FALLBACK_CHAIN: ModelConfig[] = [
   // --- TIER 1: ANTHROPIC (PRIMARY SOMA AGENT) ---
-  { provider: "anthropic", model: "claude-sonnet-4-6" },
-  { provider: "anthropic", model: "claude-haiku-4-5" },
+  { provider: "anthropic", model: "claude-3-5-sonnet-latest" },
 
   // --- TIER 2: GOOGLE GEMINI (IMMEDIATE WORKING BACKUP) ---
-  { provider: "google", model: "gemini-2.5-flash" },
-  { provider: "google", model: "gemini-2.5-pro" },
   { provider: "google", model: "gemini-1.5-pro" },
+  { provider: "google", model: "gemini-1.5-flash" },
 
-  // --- TIER 3: DEEPSEEK (BACKGROUND / PENDING FUNDS) ---
-  { provider: "deepseek", model: "deepseek-reasoner" },
+  // --- TIER 3: DEEPSEEK (BACKGROUND) ---
   { provider: "deepseek", model: "deepseek-chat" },
 
-  // --- TIER 4: OPENAI (BACKGROUND / PENDING FUNDS) ---
-  { provider: "openai", model: "gpt-5.1" },
+  // --- TIER 4: OPENAI (FAILSAFE) ---
+  { provider: "openai", model: "gpt-4o" },
   { provider: "openai", model: "gpt-4o-mini" },
 ];
 
