@@ -9,7 +9,7 @@ import fs from "fs";
 import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import crypto from "crypto";
-import { fetchPaperContext, generateAuditedQuiz, parsePdfTextFromBuffer } from "./services/aiPipeline";
+import { fetchPaperContext, generateAuditedQuiz, parsePdfTextFromBuffer, validateAndCorrectMcqAnswers } from "./services/aiPipeline";
 import { generateWithFallback } from "./services/aiOrchestrator";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
@@ -917,7 +917,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/tutor/quizzes", requireTutor, async (req, res) => {
     try {
       const tutorId = (req as any).tutorId;
-      const { title, syllabus, level, subject, topic } = req.body;
+      const { title, syllabus, level, subject, topic, timeLimitMinutes } = req.body;
       if (!title) return res.status(400).json({ message: "title is required" });
       const quiz = await storage.createSomaQuiz({
         title,
@@ -925,6 +925,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         syllabus: syllabus || "IEB",
         level: level || "Grade 6-12",
         subject: subject || null,
+        timeLimitMinutes: Number(timeLimitMinutes) || 60,
         authorId: tutorId,
         status: "published",
       });
@@ -954,12 +955,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const existing = await storage.getSomaQuiz(quizId);
       if (!existing) return res.status(404).json({ message: "Quiz not found" });
 
-      const { title, syllabus, level, subject } = req.body;
-      const updates: any = {};
+      const { title, syllabus, level, subject, timeLimitMinutes } = req.body;
+      const updates: Record<string, string | number | null> = {};
       if (title !== undefined) updates.title = title;
       if (syllabus !== undefined) updates.syllabus = syllabus || null;
       if (level !== undefined) updates.level = level || null;
       if (subject !== undefined) updates.subject = subject || null;
+      if (timeLimitMinutes !== undefined) updates.timeLimitMinutes = Number(timeLimitMinutes) || 60;
 
       const updated = await storage.updateSomaQuiz(quizId, updates);
       res.json(updated);
@@ -979,13 +981,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!Array.isArray(questions) || questions.length === 0) {
         return res.status(400).json({ message: "questions array required" });
       }
-      const mapped = questions.map((q: any) => ({
-        quizId,
+      const rawMapped = questions.map((q: any) => ({
         stem: q.prompt_text || q.stem || "",
         options: Array.isArray(q.options) ? [...q.options] : [],
-        correctAnswer: q.correct_answer || q.correctAnswer || "",
-        explanation: q.explanation || "",
-        marks: q.marks_worth || q.marks || 1,
+        correct_answer: String(q.correct_answer || q.correctAnswer || ""),
+        explanation: String(q.explanation || ""),
+        marks: Number(q.marks_worth || q.marks || 1) || 1,
+      }));
+      const validated = validateAndCorrectMcqAnswers(rawMapped);
+      const mapped = validated.map((q) => ({
+        quizId,
+        stem: q.stem,
+        options: q.options,
+        correctAnswer: q.correct_answer,
+        explanation: q.explanation,
+        marks: q.marks,
       }));
       const saved = await storage.createSomaQuestions(mapped);
       res.json(saved);
@@ -1089,15 +1099,17 @@ RULES:
         const promptText = d.prompt_text || d.promptText || d.question || d.stem || "";
         if (!promptText) return null;
 
-        let correctAnswer = d.correct_answer || d.correctAnswer || d.answer || "";
-        if (typeof correctAnswer === "string" && correctAnswer.length <= 2) {
-          const letterIndex = correctAnswer.toUpperCase().charCodeAt(0) - 65;
-          if (letterIndex >= 0 && letterIndex < opts.length) {
-            correctAnswer = opts[letterIndex];
-          }
-        }
-        correctAnswer = String(correctAnswer);
-        if (!correctAnswer || !opts.includes(correctAnswer)) return null;
+        let correctAnswer = String(d.correct_answer || d.correctAnswer || d.answer || "");
+
+        // Use shared validation to correct mismatched answers
+        const validated = validateAndCorrectMcqAnswers([{
+          stem: String(promptText),
+          options: opts,
+          correct_answer: correctAnswer,
+          explanation: String(d.explanation || ""),
+          marks: Number(d.marks_worth || d.marksWorth || d.marks || 1) || 1,
+        }]);
+        correctAnswer = validated[0].correct_answer;
 
         return {
           prompt_text: String(promptText),

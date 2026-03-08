@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   ChevronRight, SkipForward, Send, ArrowLeft, Home,
-  AlertCircle, Loader2, CheckCircle2, Circle, BookOpen, X, Award
+  AlertCircle, Loader2, CheckCircle2, Circle, BookOpen, X, Award, Clock
 } from "lucide-react";
 import 'katex/dist/katex.min.css';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
@@ -256,6 +256,7 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
   const [showSummary, setShowSummary] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<{ score: number; maxScore: number } | null>(null);
   const [quizStartedAt] = useState<string>(new Date().toISOString());
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number | null>(null);
 
   useEffect(() => {
     if (isPreview) return;
@@ -343,6 +344,30 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
       toast({ title: "Submission failed", description: err.message || "Please try again.", variant: "destructive" });
     },
   });
+
+  // Initialize countdown timer from quiz's timeLimitMinutes
+  useEffect(() => {
+    if (isPreview || !quiz?.timeLimitMinutes || submissionResult) return;
+    const totalSeconds = quiz.timeLimitMinutes * 60;
+    setTimeRemainingSeconds(totalSeconds);
+    const interval = setInterval(() => {
+      setTimeRemainingSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPreview, quiz?.timeLimitMinutes, submissionResult]);
+
+  // Auto-submit when timer reaches 0
+  useEffect(() => {
+    if (timeRemainingSeconds === 0 && !isPreview && userId && !submissionResult && !submitMutation.isPending) {
+      submitMutation.mutate();
+    }
+  }, [timeRemainingSeconds, isPreview, userId, submissionResult, submitMutation]);
 
   const questions = isPreview ? (props as PreviewProps).previewQuestions : fetchedQuestions;
   const effectiveQuiz: SomaQuiz | undefined = isPreview
@@ -524,6 +549,19 @@ export default function SomaQuizEngine(props: SomaQuizEngineProps = {}) {
             </Link>
           )}
           <div className="flex items-center gap-3">
+            {!isPreview && timeRemainingSeconds !== null && (
+              <Badge
+                className={`flex items-center gap-1.5 ${
+                  timeRemainingSeconds <= 300
+                    ? "bg-red-500/15 text-red-400 border-red-500/30 animate-pulse"
+                    : "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                }`}
+                data-testid="badge-timer"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                {Math.floor(timeRemainingSeconds / 60)}:{String(timeRemainingSeconds % 60).padStart(2, "0")}
+              </Badge>
+            )}
             <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30" data-testid="badge-progress">
               {currentIndex + 1} / {questions.length}
             </Badge>
