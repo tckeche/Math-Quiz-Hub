@@ -14,6 +14,13 @@ import { generateWithFallback } from "./services/aiOrchestrator";
 
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
+const adminRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // limit each IP to 20 admin analyze requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
@@ -1290,7 +1297,7 @@ RULES:
     res.json({ authenticated: false });
   });
 
-  app.post("/api/analyze-class", requireAdmin, async (req, res) => {
+  app.post("/api/analyze-class", adminRateLimiter, requireAdmin, async (req, res) => {
     try {
       const quizId = Number(req.body?.quizId);
       if (!Number.isInteger(quizId) || quizId <= 0) {
