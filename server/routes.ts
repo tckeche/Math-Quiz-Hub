@@ -1141,14 +1141,15 @@ RULES:
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return res.status(500).json({ message: "GEMINI_API_KEY is not configured" });
 
+      const SUPPORTING_DOCS_ROOT = path.resolve(process.cwd(), "supporting-docs");
       const resolvedPath = fs.realpathSync(req.file.path);
-      if (!resolvedPath.startsWith(UPLOAD_ROOT + path.sep)) {
+      if (!resolvedPath.startsWith(SUPPORTING_DOCS_ROOT + path.sep)) {
         return res.status(400).json({ message: "Invalid file path" });
       }
       const pdfBuffer = fs.readFileSync(resolvedPath);
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.5-flash",
         generationConfig: {
           temperature: 0,
           responseMimeType: "application/json",
@@ -1203,7 +1204,7 @@ Return only a JSON array with objects that follow this exact schema:
         id: req.file.filename,
         originalName: req.file.originalname,
         drafts,
-        metadata: { provider: "google", model: "gemini-1.5-pro" },
+        metadata: { provider: "google", model: "gemini-2.5-flash" },
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message || "Failed to extract questions from PDF" });

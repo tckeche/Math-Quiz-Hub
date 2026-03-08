@@ -1,0 +1,23 @@
+We have several critical bugs from the previous updates, and the UI instructions were not followed correctly. You must strictly adhere to the Golden Baseline and fix these issues systematically.
+
+Please review the logs and implement the following fixes one by one. Do not rewrite unrelated components.
+
+1. Fix the UI Buttons (Priority Revision):
+You previously failed to make the buttons uniform. Locate the 'Back', 'Review Mode', and 'Create Assignment' buttons. You must apply the exact same Tailwind height, padding, and text-size classes to all three so they are visually identical in size and prominence. They must have a large, highly usable click area. Provide the corrected CSS/component code.
+
+2. Fix the PostCSS Warning:
+The console shows: A PostCSS plugin did not pass the 'from' option to postcss.parse. Please check postcss.config.js or our Tailwind configuration to ensure all plugins are configured correctly and using up-to-date syntax to clear this warning.
+
+3. Fix the POST /api/tutor/upload-doc 400 Error (Invalid File Path):
+The app is crashing before the AI even runs because of an Invalid file path error. Audit the file upload middleware (e.g., Multer). If we are using memoryStorage(), ensure the route is reading req.file.buffer instead of req.file.path. If we are using disk storage, ensure the temporary uploads/ directory actually exists and is properly referenced. Provide the corrected route logic.
+
+4. Fix the AI Fallback Pipeline (500 Error & 404s):
+The copilot crashed because all AI providers failed. Update the model strings in our API router:
+
+Anthropic: The string claude-3-5-sonnet-latest is throwing a 404. Update the model string to the exact versioned API string: claude-3-5-sonnet-20241022 (or claude-3-7-sonnet-20250219).
+
+Gemini: The string gemini-1.5-pro is throwing a 404 for the v1beta API. Update this to a currently supported string like gemini-1.5-pro-latest or gemini-2.5-pro.
+
+DeepSeek & OpenAI: These are failing due to quota/insufficient balance (429 and 402 errors). Ensure the fallback catch block gracefully logs these errors without crashing the entire server, so it can successfully return the Anthropic or Gemini response once their strings are fixed.
+
+Please provide the targeted code updates for these four issues.
