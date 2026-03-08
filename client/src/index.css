@@ -67,6 +67,48 @@
   --muted-border: hsl(220 14% 20%);
   --accent-border: hsl(263 50% 20%);
   --destructive-border: hsl(0 72% 40%);
+  --app-background-image: url("/wallpaper.jpg");
+  --overlay-color: hsla(222, 47%, 7%, 0.80);
+}
+
+
+.light {
+  --button-outline: rgba(15,23,42, .16);
+  --badge-outline: rgba(15,23,42, .10);
+  --opaque-button-border-intensity: 14;
+  --elevate-1: rgba(15,23,42, .06);
+  --elevate-2: rgba(15,23,42, .10);
+  --background: 220 40% 96%;
+  --foreground: 222 47% 12%;
+  --border: 220 20% 82%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 12%;
+  --card-border: 220 24% 84%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 12%;
+  --sidebar-border: 220 24% 84%;
+  --sidebar-primary: 263 70% 48%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 263 75% 94%;
+  --sidebar-accent-foreground: 263 70% 34%;
+  --sidebar-ring: 263 70% 48%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 12%;
+  --popover-border: 220 24% 84%;
+  --primary: 263 70% 48%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 34% 94%;
+  --secondary-foreground: 222 47% 16%;
+  --muted: 220 25% 92%;
+  --muted-foreground: 222 18% 33%;
+  --accent: 263 72% 92%;
+  --accent-foreground: 263 70% 28%;
+  --destructive: 0 72% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 220 24% 86%;
+  --ring: 263 70% 48%;
+  --app-background-image: url("/ChatGPT Image Feb 26, 2026, 05_41_39 PM.jpg");
+  --overlay-color: hsla(220, 40%, 100%, 0.45);
 }
 
 .dark {
@@ -140,7 +182,7 @@
 
   body {
     @apply font-sans antialiased text-foreground;
-    background-image: url('/wallpaper.jpg');
+    background-image: var(--app-background-image);
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
@@ -167,7 +209,7 @@
     content: "";
     position: fixed;
     inset: 0;
-    background: hsla(222, 47%, 7%, 0.80);
+    background: var(--overlay-color);
     mix-blend-mode: multiply;
     pointer-events: none;
     z-index: 0;
@@ -184,6 +226,11 @@
 
   .katex .katex-html {
     color: hsl(210 40% 92%) !important;
+  }
+
+  html.light .katex,
+  html.light .katex .katex-html {
+    color: hsl(222 47% 16%) !important;
   }
 }
 
@@ -210,6 +257,25 @@
     @apply bg-black/20 border border-white/10 rounded-lg text-slate-200 placeholder:text-slate-500
            focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors;
   }
+
+  html.light .glass-card {
+    @apply bg-white/65 border-slate-300/80;
+    backdrop-filter: blur(14px);
+  }
+
+  html.light .glass-input {
+    @apply bg-white/65 border-slate-300 text-slate-800 placeholder:text-slate-500;
+    backdrop-filter: blur(10px);
+  }
+
+  html.light .glow-button-outline {
+    @apply border-violet-600 text-violet-700;
+  }
+
+  html.light .gradient-text {
+    @apply from-slate-900 to-violet-700;
+  }
+
 }
 
 @layer utilities {

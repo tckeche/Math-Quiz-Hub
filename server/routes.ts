@@ -333,9 +333,14 @@ async function runBackgroundGrading(
       return `Question ${questionNumber}: ${q.stem}\nStudent Answer: ${studentAnswer}\nCorrect Answer: ${q.correctAnswer}\nResult: ${isCorrect ? "CORRECT" : "INCORRECT"} (${q.marks} marks)`;
     }).join("\n\n");
 
-    const systemPrompt = `You are a mathematics tutor providing personalized feedback to a student. Analyze their quiz performance and provide actionable feedback in clean HTML format. Use <h3> for section headings, <ul>/<li> for lists, <p> for paragraphs, and <strong> for emphasis. Keep feedback encouraging yet specific about areas for improvement.
+    const systemPrompt = `You are a mathematics tutor providing feedback to a student.
 
-CRITICAL: When referencing specific questions in your report, you MUST use the sequential question numbers provided in the data (e.g., "In Question 1...", "For Question 4..."). You are strictly forbidden from making up numbers or using database IDs like Q156 or Q167. Always say "Question 1", "Question 2", etc.`;
+Write in simple plain English.
+Be brief and direct.
+Use short bullet points instead of long paragraphs.
+Return clean HTML using <h3>, <ul>, <li>, <p>, and <strong>.
+
+CRITICAL: When referencing specific questions, you MUST use the sequential question numbers provided in the data (e.g., "Question 1", "Question 4"). Never invent numbers and never use database IDs like Q156.`;
 
     const userPrompt = `Student scored ${totalScore}/${maxPossibleScore} (${Math.round((totalScore / maxPossibleScore) * 100)}%).
 
@@ -1160,17 +1165,13 @@ RULES:
       const studentId = (req as any).authUser.id;
       const reports = await storage.getSomaReportsByStudentId(studentId);
 
-      // Compute maxScore for each report from quiz questions
-      const quizIds = [...new Set(reports.map((r) => r.quizId))];
-      const maxScoreMap = new Map<number, number>();
-      for (const qId of quizIds) {
-        const questions = await storage.getSomaQuestionsByQuizId(qId);
-        maxScoreMap.set(qId, questions.reduce((sum, q) => sum + q.marks, 0));
-      }
+      // Bulk-compute maxScore map to avoid N+1 queries.
+      const quizIds = Array.from(new Set(reports.map((r) => r.quizId)));
+      const maxScoreMap = await storage.getSomaQuestionTotalsByQuizIds(quizIds);
 
       const enriched = reports.map((r) => ({
         ...r,
-        maxScore: maxScoreMap.get(r.quizId) || 0,
+        maxScore: maxScoreMap[r.quizId] || 0,
       }));
       res.json(enriched);
     } catch (err: any) {
@@ -1292,6 +1293,78 @@ RULES:
       } catch {}
     }
     res.json({ authenticated: false });
+  });
+
+  app.post("/api/analyze-class", requireAdmin, async (req, res) => {
+    try {
+      const quizId = Number(req.body?.quizId);
+      if (!Number.isInteger(quizId) || quizId <= 0) {
+        return res.status(400).json({ message: "quizId is required" });
+      }
+
+      const [quiz, questions, reports] = await Promise.all([
+        storage.getSomaQuiz(quizId),
+        storage.getSomaQuestionsByQuizId(quizId),
+        storage.getSomaReportsByQuizId(quizId),
+      ]);
+
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+
+      const questionMeta = new Map<number, { stem: string; correctAnswer: string }>();
+      for (const q of questions) {
+        questionMeta.set(q.id, { stem: q.stem, correctAnswer: q.correctAnswer });
+      }
+
+      const questionStats: Record<string, {
+        prompt: string;
+        correct: number;
+        wrong: number;
+        commonMistakes: Record<string, number>;
+      }> = {};
+
+      for (const report of reports) {
+        const answers = (report.answersJson || {}) as Record<string, string>;
+        for (const [questionIdRaw, answerRaw] of Object.entries(answers)) {
+          const questionId = Number(questionIdRaw);
+          const meta = questionMeta.get(questionId);
+          if (!meta) continue;
+
+          const answer = String(answerRaw || "").trim();
+          const key = String(questionId);
+          if (!questionStats[key]) {
+            questionStats[key] = { prompt: meta.stem, correct: 0, wrong: 0, commonMistakes: {} };
+          }
+
+          if (answer === meta.correctAnswer) {
+            questionStats[key].correct += 1;
+          } else {
+            questionStats[key].wrong += 1;
+            if (answer) {
+              questionStats[key].commonMistakes[answer] = (questionStats[key].commonMistakes[answer] || 0) + 1;
+            }
+          }
+        }
+      }
+
+      const { data, metadata } = await generateWithFallback(
+        "You are a mathematics assessment analyst. Return concise HTML feedback for a teacher about class performance.",
+        `Analyze class performance for quiz "${quiz.title}". Focus on misconceptions and remediation recommendations.
+
+Summary JSON:
+${JSON.stringify({
+          quizId,
+          quizTitle: quiz.title,
+          submissionCount: reports.length,
+          questionStats,
+        })}`,
+      );
+
+      return res.json({ analysis: data, submissionCount: reports.length, metadata, questionStats });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to analyze class" });
+    }
   });
 
   app.post("/api/admin/logout", async (req, res) => {

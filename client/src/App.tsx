@@ -20,6 +20,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import RoleRouter from "@/components/RoleRouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Redirect } from "wouter";
+import ThemeToggle from "@/components/ThemeToggle";
 
 function Router() {
   return (
@@ -50,6 +51,7 @@ function App() {
   return (
     <TooltipProvider>
       <Toaster />
+      <ThemeToggle />
       <ErrorBoundary title="Application error"><Router /></ErrorBoundary>
     </TooltipProvider>
   );

@@ -12,9 +12,6 @@ import {
 import { db } from "./db";
 import { eq, and, ne, inArray, or, isNull, sql, count, avg, sum } from "drizzle-orm";
 
-function sanitizeName(name: string): string {
-  return name.trim().replace(/\s+/g, " ").toLowerCase();
-}
 
 type SomaQuizBundleQuestionInput = {
   stem: string;
@@ -38,6 +35,7 @@ export interface IStorage {
   updateSomaQuiz(id: number, data: Partial<InsertSomaQuiz>): Promise<SomaQuiz | undefined>;
   createSomaQuestions(questionList: InsertSomaQuestion[]): Promise<SomaQuestion[]>;
   getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]>;
+  getSomaQuestionTotalsByQuizIds(quizIds: number[]): Promise<Record<number, number>>;
   deleteSomaQuestion(id: number): Promise<void>;
   getSomaReportsByStudentId(studentId: string): Promise<(SomaReport & { quiz: SomaQuiz })[]>;
   createSomaReport(report: InsertSomaReport): Promise<SomaReport>;
@@ -138,6 +136,24 @@ class DatabaseStorage implements IStorage {
 
   async getSomaQuestionsByQuizId(quizId: number): Promise<SomaQuestion[]> {
     return this.database.select().from(somaQuestions).where(eq(somaQuestions.quizId, quizId));
+  }
+
+  async getSomaQuestionTotalsByQuizIds(quizIds: number[]): Promise<Record<number, number>> {
+    if (quizIds.length === 0) return {};
+
+    const rows = await this.database
+      .select({
+        quizId: somaQuestions.quizId,
+        totalMarks: sql<number>`coalesce(sum(${somaQuestions.marks}), 0)::int`,
+      })
+      .from(somaQuestions)
+      .where(inArray(somaQuestions.quizId, quizIds))
+      .groupBy(somaQuestions.quizId);
+
+    return rows.reduce<Record<number, number>>((acc, row) => {
+      acc[row.quizId] = row.totalMarks;
+      return acc;
+    }, {});
   }
 
   async deleteSomaQuestion(id: number): Promise<void> {
@@ -292,8 +308,12 @@ class DatabaseStorage implements IStorage {
   }
 
   async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
-    await this.database.delete(quizAssignments)
-      .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+    await this.database.transaction(async (tx) => {
+      await tx.delete(somaReports)
+        .where(and(eq(somaReports.quizId, quizId), eq(somaReports.studentId, studentId)));
+      await tx.delete(quizAssignments)
+        .where(and(eq(quizAssignments.quizId, quizId), eq(quizAssignments.studentId, studentId)));
+    });
   }
 
   async extendQuizAssignmentDeadlines(quizId: number, hours: number): Promise<number> {
@@ -536,6 +556,16 @@ class MemoryStorage implements IStorage {
     return this.somaQuestionsList.filter((q) => q.quizId === quizId);
   }
 
+  async getSomaQuestionTotalsByQuizIds(quizIds: number[]): Promise<Record<number, number>> {
+    const wanted = new Set(quizIds);
+    const totals: Record<number, number> = {};
+    for (const q of this.somaQuestionsList) {
+      if (!wanted.has(q.quizId)) continue;
+      totals[q.quizId] = (totals[q.quizId] || 0) + q.marks;
+    }
+    return totals;
+  }
+
   async deleteSomaQuestion(id: number): Promise<void> {
     this.somaQuestionsList = this.somaQuestionsList.filter((q) => q.id !== id);
   }
@@ -676,6 +706,9 @@ class MemoryStorage implements IStorage {
   }
 
   async deleteQuizAssignment(quizId: number, studentId: string): Promise<void> {
+    this.somaReportsList = this.somaReportsList.filter(
+      (r) => !(r.quizId === quizId && r.studentId === studentId)
+    );
     this.quizAssignmentsList = this.quizAssignmentsList.filter(
       (a) => !(a.quizId === quizId && a.studentId === studentId)
     );

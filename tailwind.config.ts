@@ -10,6 +10,10 @@ export default {
         md: ".375rem", /* 6px */
         sm: ".1875rem", /* 3px */
       },
+      backgroundImage: {
+        "app-dark": "url('/wallpaper.jpg')",
+        "app-light": "url('/ChatGPT Image Feb 26, 2026, 05_41_39 PM.jpg')",
+      },
       colors: {
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
