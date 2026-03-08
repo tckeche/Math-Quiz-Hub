@@ -13,6 +13,13 @@ import { fetchPaperContext, generateAuditedQuiz, parsePdfTextFromBuffer, validat
 import { generateWithFallback } from "./services/aiOrchestrator";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
+const adminRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 admin requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const allowedImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads");
 
@@ -1380,7 +1387,7 @@ Return only a JSON array with objects that follow this exact schema:
     res.json({ authenticated: true });
   });
 
-  app.get("/api/admin/session", async (req, res) => {
+  app.get("/api/admin/session", adminRateLimiter, async (req, res) => {
     const token = getAdminSessionToken(req);
     if (token) {
       try {
