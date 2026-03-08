@@ -13,8 +13,8 @@ const AI_FALLBACK_CHAIN: ModelConfig[] = [
   { provider: "anthropic", model: "claude-sonnet-4-6" },
 
   // --- TIER 2: GOOGLE GEMINI (IMMEDIATE WORKING BACKUP) ---
-  { provider: "google", model: "gemini-2.0-flash" },
-  { provider: "google", model: "gemini-2.0-flash-lite" },
+  { provider: "google", model: "gemini-2.5-flash" },
+  { provider: "google", model: "gemini-2.0-flash-001" },
 
   // --- TIER 3: DEEPSEEK (BACKGROUND) ---
   { provider: "deepseek", model: "deepseek-chat" },
@@ -268,9 +268,9 @@ export interface AIResult {
 function getProviderTimeoutMs(provider: string): number {
   switch (provider) {
     case "anthropic":
-      return 20_000;
+      return 60_000;
     case "google":
-      return 25_000;
+      return 45_000;
     case "deepseek":
     case "openai":
       return 45_000;
