@@ -1309,7 +1309,7 @@ RULES:
     res.json({ authenticated: false });
   });
 
-  app.post("/api/analyze-class", adminRateLimiter, requireAdmin, async (req, res) => {
+  app.post("/api/analyze-class", requireAdmin, async (req, res) => {
     try {
       const quizId = Number(req.body?.quizId);
       if (!Number.isInteger(quizId) || quizId <= 0) {
